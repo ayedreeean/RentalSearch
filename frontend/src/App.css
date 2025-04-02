@@ -1,0 +1,146 @@
+.grid-container {
+  display: flex;
+  flex-wrap: wrap;
+  margin: -8px;
+}
+
+.grid-item {
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+/* Grid column widths */
+.grid-xs-12 {
+  width: 100%;
+}
+
+.grid-xs-8 {
+  width: 66.67%;
+}
+
+.grid-xs-6 {
+  width: 50%;
+}
+
+.grid-xs-4 {
+  width: 33.33%;
+}
+
+/* Media queries for responsive design */
+@media (max-width: 600px) {
+  .grid-sm-8, .grid-sm-6, .grid-sm-4 {
+    width: 100%;
+  }
+}
+
+@media (min-width: 601px) {
+  .grid-sm-8 {
+    width: 66.67%;
+  }
+  
+  .grid-sm-6 {
+    width: 50%;
+  }
+  
+  .grid-sm-4 {
+    width: 33.33%;
+  }
+}
+
+/* Property list styling */
+.property-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.property-card {
+  transition: box-shadow 0.3s ease;
+}
+
+.property-card:hover {
+  box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
+}
+
+.property-card-content {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 600px) {
+  .property-card-content {
+    flex-direction: row;
+  }
+}
+
+.property-image {
+  flex: 0 0 100%;
+  max-width: 100%;
+}
+
+@media (min-width: 600px) {
+  .property-image {
+    flex: 0 0 33.33%;
+    max-width: 33.33%;
+  }
+}
+
+.property-details {
+  flex: 0 0 100%;
+  max-width: 100%;
+}
+
+@media (min-width: 600px) {
+  .property-details {
+    flex: 0 0 66.67%;
+    max-width: 66.67%;
+  }
+}
+
+.property-metrics {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.metric {
+  width: 33.33%;
+  padding-right: 8px;
+  box-sizing: border-box;
+}
+
+.ratio-highlight {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    color: #1976d2;
+  }
+  50% {
+    color: #2196f3;
+  }
+  100% {
+    color: #1976d2;
+  }
+}
+
+/* Cashflow analysis styling */
+.cashflow-analysis {
+  width: 100%;
+}
+
+.cashflow-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.cashflow-row:last-child {
+  margin-bottom: 0;
+}
+
+/* Source chip styling */
+.source-chip {
+  margin-top: 4px;
+  font-size: 0.7rem;
+}
