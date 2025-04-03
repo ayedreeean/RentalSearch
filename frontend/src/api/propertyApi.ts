@@ -29,7 +29,8 @@ interface CacheItem {
 
 class ApiCache {
   private cache: Record<string, CacheItem> = {};
-  private readonly TTL: number = 30 * 60 * 1000; // 30 minutes in milliseconds
+  private readonly TTL: number = 60 * 60 * 1000; // 60 minutes in milliseconds for rent estimates
+  private readonly SEARCH_TTL: number = 30 * 60 * 1000; // 30 minutes for search results
   private readonly STORAGE_KEY = 'rental_search_cache';
 
   constructor() {
@@ -40,7 +41,7 @@ class ApiCache {
     setInterval(() => this.cleanExpired(), 5 * 60 * 1000); // Clean every 5 minutes
   }
 
-  set(key: string, data: any): void {
+  set(key: string, data: any, isRentEstimate: boolean = false): void {
     this.cache[key] = {
       data,
       timestamp: Date.now()
@@ -50,12 +51,13 @@ class ApiCache {
     this.saveToStorage();
   }
 
-  get(key: string): any | null {
+  get(key: string, isRentEstimate: boolean = false): any | null {
     const item = this.cache[key];
     if (!item) return null;
     
     // Check if the cache item has expired
-    if (Date.now() - item.timestamp > this.TTL) {
+    const ttl = isRentEstimate || key.startsWith('rent_') ? this.TTL : this.SEARCH_TTL;
+    if (Date.now() - item.timestamp > ttl) {
       delete this.cache[key];
       this.saveToStorage();
       return null;
@@ -75,7 +77,8 @@ class ApiCache {
     let hasChanges = false;
     
     Object.keys(this.cache).forEach(key => {
-      if (now - this.cache[key].timestamp > this.TTL) {
+      const ttl = key.startsWith('rent_') ? this.TTL : this.SEARCH_TTL;
+      if (now - this.cache[key].timestamp > ttl) {
         delete this.cache[key];
         hasChanges = true;
       }
@@ -92,6 +95,31 @@ class ApiCache {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.cache));
     } catch (error) {
       console.warn('Failed to save cache to localStorage:', error);
+      
+      // If localStorage is full, clear older items
+      try {
+        // Keep only the most recent 100 items
+        const keys = Object.keys(this.cache);
+        if (keys.length > 100) {
+          // Sort by timestamp (oldest first)
+          const sortedKeys = keys.sort((a, b) => 
+            this.cache[a].timestamp - this.cache[b].timestamp
+          );
+          
+          // Remove oldest items
+          const keysToRemove = sortedKeys.slice(0, keys.length - 100);
+          keysToRemove.forEach(key => {
+            delete this.cache[key];
+          });
+          
+          // Try saving again
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.cache));
+        }
+      } catch (e) {
+        console.error('Failed to clean up cache:', e);
+        // Last resort: clear entire cache
+        this.clear();
+      }
     }
   }
   
@@ -110,22 +138,28 @@ class ApiCache {
 
 const apiCache = new ApiCache();
 
-// Rate limiter implementation
+// Rate limiter implementation with priority queue
 class RateLimiter {
-  private queue: Array<() => Promise<any>> = [];
+  private queue: Array<{
+    apiCall: () => Promise<any>,
+    resolve: (value: any) => void,
+    reject: (reason?: any) => void,
+    priority: number
+  }> = [];
   private isProcessing = false;
   private readonly requestInterval: number = 1000; // 1 request per second (half of the allowed 2/sec)
 
-  async enqueue<T>(apiCall: () => Promise<T>): Promise<T> {
+  async enqueue<T>(apiCall: () => Promise<T>, priority: number = 1): Promise<T> {
     return new Promise((resolve, reject) => {
-      this.queue.push(async () => {
-        try {
-          const result = await apiCall();
-          resolve(result);
-        } catch (error) {
-          reject(error);
-        }
+      this.queue.push({
+        apiCall,
+        resolve,
+        reject,
+        priority
       });
+      
+      // Sort queue by priority (higher number = higher priority)
+      this.queue.sort((a, b) => b.priority - a.priority);
       
       if (!this.isProcessing) {
         this.processQueue();
@@ -144,9 +178,11 @@ class RateLimiter {
     
     if (nextRequest) {
       try {
-        await nextRequest();
+        const result = await nextRequest.apiCall();
+        nextRequest.resolve(result);
       } catch (error) {
         console.error('Error processing queued request:', error);
+        nextRequest.reject(error);
       }
       
       // Wait before processing next request
@@ -158,10 +194,130 @@ class RateLimiter {
 
 const rateLimiter = new RateLimiter();
 
+// Background processing queue for rent estimates
+class BackgroundProcessor {
+  private queue: Property[] = [];
+  private isProcessing = false;
+  private readonly batchSize = 5;
+  private readonly batchInterval = 5000; // 5 seconds between batches
+  
+  enqueue(property: Property): void {
+    // Don't add duplicates
+    if (!this.queue.some(p => p.property_id === property.property_id)) {
+      this.queue.push(property);
+      
+      if (!this.isProcessing) {
+        this.processQueue();
+      }
+    }
+  }
+  
+  enqueueMany(properties: Property[]): void {
+    // Filter out duplicates
+    const newProperties = properties.filter(
+      prop => !this.queue.some(p => p.property_id === prop.property_id)
+    );
+    
+    this.queue.push(...newProperties);
+    
+    if (!this.isProcessing && newProperties.length > 0) {
+      this.processQueue();
+    }
+  }
+  
+  private async processQueue() {
+    if (this.queue.length === 0) {
+      this.isProcessing = false;
+      return;
+    }
+    
+    this.isProcessing = true;
+    
+    // Process in batches
+    const batch = this.queue.splice(0, this.batchSize);
+    console.log(`Processing background batch of ${batch.length} properties`);
+    
+    // Process batch in parallel
+    const promises = batch.map(property => 
+      getPropertyWithRentEstimate(property, false)
+        .catch(error => {
+          console.error(`Error in background processing for ${property.property_id}:`, error);
+          return property; // Return original property on error
+        })
+    );
+    
+    await Promise.all(promises);
+    
+    // If there are more items in the queue, wait before processing next batch
+    if (this.queue.length > 0) {
+      setTimeout(() => this.processQueue(), this.batchInterval);
+    } else {
+      this.isProcessing = false;
+    }
+  }
+}
+
+const backgroundProcessor = new BackgroundProcessor();
+
 // Helper function to add delay between API calls
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Function to search for properties by location
+// Function to get total properties count for pagination
+export const getTotalPropertiesCount = async (
+  location: string,
+  filters: {
+    priceRange?: [number, number],
+    bedroomsFilter?: number[],
+    bathroomsFilter?: number[],
+    minRatio?: number,
+    propertyType?: string
+  } = {}
+): Promise<number> => {
+  try {
+    // Create cache key based on search parameters
+    const cacheKey = `count_${location}_${JSON.stringify(filters)}`;
+    
+    // Check cache first
+    const cachedData = apiCache.get(cacheKey);
+    if (cachedData) {
+      console.log('Using cached data for property count');
+      return cachedData;
+    }
+    
+    // Search for properties using the Zillow API
+    const searchResponse = await rateLimiter.enqueue(() => axios.request({
+      method: 'GET',
+      url: 'https://zillow-com1.p.rapidapi.com/propertyExtendedSearch',
+      params: {
+        location: location,
+        home_type: filters.propertyType && filters.propertyType !== 'All' ? filters.propertyType : 'Houses',
+        page: 1
+      },
+      headers: {
+        'X-RapidAPI-Key': RAPIDAPI_KEY,
+        'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
+      },
+      timeout: 10000
+    }), 3); // High priority for count
+    
+    // Check if we have results
+    if (!searchResponse.data || !searchResponse.data.totalResultCount) {
+      return 0;
+    }
+    
+    const totalCount = searchResponse.data.totalResultCount;
+    
+    // Cache the count
+    apiCache.set(cacheKey, totalCount);
+    
+    return totalCount;
+  } catch (error) {
+    console.error('Error getting property count:', error);
+    return 0;
+  }
+};
+
+// Function to search for properties by location with prioritized loading
 export const searchProperties = async (
   location: string, 
   page: number = 0,
@@ -171,10 +327,14 @@ export const searchProperties = async (
     bathroomsFilter?: number[],
     minRatio?: number,
     propertyType?: string
-  } = {}
-): Promise<Property[]> => {
+  } = {},
+  isPrioritized: boolean = false
+): Promise<{
+  allProperties: Property[],
+  completeProperties: Property[]
+}> => {
   try {
-    console.log(`Searching for properties in ${location}, page ${page + 1}`);
+    console.log(`Searching for properties in ${location}, page ${page + 1}, prioritized: ${isPrioritized}`);
     
     // Create cache key based on search parameters
     const cacheKey = `search_${location}_${page}_${JSON.stringify(filters)}`;
@@ -200,11 +360,11 @@ export const searchProperties = async (
         'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
       },
       timeout: 10000
-    }));
+    }), isPrioritized ? 3 : 1); // Higher priority for initial search
     
     // Check if we have results
     if (!searchResponse.data || !searchResponse.data.props || searchResponse.data.props.length === 0) {
-      return [];
+      return { allProperties: [], completeProperties: [] };
     }
     
     // Get properties for the current page directly from API
@@ -232,229 +392,137 @@ export const searchProperties = async (
       );
     }
     
-    // Process each property to get additional details and rent estimates
-    const properties: Property[] = [];
-    
-    // Process properties sequentially to avoid rate limiting
-    for (const item of pageProperties) {
-      // Get property details to fetch days on market
-      let daysOnMarket = null;
+    // Map the API response to our Property interface
+    const allProperties: Property[] = pageProperties.map((item: any) => {
+      // Use rentZestimate if available, otherwise calculate based on price
+      const calculatedRent = item.price * 0.007; // 0.7% rule as fallback
       
-      try {
-        if (item.zpid) {
-          // Check cache for property details
-          const propertyDetailsCacheKey = `property_${item.zpid}`;
-          const cachedPropertyDetails = apiCache.get(propertyDetailsCacheKey);
-          
-          let propertyData;
-          if (cachedPropertyDetails) {
-            console.log(`Using cached data for property ${item.zpid}`);
-            propertyData = cachedPropertyDetails;
-          } else {
-            try {
-              const propertyResponse = await rateLimiter.enqueue(() => axios.request({
-                method: 'GET',
-                url: 'https://zillow-com1.p.rapidapi.com/property',
-                params: {
-                  zpid: item.zpid
-                },
-                headers: {
-                  'X-RapidAPI-Key': RAPIDAPI_KEY,
-                  'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
-                },
-                timeout: 10000
-              }));
-              
-              propertyData = propertyResponse.data;
-              // Cache the property details
-              apiCache.set(propertyDetailsCacheKey, propertyData);
-            } catch (error) {
-              console.error('Error getting property details:', error);
-              // Continue with the process even if this API call fails
-              propertyData = null;
-            }
-          }
-          
-          // Extract days on market if available
-          if (propertyData && propertyData.hasOwnProperty('daysOnZillow')) {
-            daysOnMarket = propertyData.daysOnZillow;
-          } else if (propertyData && propertyData.hasOwnProperty('timeOnZillow')) {
-            // Alternative property name that might contain days on market
-            daysOnMarket = propertyData.timeOnZillow;
-          }
-        }
-      } catch (error) {
-        console.error('Error getting property details:', error);
-        // Continue with the process even if this API call fails
-      }
-      
-      // Get rent estimate for each property
-      let rentEstimate = 0;
-      let rentSource: 'zillow' | 'calculated' = 'calculated'; // Default to calculated
-      
-      try {
-        // Check cache for rent estimate
-        const rentEstimateCacheKey = `rent_${item.address}_${item.bedrooms}_${item.bathrooms}`;
-        const cachedRentEstimate = apiCache.get(rentEstimateCacheKey);
-        
-        if (cachedRentEstimate) {
-          console.log(`Using cached rent estimate for ${item.address}`);
-          rentEstimate = cachedRentEstimate.rent;
-          rentSource = 'zillow';
-        } else {
-          try {
-            // Use the Zillow API rentEstimate endpoint with optimized parameters
-            const rentResponse = await rateLimiter.enqueue(() => axios.request({
-              method: 'GET',
-              url: 'https://zillow-com1.p.rapidapi.com/rentEstimate',
-              params: {
-                propertyType: 'SingleFamily', // Required parameter
-                address: item.address, // Axios handles URL encoding
-                d: 0.5, // Diameter parameter (default is 0.5)
-                beds: item.bedrooms || 3,
-                baths: item.bathrooms || 2,
-                sqftMin: item.livingArea || 1000 // For better accuracy
-              },
-              headers: {
-                'X-RapidAPI-Key': RAPIDAPI_KEY,
-                'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
-              },
-              timeout: 10000
-            }));
-            
-            // Extract rent estimate from response
-            if (rentResponse.data && rentResponse.data.rent) {
-              rentEstimate = rentResponse.data.rent;
-              rentSource = 'zillow'; // Set source to zillow when we get data from API
-              
-              // Cache the rent estimate
-              apiCache.set(rentEstimateCacheKey, rentResponse.data);
-            } else {
-              // Fallback: estimate rent as 0.7% of property value per month
-              rentEstimate = Math.round(item.price * 0.007);
-              rentSource = 'calculated'; // Set source to calculated for fallback
-            }
-          } catch (error) {
-            console.error('Error getting rent estimate:', error);
-            // Fallback: estimate rent as 0.7% of property value per month
-            rentEstimate = Math.round(item.price * 0.007);
-            rentSource = 'calculated'; // Set source to calculated for fallback
-          }
-        }
-      } catch (error) {
-        console.error('Error getting rent estimate:', error);
-        // Fallback: estimate rent as 0.7% of property value per month
-        rentEstimate = Math.round(item.price * 0.007);
-        rentSource = 'calculated'; // Set source to calculated for fallback
-      }
-      
-      // Calculate rent-to-price ratio
-      const price = item.price;
-      const ratio = rentEstimate / price;
-      
-      // Apply minimum ratio filter if specified
-      if (filters.minRatio && ratio < filters.minRatio) {
-        continue;
-      }
-      
-      // Get a default image if none is provided
-      const thumbnail = item.imgSrc || 'https://via.placeholder.com/150?text=No+Image';
-      
-      properties.push({
-        property_id: item.zpid || `property-${Math.random().toString(36).substr(2, 9)}`,
+      return {
+        property_id: item.zpid || `property-${item.address}`,
         address: item.address,
-        price: price,
-        rent_estimate: rentEstimate,
-        ratio: ratio,
-        thumbnail: thumbnail,
-        bedrooms: item.bedrooms || 0,
-        bathrooms: item.bathrooms || 0,
+        price: item.price,
+        rent_estimate: item.rentZestimate || calculatedRent,
+        ratio: (item.rentZestimate || calculatedRent) / item.price,
+        thumbnail: item.imgSrc,
+        bedrooms: item.bedrooms,
+        bathrooms: item.bathrooms,
         sqft: item.livingArea || 0,
-        url: `https://www.zillow.com/homes/${item.zpid}_zpid/`,
-        days_on_market: daysOnMarket,
-        rent_source: rentSource
-      });
+        url: `https://www.zillow.com${item.detailUrl}`,
+        days_on_market: item.daysOnZillow || null,
+        rent_source: item.rentZestimate ? 'zillow' : 'calculated'
+      };
+    });
+    
+    // Filter out properties that don't meet the minimum ratio requirement
+    const filteredProperties = filters.minRatio 
+      ? allProperties.filter(prop => prop.ratio >= filters.minRatio!)
+      : allProperties;
+    
+    // For prioritized loading, we'll process the first 10 properties first
+    // For non-prioritized loading, we'll process all properties
+    const priorityCount = isPrioritized ? Math.min(10, filteredProperties.length) : filteredProperties.length;
+    const priorityProperties = filteredProperties.slice(0, priorityCount);
+    const remainingProperties = isPrioritized ? filteredProperties.slice(priorityCount) : [];
+    
+    // Process priority properties to get accurate rent estimates
+    const completeProperties: Property[] = [];
+    
+    // Process priority properties in parallel with controlled concurrency
+    await Promise.all(
+      priorityProperties.map(async (property) => {
+        try {
+          const updatedProperty = await getPropertyWithRentEstimate(property, true);
+          completeProperties.push(updatedProperty);
+        } catch (error) {
+          console.error(`Error processing property ${property.property_id}:`, error);
+          // If we fail to get rent estimate, still include the property with calculated estimate
+          completeProperties.push(property);
+        }
+      })
+    );
+    
+    // Sort complete properties to match original order
+    completeProperties.sort((a, b) => {
+      const aIndex = filteredProperties.findIndex(p => p.property_id === a.property_id);
+      const bIndex = filteredProperties.findIndex(p => p.property_id === b.property_id);
+      return aIndex - bIndex;
+    });
+    
+    // Start background processing of remaining properties if this is prioritized loading
+    if (isPrioritized && remainingProperties.length > 0) {
+      // Add remaining properties to background processing queue
+      backgroundProcessor.enqueueMany(remainingProperties);
     }
     
-    // Sort by rent-to-price ratio (highest first)
-    const sortedProperties = properties.sort((a, b) => b.ratio - a.ratio);
+    const result = {
+      allProperties: filteredProperties,
+      completeProperties: completeProperties
+    };
     
-    // Cache the results
-    apiCache.set(cacheKey, sortedProperties);
+    // Cache the result
+    apiCache.set(cacheKey, result);
     
-    return sortedProperties;
+    return result;
   } catch (error) {
-    console.error('Error fetching properties:', error);
-    throw error;
+    console.error('Error searching properties:', error);
+    return { allProperties: [], completeProperties: [] };
   }
 };
 
-// Function to get total number of properties from search
-export const getTotalPropertiesCount = async (
-  location: string,
-  filters: {
-    priceRange?: [number, number],
-    bedroomsFilter?: number[],
-    bathroomsFilter?: number[],
-    minRatio?: number,
-    propertyType?: string
-  } = {}
-): Promise<number> => {
+// Function to get property with accurate rent estimate
+const getPropertyWithRentEstimate = async (property: Property, isPriority: boolean = false): Promise<Property> => {
+  // Check cache for rent estimate
+  const rentEstimateCacheKey = `rent_${property.property_id}`;
+  const cachedRentEstimate = apiCache.get(rentEstimateCacheKey, true);
+  
+  if (cachedRentEstimate) {
+    console.log(`Using cached rent estimate for ${property.address}`);
+    return {
+      ...property,
+      rent_estimate: cachedRentEstimate.rent,
+      ratio: cachedRentEstimate.rent / property.price,
+      rent_source: 'zillow'
+    };
+  }
+  
   try {
-    // Create cache key based on search parameters
-    const cacheKey = `count_${location}_${JSON.stringify(filters)}`;
-    
-    // Check cache first
-    const cachedData = apiCache.get(cacheKey);
-    if (cachedData !== null) {
-      console.log('Using cached data for property count');
-      return cachedData;
-    }
-    
-    const searchResponse = await rateLimiter.enqueue(() => axios.request({
+    // Use the Zillow API rentEstimate endpoint
+    const rentResponse = await rateLimiter.enqueue(() => axios.request({
       method: 'GET',
-      url: 'https://zillow-com1.p.rapidapi.com/propertyExtendedSearch',
+      url: 'https://zillow-com1.p.rapidapi.com/rentEstimate',
       params: {
-        location: location,
-        home_type: filters.propertyType && filters.propertyType !== 'All' ? filters.propertyType : 'Houses'
+        propertyType: 'SingleFamily',
+        address: property.address,
+        beds: property.bedrooms || 3,
+        baths: property.bathrooms || 2,
+        sqft: property.sqft || 1500,
+        d: 0.5
       },
       headers: {
         'X-RapidAPI-Key': RAPIDAPI_KEY,
         'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
       },
       timeout: 10000
-    }));
+    }), isPriority ? 2 : 0); // Higher priority for visible properties
     
-    if (!searchResponse.data || !searchResponse.data.totalPages) {
-      return 0;
+    if (rentResponse.data && rentResponse.data.rent) {
+      const rentEstimate = rentResponse.data.rent;
+      
+      // Cache the rent estimate
+      apiCache.set(rentEstimateCacheKey, rentResponse.data, true);
+      
+      // Return updated property with accurate rent estimate
+      return {
+        ...property,
+        rent_estimate: rentEstimate,
+        ratio: rentEstimate / property.price,
+        rent_source: 'zillow'
+      };
     }
-    
-    // Use the totalPages and resultsPerPage from the API response
-    // This is more accurate than counting the properties ourselves
-    const totalPages = searchResponse.data.totalPages || 1;
-    const resultsPerPage = searchResponse.data.resultsPerPage || 10;
-    let estimatedCount = totalPages * resultsPerPage;
-    
-    // Apply a correction factor for our filters
-    // This is an estimate since we can't know exactly how many properties
-    // will match our filters without fetching them all
-    if (filters.priceRange || filters.bedroomsFilter?.length || filters.bathroomsFilter?.length || filters.minRatio) {
-      // Apply a conservative reduction factor
-      estimatedCount = Math.floor(estimatedCount * 0.8);
-    }
-    
-    // Cache the count
-    apiCache.set(cacheKey, estimatedCount);
-    
-    return estimatedCount;
   } catch (error) {
-    console.error('Error getting total properties count:', error);
-    return 0;
+    console.error(`Error getting rent estimate for ${property.address}:`, error);
   }
-};
-
-// Function to clear the cache
-export const clearCache = (): void => {
-  apiCache.clear();
-  console.log('API cache cleared');
+  
+  // If we couldn't get a rent estimate, return the original property
+  return property;
 };

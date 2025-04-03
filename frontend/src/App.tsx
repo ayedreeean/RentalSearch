@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Container, TextField, Button, Typography, Card, CardContent, CardMedia, Box, Alert, CircularProgress, Slider, Accordion, AccordionSummary, AccordionDetails, Divider, Pagination, Skeleton } from '@mui/material';
+import { FixedSizeGrid as Grid } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
+import { Container, TextField, Button, Typography, Card, CardContent, Box, Alert, CircularProgress, Slider, Accordion, AccordionSummary, AccordionDetails, Pagination, Skeleton } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import './App.css';
-import { searchProperties, getTotalPropertiesCount, clearCache, Property } from './api/propertyApi';
+import { searchProperties, getTotalPropertiesCount, Property } from './api/propertyApi';
 
 // Define cashflow interface
 interface Cashflow {
@@ -70,11 +72,251 @@ const LazyImage: React.FC<LazyImageProps> = ({ src, alt, className }) => {
   );
 };
 
+// Property Card Component
+interface PropertyCardProps {
+  property: Property;
+  calculateCashflow: (property: Property) => Cashflow;
+  formatCurrency: (amount: number) => string;
+  formatPercent: (percent: number) => string;
+  vacancyPercent: number;
+  capexPercent: number;
+  style?: React.CSSProperties;
+}
+
+const PropertyCard: React.FC<PropertyCardProps> = ({ 
+  property, 
+  calculateCashflow, 
+  formatCurrency, 
+  formatPercent, 
+  vacancyPercent, 
+  capexPercent,
+  style
+}) => {
+  const cashflow = calculateCashflow(property);
+  
+  return (
+    <Card className="property-card" style={style}>
+      <a href={property.url} target="_blank" rel="noopener noreferrer" className="property-image-container">
+        <LazyImage
+          src={property.thumbnail}
+          alt={property.address}
+        />
+        <div className="property-price">
+          {formatCurrency(property.price)}
+        </div>
+      </a>
+      
+      <CardContent className="property-details">
+        <Typography variant="h6" component="div" gutterBottom>
+          {formatCurrency(property.price)}
+        </Typography>
+        
+        <a href={property.url} target="_blank" rel="noopener noreferrer" className="property-address">
+          <Typography variant="body2" color="textSecondary" gutterBottom>
+            {property.address}
+          </Typography>
+        </a>
+        
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <div>
+            <Typography variant="body2" fontWeight="medium">
+              Rent Est: {formatCurrency(property.rent_estimate)}
+              {property.rent_source === 'zillow' && (
+                <span className="rent-source">Zillow</span>
+              )}
+            </Typography>
+            
+            <div className={`ratio-chip ${property.ratio >= 0.007 ? 'ratio-good' : property.ratio >= 0.004 ? 'ratio-medium' : 'ratio-poor'}`}>
+              Ratio: {formatPercent(property.ratio * 100)}
+            </div>
+          </div>
+          
+          {property.days_on_market !== null && (
+            <div className="days-on-market">
+              {property.days_on_market}
+            </div>
+          )}
+        </Box>
+        
+        <div className="metrics">
+          <div className="metric">
+            <Typography variant="body2" color="textSecondary">Beds</Typography>
+            <Typography variant="body1" fontWeight="medium">{property.bedrooms}</Typography>
+          </div>
+          <div className="metric">
+            <Typography variant="body2" color="textSecondary">Baths</Typography>
+            <Typography variant="body1" fontWeight="medium">{property.bathrooms}</Typography>
+          </div>
+          <div className="metric">
+            <Typography variant="body2" color="textSecondary">Sq Ft</Typography>
+            <Typography variant="body1" fontWeight="medium">{property.sqft.toLocaleString()}</Typography>
+          </div>
+        </div>
+      </CardContent>
+      
+      <div className="property-footer">
+        <Accordion>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <div className="cashflow-header">
+              <ExpandMoreIcon />
+              <Typography fontWeight="medium">Cashflow Analysis</Typography>
+              <Typography 
+                variant="body2" 
+                fontWeight="bold" 
+                color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}
+                sx={{ ml: 'auto' }}
+              >
+                {formatCurrency(cashflow.monthlyCashflow)}/mo
+              </Typography>
+            </div>
+          </AccordionSummary>
+          <AccordionDetails>
+            <div className="cashflow-analysis">
+              <div className="cashflow-row">
+                <Typography variant="body2">Monthly Mortgage Payment:</Typography>
+                <Typography variant="body2">{formatCurrency(cashflow.monthlyMortgage)}</Typography>
+              </div>
+              <div className="cashflow-row">
+                <Typography variant="body2">Monthly Tax & Insurance:</Typography>
+                <Typography variant="body2">{formatCurrency(cashflow.monthlyTaxInsurance)}</Typography>
+              </div>
+              <div className="cashflow-row">
+                <Typography variant="body2">Vacancy Cost ({vacancyPercent}%):</Typography>
+                <Typography variant="body2">{formatCurrency(cashflow.monthlyVacancy)}</Typography>
+              </div>
+              <div className="cashflow-row">
+                <Typography variant="body2">CapEx ({capexPercent}%):</Typography>
+                <Typography variant="body2">{formatCurrency(cashflow.monthlyCapex)}</Typography>
+              </div>
+              
+              <div className="cashflow-divider"></div>
+              
+              <div className="cashflow-row">
+                <Typography variant="body2" fontWeight="bold">Total Monthly Expenses:</Typography>
+                <Typography variant="body2" fontWeight="bold">{formatCurrency(cashflow.totalMonthlyExpenses)}</Typography>
+              </div>
+              
+              <div className="cashflow-total">
+                <div className="cashflow-row">
+                  <Typography variant="body2" fontWeight="bold">Monthly Cashflow:</Typography>
+                  <Typography variant="body2" fontWeight="bold" color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}>
+                    {formatCurrency(cashflow.monthlyCashflow)}
+                  </Typography>
+                </div>
+                <div className="cashflow-row">
+                  <Typography variant="body2" fontWeight="bold">Annual Cashflow:</Typography>
+                  <Typography variant="body2" fontWeight="bold" color={cashflow.annualCashflow >= 0 ? 'success.main' : 'error.main'}>
+                    {formatCurrency(cashflow.annualCashflow)}
+                  </Typography>
+                </div>
+                <div className="cashflow-row">
+                  <Typography variant="body2" fontWeight="bold">Cash-on-Cash Return:</Typography>
+                  <Typography variant="body2" fontWeight="bold" color={cashflow.cashOnCashReturn >= 0 ? 'success.main' : 'error.main'}>
+                    {formatPercent(cashflow.cashOnCashReturn)}
+                  </Typography>
+                </div>
+              </div>
+            </div>
+          </AccordionDetails>
+        </Accordion>
+      </div>
+    </Card>
+  );
+};
+
+// Virtualized Property Grid Component
+interface VirtualizedPropertyGridProps {
+  properties: Property[];
+  calculateCashflow: (property: Property) => Cashflow;
+  formatCurrency: (amount: number) => string;
+  formatPercent: (percent: number) => string;
+  vacancyPercent: number;
+  capexPercent: number;
+}
+
+const VirtualizedPropertyGrid: React.FC<VirtualizedPropertyGridProps> = ({
+  properties,
+  calculateCashflow,
+  formatCurrency,
+  formatPercent,
+  vacancyPercent,
+  capexPercent
+}) => {
+  // Calculate number of columns based on container width
+  const getColumnCount = (width: number) => {
+    if (width < 600) return 1;
+    if (width < 960) return 2;
+    return 3;
+  };
+
+  // Cell renderer for the grid
+  const Cell = ({ columnIndex, rowIndex, style, data }: any) => {
+    const { properties, columnCount } = data;
+    const index = rowIndex * columnCount + columnIndex;
+    
+    if (index >= properties.length) {
+      return null;
+    }
+    
+    const property = properties[index];
+    
+    return (
+      <div style={{
+        ...style,
+        padding: '10px',
+      }}>
+        <PropertyCard
+          property={property}
+          calculateCashflow={calculateCashflow}
+          formatCurrency={formatCurrency}
+          formatPercent={formatPercent}
+          vacancyPercent={vacancyPercent}
+          capexPercent={capexPercent}
+        />
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ height: 'calc(100vh - 300px)', minHeight: '500px' }}>
+      <AutoSizer>
+        {({ height, width }) => {
+          const columnCount = getColumnCount(width);
+          const rowCount = Math.ceil(properties.length / columnCount);
+          
+          return (
+            <Grid
+              columnCount={columnCount}
+              columnWidth={width / columnCount}
+              height={height}
+              rowCount={rowCount}
+              rowHeight={550}
+              width={width}
+              itemData={{
+                properties,
+                columnCount,
+                calculateCashflow,
+                formatCurrency,
+                formatPercent,
+                vacancyPercent,
+                capexPercent
+              }}
+            >
+              {Cell}
+            </Grid>
+          );
+        }}
+      </AutoSizer>
+    </div>
+  );
+};
+
 function App() {
   // State variables
   const [location, setLocation] = useState('');
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchPerformed, setSearchPerformed] = useState(false);
   
@@ -97,6 +339,10 @@ function App() {
   const [bathroomsFilter, setBathroomsFilter] = useState<number[]>([]);
   const [minRatio, setMinRatio] = useState(0.004);
   const [propertyType, setPropertyType] = useState('All');
+  
+  // State for tracking complete properties (with rent estimates)
+  const [completeProperties, setCompleteProperties] = useState<Property[]>([]);
+  const [hasInitialBatch, setHasInitialBatch] = useState(false);
 
   // Function to handle search button click
   const handleSearch = async () => {
@@ -106,9 +352,12 @@ function App() {
     }
     
     setLoading(true);
+    setInitialLoading(true);
     setError(null);
     setSearchPerformed(true);
     setCurrentPage(0);
+    setHasInitialBatch(false);
+    setCompleteProperties([]);
     
     try {
       console.log('Starting property search for:', location);
@@ -122,10 +371,6 @@ function App() {
         propertyType: propertyType !== 'All' ? propertyType : undefined
       };
       
-      const results = await searchProperties(location, 0, filters);
-      console.log('Search results:', results);
-      setProperties(results);
-      
       // Get total count for pagination
       const totalCount = await getTotalPropertiesCount(location, filters);
       
@@ -136,10 +381,30 @@ function App() {
       setTotalProperties(totalCount);
       
       console.log(`Found ${totalCount} properties, ${pages} pages`);
+      
+      // Search for properties with prioritized loading
+      const results = await searchProperties(location, 0, filters, true);
+      console.log('Search results:', results);
+      
+      // Set all properties
+      setProperties(results.allProperties);
+      
+      // Set complete properties (with rent estimates)
+      setCompleteProperties(results.completeProperties);
+      
+      // Check if we have at least 10 complete properties or all properties are complete
+      if (results.completeProperties.length >= 10 || 
+          results.completeProperties.length === results.allProperties.length) {
+        setHasInitialBatch(true);
+        setInitialLoading(false);
+      }
+      
     } catch (err) {
       console.error('Error searching properties:', err);
       setError('Error searching for properties. Please try again.');
       setProperties([]);
+      setCompleteProperties([]);
+      setInitialLoading(false);
     } finally {
       setLoading(false);
     }
@@ -164,9 +429,16 @@ function App() {
         propertyType: propertyType !== 'All' ? propertyType : undefined
       };
       
-      const results = await searchProperties(location, pageIndex, filters);
+      // Search for properties with prioritized loading
+      const results = await searchProperties(location, pageIndex, filters, false);
       console.log('Page results:', results);
-      setProperties(results);
+      
+      // Set all properties
+      setProperties(results.allProperties);
+      
+      // Set complete properties (with rent estimates)
+      setCompleteProperties(results.completeProperties);
+      
       setCurrentPage(pageIndex);
     } catch (err) {
       console.error('Error fetching page:', err);
@@ -236,6 +508,9 @@ function App() {
       maximumFractionDigits: 1
     }).format(percent / 100);
   };
+
+  // Determine which properties to display
+  const displayProperties = hasInitialBatch ? completeProperties : [];
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
@@ -345,155 +620,38 @@ function App() {
       </Accordion>
       
       {/* Show pagination info if we have results */}
-      {searchPerformed && !loading && properties.length > 0 && totalPages > 0 && (
+      {searchPerformed && !loading && displayProperties.length > 0 && totalPages > 0 && (
         <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-          Showing {properties.length} of {totalProperties} properties (Page {currentPage + 1} of {totalPages})
+          Showing {displayProperties.length} of {totalProperties} properties (Page {currentPage + 1} of {totalPages})
         </Typography>
       )}
       
-      {loading ? (
-        <Box display="flex" justifyContent="center" my={4}>
+      {initialLoading ? (
+        <Box display="flex" justifyContent="center" flexDirection="column" alignItems="center" my={4}>
           <CircularProgress />
+          <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>
+            Loading properties with complete data...
+          </Typography>
         </Box>
       ) : (
         <>
-          <div className="property-grid">
-            {properties.map(property => {
-              const cashflow = calculateCashflow(property);
-              
-              return (
-                <Card key={property.property_id} className="property-card">
-                  <a href={property.url} target="_blank" rel="noopener noreferrer" className="property-image-container">
-                    <LazyImage
-                      src={property.thumbnail}
-                      alt={property.address}
-                    />
-                    <div className="property-price">
-                      {formatCurrency(property.price)}
-                    </div>
-                  </a>
-                  
-                  <CardContent className="property-details">
-                    <Typography variant="h6" component="div" gutterBottom>
-                      {formatCurrency(property.price)}
-                    </Typography>
-                    
-                    <a href={property.url} target="_blank" rel="noopener noreferrer" className="property-address">
-                      <Typography variant="body2" color="textSecondary" gutterBottom>
-                        {property.address}
-                      </Typography>
-                    </a>
-                    
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                      <div>
-                        <Typography variant="body2" fontWeight="medium">
-                          Rent Est: {formatCurrency(property.rent_estimate)}
-                          {property.rent_source === 'zillow' && (
-                            <span className="rent-source">Zillow</span>
-                          )}
-                        </Typography>
-                        
-                        <div className={`ratio-chip ${property.ratio >= 0.007 ? 'ratio-good' : property.ratio >= 0.004 ? 'ratio-medium' : 'ratio-poor'}`}>
-                          Ratio: {formatPercent(property.ratio * 100)}
-                        </div>
-                      </div>
-                      
-                      {property.days_on_market !== null && (
-                        <div className="days-on-market">
-                          {property.days_on_market}
-                        </div>
-                      )}
-                    </Box>
-                    
-                    <div className="metrics">
-                      <div className="metric">
-                        <Typography variant="body2" color="textSecondary">Beds</Typography>
-                        <Typography variant="body1" fontWeight="medium">{property.bedrooms}</Typography>
-                      </div>
-                      <div className="metric">
-                        <Typography variant="body2" color="textSecondary">Baths</Typography>
-                        <Typography variant="body1" fontWeight="medium">{property.bathrooms}</Typography>
-                      </div>
-                      <div className="metric">
-                        <Typography variant="body2" color="textSecondary">Sq Ft</Typography>
-                        <Typography variant="body1" fontWeight="medium">{property.sqft.toLocaleString()}</Typography>
-                      </div>
-                    </div>
-                  </CardContent>
-                  
-                  <div className="property-footer">
-                    <Accordion>
-                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <div className="cashflow-header">
-                          <ExpandMoreIcon />
-                          <Typography fontWeight="medium">Cashflow Analysis</Typography>
-                          <Typography 
-                            variant="body2" 
-                            fontWeight="bold" 
-                            color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}
-                            sx={{ ml: 'auto' }}
-                          >
-                            {formatCurrency(cashflow.monthlyCashflow)}/mo
-                          </Typography>
-                        </div>
-                      </AccordionSummary>
-                      <AccordionDetails>
-                        <div className="cashflow-analysis">
-                          <div className="cashflow-row">
-                            <Typography variant="body2">Monthly Mortgage Payment:</Typography>
-                            <Typography variant="body2">{formatCurrency(cashflow.monthlyMortgage)}</Typography>
-                          </div>
-                          <div className="cashflow-row">
-                            <Typography variant="body2">Monthly Tax & Insurance:</Typography>
-                            <Typography variant="body2">{formatCurrency(cashflow.monthlyTaxInsurance)}</Typography>
-                          </div>
-                          <div className="cashflow-row">
-                            <Typography variant="body2">Vacancy Cost ({vacancyPercent}%):</Typography>
-                            <Typography variant="body2">{formatCurrency(cashflow.monthlyVacancy)}</Typography>
-                          </div>
-                          <div className="cashflow-row">
-                            <Typography variant="body2">CapEx ({capexPercent}%):</Typography>
-                            <Typography variant="body2">{formatCurrency(cashflow.monthlyCapex)}</Typography>
-                          </div>
-                          
-                          <div className="cashflow-divider"></div>
-                          
-                          <div className="cashflow-row">
-                            <Typography variant="body2" fontWeight="bold">Total Monthly Expenses:</Typography>
-                            <Typography variant="body2" fontWeight="bold">{formatCurrency(cashflow.totalMonthlyExpenses)}</Typography>
-                          </div>
-                          
-                          <div className="cashflow-total">
-                            <div className="cashflow-row">
-                              <Typography variant="body2" fontWeight="bold">Monthly Cashflow:</Typography>
-                              <Typography variant="body2" fontWeight="bold" color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}>
-                                {formatCurrency(cashflow.monthlyCashflow)}
-                              </Typography>
-                            </div>
-                            <div className="cashflow-row">
-                              <Typography variant="body2" fontWeight="bold">Annual Cashflow:</Typography>
-                              <Typography variant="body2" fontWeight="bold" color={cashflow.annualCashflow >= 0 ? 'success.main' : 'error.main'}>
-                                {formatCurrency(cashflow.annualCashflow)}
-                              </Typography>
-                            </div>
-                            <div className="cashflow-row">
-                              <Typography variant="body2" fontWeight="bold">Cash-on-Cash Return:</Typography>
-                              <Typography variant="body2" fontWeight="bold" color={cashflow.cashOnCashReturn >= 0 ? 'success.main' : 'error.main'}>
-                                {formatPercent(cashflow.cashOnCashReturn)}
-                              </Typography>
-                            </div>
-                          </div>
-                        </div>
-                      </AccordionDetails>
-                    </Accordion>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+          {displayProperties.length > 0 ? (
+            <VirtualizedPropertyGrid
+              properties={displayProperties}
+              calculateCashflow={calculateCashflow}
+              formatCurrency={formatCurrency}
+              formatPercent={formatPercent}
+              vacancyPercent={vacancyPercent}
+              capexPercent={capexPercent}
+            />
+          ) : searchPerformed && !loading && !initialLoading ? (
+            <Alert severity="info">
+              No properties found in this location. Please try another zip code or city.
+            </Alert>
+          ) : null}
           
           {/* Simple pagination controls */}
-          {totalPages > 1 && (
+          {totalPages > 1 && displayProperties.length > 0 && (
             <Box display="flex" justifyContent="center" mt={4} mb={4}>
               <Pagination 
                 count={totalPages} 
@@ -504,12 +662,6 @@ function App() {
             </Box>
           )}
         </>
-      )}
-      
-      {searchPerformed && !loading && properties.length === 0 && !error && (
-        <Alert severity="info">
-          No properties found in this location. Please try another zip code or city.
-        </Alert>
       )}
     </Container>
   );
