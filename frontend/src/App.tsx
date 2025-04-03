@@ -1,23 +1,8 @@
-import React, { useState } from 'react';
-import { Container, TextField, Button, Typography, Card, CardContent, CardMedia, Box, Alert, CircularProgress, Slider, Accordion, AccordionSummary, AccordionDetails, Divider, Pagination } from '@mui/material';
+import React, { useState, useEffect, useRef } from 'react';
+import { Container, TextField, Button, Typography, Card, CardContent, CardMedia, Box, Alert, CircularProgress, Slider, Accordion, AccordionSummary, AccordionDetails, Divider, Pagination, Skeleton } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import './App.css';
-
-// Define property interface
-interface Property {
-  property_id: string;
-  address: string;
-  price: number;
-  rent_estimate: number;
-  ratio: number;
-  thumbnail: string;
-  bedrooms: number;
-  bathrooms: number;
-  sqft: number;
-  url: string;
-  days_on_market: string | null;
-  rent_source: string;
-}
+import { searchProperties, getTotalPropertiesCount, clearCache, Property } from './api/propertyApi';
 
 // Define cashflow interface
 interface Cashflow {
@@ -30,6 +15,60 @@ interface Cashflow {
   annualCashflow: number;
   cashOnCashReturn: number;
 }
+
+// Lazy Image component for better performance
+interface LazyImageProps {
+  src: string;
+  alt: string;
+  className?: string;
+}
+
+const LazyImage: React.FC<LazyImageProps> = ({ src, alt, className }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isInView, setIsInView] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            setIsInView(true);
+            observer.disconnect();
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    if (imgRef.current) {
+      observer.observe(imgRef.current);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  return (
+    <div className="lazy-image-container" ref={imgRef}>
+      {isInView ? (
+        <>
+          {!isLoaded && <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" />}
+          <img
+            src={src}
+            alt={alt}
+            className={`lazy-image ${isLoaded ? 'loaded' : ''} ${className || ''}`}
+            onLoad={() => setIsLoaded(true)}
+            style={{ display: isLoaded ? 'block' : 'none' }}
+          />
+        </>
+      ) : (
+        <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" />
+      )}
+    </div>
+  );
+};
 
 function App() {
   // State variables
@@ -52,50 +91,13 @@ function App() {
   const [totalPages, setTotalPages] = useState(0);
   const [totalProperties, setTotalProperties] = useState(0);
 
-  // Get the API base URL (use relative URL for production, full URL for development)
-  // Explicitly set the backend URL to the exposed port URL with HTTPS
-  const API_BASE_URL = 'https://4000-i4di8c618ffb8mf6d8u6n-853b7697.manus.computer';
+  // Filter state - keeping these for the API but not showing in UI
+  const [priceRange, setPriceRange] = useState<[number, number]>([100000, 1000000]);
+  const [bedroomsFilter, setBedroomsFilter] = useState<number[]>([]);
+  const [bathroomsFilter, setBathroomsFilter] = useState<number[]>([]);
+  const [minRatio, setMinRatio] = useState(0.004);
+  const [propertyType, setPropertyType] = useState('All');
 
-  // Function to search for properties
-  const searchProperties = async (location: string, page: number = 0): Promise<Property[]> => {
-    try {
-      console.log(`Searching for properties in ${location}, page ${page} using API: ${API_BASE_URL}`);
-      
-      const response = await fetch(`${API_BASE_URL}/api/search?location=${encodeURIComponent(location)}&page=${page}`);
-      
-      if (!response.ok) {
-        console.error(`API error: ${response.status} - ${response.statusText}`);
-        throw new Error(`API error: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log('API response:', data);
-      
-      if (data.error) {
-        console.error('API returned error:', data.error);
-        throw new Error(data.error);
-      }
-      
-      // Get total count for pagination
-      const countResponse = await fetch(`${API_BASE_URL}/api/count?location=${encodeURIComponent(location)}`);
-      const countData = await countResponse.json();
-      
-      // Calculate total pages (10 properties per page)
-      const totalCount = countData.count || data.totalCount || 0;
-      const pages = Math.ceil(totalCount / 10);
-      
-      setTotalPages(pages);
-      setTotalProperties(totalCount);
-      
-      console.log(`Found ${totalCount} properties, ${pages} pages`);
-      
-      return data.properties || [];
-    } catch (error) {
-      console.error('Error in searchProperties:', error);
-      throw error;
-    }
-  };
-  
   // Function to handle search button click
   const handleSearch = async () => {
     if (!location.trim()) {
@@ -106,12 +108,34 @@ function App() {
     setLoading(true);
     setError(null);
     setSearchPerformed(true);
+    setCurrentPage(0);
     
     try {
       console.log('Starting property search for:', location);
-      const results = await searchProperties(location, 0);
+      
+      // Create filters object
+      const filters = {
+        priceRange,
+        bedroomsFilter: bedroomsFilter.length > 0 ? bedroomsFilter : undefined,
+        bathroomsFilter: bathroomsFilter.length > 0 ? bathroomsFilter : undefined,
+        minRatio,
+        propertyType: propertyType !== 'All' ? propertyType : undefined
+      };
+      
+      const results = await searchProperties(location, 0, filters);
       console.log('Search results:', results);
       setProperties(results);
+      
+      // Get total count for pagination
+      const totalCount = await getTotalPropertiesCount(location, filters);
+      
+      // Calculate total pages (10 properties per page)
+      const pages = Math.ceil(totalCount / 10);
+      
+      setTotalPages(pages);
+      setTotalProperties(totalCount);
+      
+      console.log(`Found ${totalCount} properties, ${pages} pages`);
     } catch (err) {
       console.error('Error searching properties:', err);
       setError('Error searching for properties. Please try again.');
@@ -130,7 +154,17 @@ function App() {
     
     try {
       console.log(`Changing to page ${value} (index ${pageIndex})`);
-      const results = await searchProperties(location, pageIndex);
+      
+      // Create filters object
+      const filters = {
+        priceRange,
+        bedroomsFilter: bedroomsFilter.length > 0 ? bedroomsFilter : undefined,
+        bathroomsFilter: bathroomsFilter.length > 0 ? bathroomsFilter : undefined,
+        minRatio,
+        propertyType: propertyType !== 'All' ? propertyType : undefined
+      };
+      
+      const results = await searchProperties(location, pageIndex, filters);
       console.log('Page results:', results);
       setProperties(results);
       setCurrentPage(pageIndex);
@@ -330,9 +364,8 @@ function App() {
               return (
                 <Card key={property.property_id} className="property-card">
                   <a href={property.url} target="_blank" rel="noopener noreferrer" className="property-image-container">
-                    <CardMedia
-                      component="img"
-                      image={property.thumbnail}
+                    <LazyImage
+                      src={property.thumbnail}
                       alt={property.address}
                     />
                     <div className="property-price">
@@ -481,4 +514,5 @@ function App() {
     </Container>
   );
 }
+
 export default App;
