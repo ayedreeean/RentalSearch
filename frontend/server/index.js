@@ -1,34 +1,65 @@
-import axios from 'axios';
+const express = require('express');
+const axios = require('axios');
+const cors = require('cors');
+const dotenv = require('dotenv');
+const path = require('path');
+const { mockProperties } = require('./mockData');
 
-// Define the property interface
-export interface Property {
-  property_id: string;
-  address: string;
-  price: number;
-  rent_estimate: number;
-  ratio: number;
-  thumbnail: string;
-  bedrooms: number;
-  bathrooms: number;
-  sqft: number;
-  url: string;
-  days_on_market: number | null;
-  rent_source: 'zillow' | 'calculated';
+// Load environment variables
+dotenv.config({ path: path.resolve(__dirname, './.env') });
+
+const app = express();
+const PORT = process.env.PORT || 4000;
+
+// Get API key from environment variable
+const RAPIDAPI_KEY = process.env.REACT_APP_RAPIDAPI_KEY;
+
+// Use mock data flag
+const USE_MOCK_DATA = false;
+
+if (!RAPIDAPI_KEY && !USE_MOCK_DATA) {
+  console.error('ERROR: RapidAPI key not found in environment variables');
+  process.exit(1);
 }
 
-// API key for Zillow RapidAPI - Use environment variable if available
-// This is a more secure approach than hardcoding the API key
-const RAPIDAPI_KEY = process.env.REACT_APP_RAPIDAPI_KEY || '2f3a6e2c0emsh7c9c7e2b5c3d4d0p1e8b3fjsn9e0f0f3c67d6';
+// Enable CORS for all routes
+app.use(cors());
+
+// Serve static files from the build directory
+app.use(express.static(path.join(__dirname, '../build')));
+
+// Middleware to parse JSON bodies
+app.use(express.json());
 
 // Helper function to add delay between API calls
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Function to search for properties by location
-export const searchProperties = async (location: string, page: number = 0): Promise<Property[]> => {
+// API proxy endpoint for property search
+app.get('/api/search', async (req, res) => {
   try {
-    console.log(`Searching for properties in ${location}, page ${page + 1}`);
+    const { location, page = 0 } = req.query;
+    console.log(`Searching for properties in ${location}, page ${parseInt(page) + 1}`);
     
-    // Search for properties using the Zillow API
+    // Use mock data if flag is set
+    if (USE_MOCK_DATA) {
+      console.log('Using mock data for property search');
+      
+      // Calculate pagination
+      const pageSize = 10;
+      const startIndex = parseInt(page) * pageSize;
+      const endIndex = Math.min(startIndex + pageSize, mockProperties.length);
+      
+      // Get properties for the current page
+      const paginatedProperties = mockProperties.slice(startIndex, endIndex);
+      
+      // Return mock properties and total count
+      return res.json({
+        properties: paginatedProperties,
+        totalCount: mockProperties.length
+      });
+    }
+    
+    // If not using mock data, proceed with real API call
     const searchResponse = await axios.request({
       method: 'GET',
       url: 'https://zillow-com1.p.rapidapi.com/propertyExtendedSearch',
@@ -45,22 +76,23 @@ export const searchProperties = async (location: string, page: number = 0): Prom
     
     // Check if we have results
     if (!searchResponse.data || !searchResponse.data.props || searchResponse.data.props.length === 0) {
-      return [];
+      return res.json({ properties: [], totalCount: 0 });
     }
     
     // Get all properties for pagination
     const allProperties = searchResponse.data.props;
+    const totalCount = allProperties.length;
     
     // Calculate start and end indices for pagination (10 properties per page)
     const pageSize = 10;
-    const startIndex = page * pageSize;
+    const startIndex = parseInt(page) * pageSize;
     const endIndex = Math.min(startIndex + pageSize, allProperties.length);
     
     // Get properties for the current page
     const paginatedProperties = allProperties.slice(startIndex, endIndex);
     
     // Process each property to get additional details and rent estimates
-    const properties: Property[] = [];
+    const properties = [];
     
     // Process properties sequentially with optimized delays to avoid rate limiting
     for (const item of paginatedProperties) {
@@ -101,7 +133,7 @@ export const searchProperties = async (location: string, page: number = 0): Prom
       
       // Get rent estimate for each property
       let rentEstimate = 0;
-      let rentSource: 'zillow' | 'calculated' = 'calculated'; // Default to calculated
+      let rentSource = 'calculated'; // Default to calculated
       
       try {
         // Use the Zillow API rentEstimate endpoint with optimized parameters
@@ -169,16 +201,31 @@ export const searchProperties = async (location: string, page: number = 0): Prom
     }
     
     // Sort by rent-to-price ratio (highest first)
-    return properties.sort((a, b) => b.ratio - a.ratio);
+    const sortedProperties = properties.sort((a, b) => b.ratio - a.ratio);
+    
+    // Return properties and total count
+    res.json({
+      properties: sortedProperties,
+      totalCount: totalCount
+    });
+    
   } catch (error) {
     console.error('Error fetching properties:', error);
-    throw error;
+    res.status(500).json({ error: 'Error searching for properties. Please try again.' });
   }
-};
+});
 
-// Function to get total number of properties from search
-export const getTotalPropertiesCount = async (location: string): Promise<number> => {
+// API endpoint to get total properties count
+app.get('/api/count', async (req, res) => {
   try {
+    const { location } = req.query;
+    
+    // Use mock data if flag is set
+    if (USE_MOCK_DATA) {
+      console.log('Using mock data for property count');
+      return res.json({ count: mockProperties.length });
+    }
+    
     const searchResponse = await axios.request({
       method: 'GET',
       url: 'https://zillow-com1.p.rapidapi.com/propertyExtendedSearch',
@@ -194,12 +241,23 @@ export const getTotalPropertiesCount = async (location: string): Promise<number>
     });
     
     if (!searchResponse.data || !searchResponse.data.props) {
-      return 0;
+      return res.json({ count: 0 });
     }
     
-    return searchResponse.data.props.length;
+    res.json({ count: searchResponse.data.props.length });
   } catch (error) {
     console.error('Error getting total properties count:', error);
-    return 0;
+    res.status(500).json({ error: 'Error getting property count. Please try again.' });
   }
-};
+});
+
+// Catch-all route to serve the React app
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../build', 'index.html'));
+});
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`API Key status: ${RAPIDAPI_KEY ? 'Found' : 'Not found'}`);
+});
