@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { FixedSizeGrid as Grid } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { Container, TextField, Button, Typography, Card, CardContent, Box, Alert, CircularProgress, Slider, Accordion, AccordionSummary, AccordionDetails, Pagination, Skeleton } from '@mui/material';
@@ -311,10 +311,18 @@ const VirtualizedPropertyGrid: React.FC<VirtualizedPropertyGridProps> = ({
   );
 };
 
+// Cache for storing paginated results
+interface PageCache {
+  [key: string]: {
+    allProperties: Property[];
+    completeProperties: Property[];
+    timestamp: number;
+  }
+}
+
 function App() {
   // State variables
   const [location, setLocation] = useState('');
-  const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -332,6 +340,8 @@ function App() {
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalProperties, setTotalProperties] = useState(0);
+  const [displayedProperties, setDisplayedProperties] = useState<Property[]>([]);
+  const [pageSize] = useState(10); // Fixed page size of 10 properties
 
   // Filter state - keeping these for the API but not showing in UI
   const [priceRange, setPriceRange] = useState<[number, number]>([100000, 1000000]);
@@ -343,6 +353,67 @@ function App() {
   // State for tracking complete properties (with rent estimates)
   const [completeProperties, setCompleteProperties] = useState<Property[]>([]);
   const [hasInitialBatch, setHasInitialBatch] = useState(false);
+  
+  // Page cache for faster navigation
+  const pageCache = useRef<PageCache>({});
+  const prefetchingPage = useRef<number | null>(null);
+  
+  // Current search parameters for prefetching
+  const currentSearchParams = useRef({
+    location: '',
+    filters: {}
+  });
+
+  // Function to create filters object
+  const createFilters = useCallback(() => {
+    return {
+      priceRange,
+      bedroomsFilter: bedroomsFilter.length > 0 ? bedroomsFilter : undefined,
+      bathroomsFilter: bathroomsFilter.length > 0 ? bathroomsFilter : undefined,
+      minRatio,
+      propertyType: propertyType !== 'All' ? propertyType : undefined
+    };
+  }, [priceRange, bedroomsFilter, bathroomsFilter, minRatio, propertyType]);
+
+  // Function to get cache key for a page
+  const getPageCacheKey = useCallback((loc: string, page: number, filters: any) => {
+    return `${loc}_${page}_${JSON.stringify(filters)}`;
+  }, []);
+
+  // Function to prefetch next page
+  const prefetchNextPage = useCallback(async (loc: string, currentPageIndex: number, filters: any) => {
+    // Don't prefetch if we're on the last page
+    if (currentPageIndex >= totalPages - 1) return;
+    
+    const nextPageIndex = currentPageIndex + 1;
+    const cacheKey = getPageCacheKey(loc, nextPageIndex, filters);
+    
+    // Check if page is already in cache
+    if (pageCache.current[cacheKey]) return;
+    
+    // Check if we're already prefetching this page
+    if (prefetchingPage.current === nextPageIndex) return;
+    
+    prefetchingPage.current = nextPageIndex;
+    
+    try {
+      console.log(`Prefetching page ${nextPageIndex + 1} in background`);
+      const results = await searchProperties(loc, nextPageIndex, filters, false);
+      
+      // Store in cache
+      pageCache.current[cacheKey] = {
+        allProperties: results.allProperties,
+        completeProperties: results.completeProperties,
+        timestamp: Date.now()
+      };
+      
+      console.log(`Page ${nextPageIndex + 1} prefetched and cached`);
+    } catch (error) {
+      console.error(`Error prefetching page ${nextPageIndex + 1}:`, error);
+    } finally {
+      prefetchingPage.current = null;
+    }
+  }, [getPageCacheKey, totalPages]);
 
   // Function to handle search button click
   const handleSearch = async () => {
@@ -358,24 +429,25 @@ function App() {
     setCurrentPage(0);
     setHasInitialBatch(false);
     setCompleteProperties([]);
+    setDisplayedProperties([]);
     
     try {
       console.log('Starting property search for:', location);
       
       // Create filters object
-      const filters = {
-        priceRange,
-        bedroomsFilter: bedroomsFilter.length > 0 ? bedroomsFilter : undefined,
-        bathroomsFilter: bathroomsFilter.length > 0 ? bathroomsFilter : undefined,
-        minRatio,
-        propertyType: propertyType !== 'All' ? propertyType : undefined
+      const filters = createFilters();
+      
+      // Update current search parameters for prefetching
+      currentSearchParams.current = {
+        location,
+        filters
       };
       
       // Get total count for pagination
       const totalCount = await getTotalPropertiesCount(location, filters);
       
       // Calculate total pages (10 properties per page)
-      const pages = Math.ceil(totalCount / 10);
+      const pages = Math.ceil(totalCount / pageSize);
       
       setTotalPages(pages);
       setTotalProperties(totalCount);
@@ -386,11 +458,12 @@ function App() {
       const results = await searchProperties(location, 0, filters, true);
       console.log('Search results:', results);
       
-      // Set all properties
-      setProperties(results.allProperties);
-      
       // Set complete properties (with rent estimates)
       setCompleteProperties(results.completeProperties);
+      
+      // Only display the first 10 properties (or fewer if there are less than 10)
+      const displayCount = Math.min(pageSize, results.completeProperties.length);
+      setDisplayedProperties(results.completeProperties.slice(0, displayCount));
       
       // Check if we have at least 10 complete properties or all properties are complete
       if (results.completeProperties.length >= 10 || 
@@ -399,10 +472,21 @@ function App() {
         setInitialLoading(false);
       }
       
+      // Cache the first page results
+      const cacheKey = getPageCacheKey(location, 0, filters);
+      pageCache.current[cacheKey] = {
+        allProperties: results.allProperties,
+        completeProperties: results.completeProperties,
+        timestamp: Date.now()
+      };
+      
+      // Start prefetching the next page
+      prefetchNextPage(location, 0, filters);
+      
     } catch (err) {
       console.error('Error searching properties:', err);
       setError('Error searching for properties. Please try again.');
-      setProperties([]);
+      setDisplayedProperties([]);
       setCompleteProperties([]);
       setInitialLoading(false);
     } finally {
@@ -421,25 +505,52 @@ function App() {
       console.log(`Changing to page ${value} (index ${pageIndex})`);
       
       // Create filters object
-      const filters = {
-        priceRange,
-        bedroomsFilter: bedroomsFilter.length > 0 ? bedroomsFilter : undefined,
-        bathroomsFilter: bathroomsFilter.length > 0 ? bathroomsFilter : undefined,
-        minRatio,
-        propertyType: propertyType !== 'All' ? propertyType : undefined
-      };
+      const filters = createFilters();
       
-      // Search for properties with prioritized loading
+      // Check if page is in cache
+      const cacheKey = getPageCacheKey(location, pageIndex, filters);
+      const cachedPage = pageCache.current[cacheKey];
+      
+      if (cachedPage) {
+        console.log(`Using cached data for page ${value}`);
+        
+        // Use cached data
+        setCompleteProperties(cachedPage.completeProperties);
+        setDisplayedProperties(cachedPage.completeProperties.slice(0, pageSize));
+        setCurrentPage(pageIndex);
+        setLoading(false);
+        
+        // Start prefetching the next page
+        prefetchNextPage(location, pageIndex, filters);
+        return;
+      }
+      
+      // If not in cache, fetch from API
+      console.log(`Fetching page ${value} from API`);
+      
+      // Search for properties
       const results = await searchProperties(location, pageIndex, filters, false);
       console.log('Page results:', results);
-      
-      // Set all properties
-      setProperties(results.allProperties);
       
       // Set complete properties (with rent estimates)
       setCompleteProperties(results.completeProperties);
       
+      // Only display the first 10 properties (or fewer if there are less than 10)
+      const displayCount = Math.min(pageSize, results.completeProperties.length);
+      setDisplayedProperties(results.completeProperties.slice(0, displayCount));
+      
       setCurrentPage(pageIndex);
+      
+      // Cache the page results
+      pageCache.current[cacheKey] = {
+        allProperties: results.allProperties,
+        completeProperties: results.completeProperties,
+        timestamp: Date.now()
+      };
+      
+      // Start prefetching the next page
+      prefetchNextPage(location, pageIndex, filters);
+      
     } catch (err) {
       console.error('Error fetching page:', err);
       setError('Error loading properties. Please try again.');
@@ -508,160 +619,211 @@ function App() {
       maximumFractionDigits: 1
     }).format(percent / 100);
   };
-
-  // Determine which properties to display
-  const displayProperties = hasInitialBatch ? completeProperties : [];
-
+  
+  // Clean up expired cache entries periodically
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      const expirationTime = 30 * 60 * 1000; // 30 minutes
+      
+      Object.keys(pageCache.current).forEach(key => {
+        if (now - pageCache.current[key].timestamp > expirationTime) {
+          delete pageCache.current[key];
+        }
+      });
+    }, 5 * 60 * 1000); // Run every 5 minutes
+    
+    return () => clearInterval(cleanupInterval);
+  }, []);
+  
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom align="center">
-        Rental Property Finder
+    <Container maxWidth="lg" className="app-container">
+      <Typography variant="h4" component="h1" gutterBottom align="center" className="app-title">
+        Rental Property Search
       </Typography>
       
-      <Box sx={{ mb: 4 }}>
+      <Box className="search-container">
         <TextField
-          fullWidth
-          label="Enter Zip Code or City"
+          label="Enter Location (City, State, or Zip)"
           variant="outlined"
+          fullWidth
           value={location}
           onChange={(e) => setLocation(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-          sx={{ mb: 2 }}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter') {
+              handleSearch();
+            }
+          }}
         />
         <Button 
           variant="contained" 
           color="primary" 
           onClick={handleSearch}
           disabled={loading}
-          fullWidth
+          className="search-button"
         >
-          {loading ? <CircularProgress size={24} color="inherit" /> : 'Search Properties'}
+          {loading ? <CircularProgress size={24} color="inherit" /> : 'Search'}
         </Button>
       </Box>
       
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mt: 2 }}>
           {error}
         </Alert>
       )}
       
-      {/* Mortgage Calculator Settings */}
-      <Accordion sx={{ mb: 3 }}>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography>Cashflow Calculator Settings</Typography>
-        </AccordionSummary>
-        <AccordionDetails>
-          <Typography gutterBottom>Interest Rate: {interestRate}%</Typography>
-          <Slider
-            value={interestRate}
-            onChange={(_, value) => setInterestRate(value as number)}
-            min={2}
-            max={10}
-            step={0.1}
-            valueLabelDisplay="auto"
-            sx={{ mb: 3 }}
-          />
-          
-          <Typography gutterBottom>Loan Term: {loanTerm} years</Typography>
-          <Slider
-            value={loanTerm}
-            onChange={(_, value) => setLoanTerm(value as number)}
-            min={15}
-            max={30}
-            step={5}
-            marks
-            valueLabelDisplay="auto"
-            sx={{ mb: 3 }}
-          />
-          
-          <Typography gutterBottom>Down Payment: {downPaymentPercent}%</Typography>
-          <Slider
-            value={downPaymentPercent}
-            onChange={(_, value) => setDownPaymentPercent(value as number)}
-            min={5}
-            max={50}
-            step={5}
-            valueLabelDisplay="auto"
-            sx={{ mb: 3 }}
-          />
-          
-          <Typography gutterBottom>Property Tax & Insurance: {taxInsurancePercent}% of property value annually</Typography>
-          <Slider
-            value={taxInsurancePercent}
-            onChange={(_, value) => setTaxInsurancePercent(value as number)}
-            min={0.5}
-            max={3}
-            step={0.1}
-            valueLabelDisplay="auto"
-            sx={{ mb: 3 }}
-          />
-          
-          <Typography gutterBottom>Vacancy: {vacancyPercent}% of rent</Typography>
-          <Slider
-            value={vacancyPercent}
-            onChange={(_, value) => setVacancyPercent(value as number)}
-            min={0}
-            max={10}
-            step={1}
-            valueLabelDisplay="auto"
-            sx={{ mb: 3 }}
-          />
-          
-          <Typography gutterBottom>Capital Expenditures: {capexPercent}% of rent</Typography>
-          <Slider
-            value={capexPercent}
-            onChange={(_, value) => setCapexPercent(value as number)}
-            min={0}
-            max={10}
-            step={1}
-            valueLabelDisplay="auto"
-          />
-        </AccordionDetails>
-      </Accordion>
-      
-      {/* Show pagination info if we have results */}
-      {searchPerformed && !loading && displayProperties.length > 0 && totalPages > 0 && (
-        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-          Showing {displayProperties.length} of {totalProperties} properties (Page {currentPage + 1} of {totalPages})
-        </Typography>
-      )}
-      
-      {initialLoading ? (
-        <Box display="flex" justifyContent="center" flexDirection="column" alignItems="center" my={4}>
-          <CircularProgress />
-          <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>
-            Loading properties with complete data...
-          </Typography>
-        </Box>
-      ) : (
-        <>
-          {displayProperties.length > 0 ? (
-            <VirtualizedPropertyGrid
-              properties={displayProperties}
-              calculateCashflow={calculateCashflow}
-              formatCurrency={formatCurrency}
-              formatPercent={formatPercent}
-              vacancyPercent={vacancyPercent}
-              capexPercent={capexPercent}
-            />
-          ) : searchPerformed && !loading && !initialLoading ? (
-            <Alert severity="info">
-              No properties found in this location. Please try another zip code or city.
-            </Alert>
-          ) : null}
-          
-          {/* Simple pagination controls */}
-          {totalPages > 1 && displayProperties.length > 0 && (
-            <Box display="flex" justifyContent="center" mt={4} mb={4}>
-              <Pagination 
-                count={totalPages} 
-                page={currentPage + 1} 
-                onChange={handlePageChange}
-                color="primary"
+      {searchPerformed && (
+        <Box className="results-container">
+          <Box className="mortgage-calculator">
+            <Typography variant="h6" gutterBottom>
+              Mortgage Calculator
+            </Typography>
+            
+            <Box className="slider-container">
+              <Typography variant="body2">
+                Interest Rate: {interestRate}%
+              </Typography>
+              <Slider
+                value={interestRate}
+                onChange={(_, value) => setInterestRate(value as number)}
+                min={2}
+                max={10}
+                step={0.1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
               />
             </Box>
-          )}
-        </>
+            
+            <Box className="slider-container">
+              <Typography variant="body2">
+                Loan Term: {loanTerm} years
+              </Typography>
+              <Slider
+                value={loanTerm}
+                onChange={(_, value) => setLoanTerm(value as number)}
+                min={15}
+                max={30}
+                step={5}
+                marks
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value} years`}
+              />
+            </Box>
+            
+            <Box className="slider-container">
+              <Typography variant="body2">
+                Down Payment: {downPaymentPercent}%
+              </Typography>
+              <Slider
+                value={downPaymentPercent}
+                onChange={(_, value) => setDownPaymentPercent(value as number)}
+                min={5}
+                max={30}
+                step={5}
+                marks
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
+              />
+            </Box>
+            
+            <Box className="slider-container">
+              <Typography variant="body2">
+                Property Tax & Insurance: {taxInsurancePercent}%
+              </Typography>
+              <Slider
+                value={taxInsurancePercent}
+                onChange={(_, value) => setTaxInsurancePercent(value as number)}
+                min={0.5}
+                max={3}
+                step={0.1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
+              />
+            </Box>
+            
+            <Box className="slider-container">
+              <Typography variant="body2">
+                Vacancy: {vacancyPercent}%
+              </Typography>
+              <Slider
+                value={vacancyPercent}
+                onChange={(_, value) => setVacancyPercent(value as number)}
+                min={0}
+                max={10}
+                step={1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
+              />
+            </Box>
+            
+            <Box className="slider-container">
+              <Typography variant="body2">
+                CapEx: {capexPercent}%
+              </Typography>
+              <Slider
+                value={capexPercent}
+                onChange={(_, value) => setCapexPercent(value as number)}
+                min={0}
+                max={10}
+                step={1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
+              />
+            </Box>
+          </Box>
+          
+          <Box className="properties-container">
+            {initialLoading ? (
+              <Box className="loading-container">
+                <CircularProgress />
+                <Typography variant="body1" sx={{ mt: 2 }}>
+                  Loading properties...
+                </Typography>
+              </Box>
+            ) : displayedProperties.length > 0 ? (
+              <>
+                <Box className="properties-header">
+                  <Typography variant="h6">
+                    {totalProperties} Properties Found
+                  </Typography>
+                  
+                  <Box className="pagination-container">
+                    <Pagination 
+                      count={totalPages} 
+                      page={currentPage + 1} 
+                      onChange={handlePageChange}
+                      color="primary"
+                      disabled={loading}
+                    />
+                  </Box>
+                </Box>
+                
+                <VirtualizedPropertyGrid
+                  properties={displayedProperties}
+                  calculateCashflow={calculateCashflow}
+                  formatCurrency={formatCurrency}
+                  formatPercent={formatPercent}
+                  vacancyPercent={vacancyPercent}
+                  capexPercent={capexPercent}
+                />
+                
+                <Box className="pagination-container" sx={{ mt: 2 }}>
+                  <Pagination 
+                    count={totalPages} 
+                    page={currentPage + 1} 
+                    onChange={handlePageChange}
+                    color="primary"
+                    disabled={loading}
+                  />
+                </Box>
+              </>
+            ) : (
+              <Typography variant="body1">
+                No properties found matching your criteria.
+              </Typography>
+            )}
+          </Box>
+        </Box>
       )}
     </Container>
   );
