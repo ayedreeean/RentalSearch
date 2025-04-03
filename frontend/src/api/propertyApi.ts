@@ -200,11 +200,15 @@ class BackgroundProcessor {
   private isProcessing = false;
   private readonly batchSize = 5;
   private readonly batchInterval = 5000; // 5 seconds between batches
+  private readonly maxRetries = 3; // Maximum number of retries for each property
+  private retryMap: Record<string, number> = {}; // Track retry attempts
+  private callbacks: Record<string, ((property: Property) => void)[]> = {}; // Callbacks for property updates
   
   enqueue(property: Property): void {
     // Don't add duplicates
     if (!this.queue.some(p => p.property_id === property.property_id)) {
       this.queue.push(property);
+      this.retryMap[property.property_id] = 0; // Initialize retry count
       
       if (!this.isProcessing) {
         this.processQueue();
@@ -218,10 +222,30 @@ class BackgroundProcessor {
       prop => !this.queue.some(p => p.property_id === prop.property_id)
     );
     
+    newProperties.forEach(prop => {
+      this.retryMap[prop.property_id] = 0; // Initialize retry count
+    });
+    
     this.queue.push(...newProperties);
     
     if (!this.isProcessing && newProperties.length > 0) {
       this.processQueue();
+    }
+  }
+  
+  // Register a callback for when a property is updated
+  onPropertyUpdated(propertyId: string, callback: (property: Property) => void): void {
+    if (!this.callbacks[propertyId]) {
+      this.callbacks[propertyId] = [];
+    }
+    this.callbacks[propertyId].push(callback);
+  }
+  
+  // Notify callbacks when a property is updated
+  private notifyPropertyUpdated(property: Property): void {
+    const callbacks = this.callbacks[property.property_id];
+    if (callbacks && callbacks.length > 0) {
+      callbacks.forEach(callback => callback(property));
     }
   }
   
@@ -238,15 +262,56 @@ class BackgroundProcessor {
     console.log(`Processing background batch of ${batch.length} properties`);
     
     // Process batch in parallel
-    const promises = batch.map(property => 
-      getPropertyWithRentEstimate(property, false)
-        .catch(error => {
+    const results = await Promise.all(
+      batch.map(async property => {
+        try {
+          const updatedProperty = await getPropertyWithRentEstimate(property, false);
+          
+          // Check if we got a Zillow rent estimate
+          if (updatedProperty.rent_source === 'zillow') {
+            // Success - notify callbacks
+            this.notifyPropertyUpdated(updatedProperty);
+            return { success: true, property: updatedProperty };
+          } else {
+            // Failed to get Zillow estimate - check if we should retry
+            const retryCount = this.retryMap[property.property_id] || 0;
+            if (retryCount < this.maxRetries) {
+              // Increment retry count and re-queue
+              this.retryMap[property.property_id] = retryCount + 1;
+              return { success: false, property, retry: true };
+            } else {
+              // Max retries reached - notify with calculated estimate
+              this.notifyPropertyUpdated(updatedProperty);
+              return { success: false, property: updatedProperty, retry: false };
+            }
+          }
+        } catch (error) {
           console.error(`Error in background processing for ${property.property_id}:`, error);
-          return property; // Return original property on error
-        })
+          
+          // Check if we should retry
+          const retryCount = this.retryMap[property.property_id] || 0;
+          if (retryCount < this.maxRetries) {
+            // Increment retry count and re-queue
+            this.retryMap[property.property_id] = retryCount + 1;
+            return { success: false, property, retry: true };
+          } else {
+            // Max retries reached - notify with original property
+            this.notifyPropertyUpdated(property);
+            return { success: false, property, retry: false };
+          }
+        }
+      })
     );
     
-    await Promise.all(promises);
+    // Re-queue properties that need retry
+    const propertiesToRetry = results
+      .filter(result => !result.success && result.retry)
+      .map(result => result.property);
+    
+    if (propertiesToRetry.length > 0) {
+      console.log(`Re-queuing ${propertiesToRetry.length} properties for retry`);
+      this.queue.push(...propertiesToRetry);
+    }
     
     // If there are more items in the queue, wait before processing next batch
     if (this.queue.length > 0) {
@@ -428,18 +493,57 @@ export const searchProperties = async (
     const completeProperties: Property[] = [];
     
     // Process priority properties in parallel with controlled concurrency
-    await Promise.all(
+    // Use Promise.allSettled to ensure we continue even if some requests fail
+    const results = await Promise.allSettled(
       priorityProperties.map(async (property) => {
         try {
-          const updatedProperty = await getPropertyWithRentEstimate(property, true);
-          completeProperties.push(updatedProperty);
+          // Try up to 3 times to get a Zillow rent estimate
+          let updatedProperty = property;
+          let attempts = 0;
+          const maxAttempts = 3;
+          
+          while (attempts < maxAttempts) {
+            try {
+              updatedProperty = await getPropertyWithRentEstimate(property, true);
+              
+              // If we got a Zillow rent estimate, break the loop
+              if (updatedProperty.rent_source === 'zillow') {
+                break;
+              }
+              
+              // If we didn't get a Zillow estimate, try again
+              attempts++;
+              if (attempts < maxAttempts) {
+                await delay(1000); // Wait 1 second before retrying
+              }
+            } catch (error) {
+              console.error(`Attempt ${attempts + 1} failed for ${property.property_id}:`, error);
+              attempts++;
+              if (attempts < maxAttempts) {
+                await delay(1000); // Wait 1 second before retrying
+              }
+            }
+          }
+          
+          return updatedProperty;
         } catch (error) {
           console.error(`Error processing property ${property.property_id}:`, error);
-          // If we fail to get rent estimate, still include the property with calculated estimate
-          completeProperties.push(property);
+          // If all attempts fail, return the original property
+          return property;
         }
       })
     );
+    
+    // Process results
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        completeProperties.push(result.value);
+      } else {
+        // If the promise was rejected, use the original property
+        console.error(`Property processing rejected: ${result.reason}`);
+        completeProperties.push(priorityProperties[index]);
+      }
+    });
     
     // Sort complete properties to match original order
     completeProperties.sort((a, b) => {
@@ -486,7 +590,7 @@ const getPropertyWithRentEstimate = async (property: Property, isPriority: boole
   }
   
   try {
-    // Use the Zillow API rentEstimate endpoint
+    // Use the Zillow API rentEstimate endpoint with more specific parameters
     const rentResponse = await rateLimiter.enqueue(() => axios.request({
       method: 'GET',
       url: 'https://zillow-com1.p.rapidapi.com/rentEstimate',
@@ -502,10 +606,16 @@ const getPropertyWithRentEstimate = async (property: Property, isPriority: boole
         'X-RapidAPI-Key': RAPIDAPI_KEY,
         'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
       },
-      timeout: 10000
+      timeout: 15000 // Increased timeout for rent estimates
     }), isPriority ? 2 : 0); // Higher priority for visible properties
     
-    if (rentResponse.data && rentResponse.data.rent) {
+    // Validate the response data more thoroughly
+    if (rentResponse.data && 
+        typeof rentResponse.data === 'object' && 
+        'rent' in rentResponse.data && 
+        typeof rentResponse.data.rent === 'number' && 
+        rentResponse.data.rent > 0) {
+      
       const rentEstimate = rentResponse.data.rent;
       
       // Cache the rent estimate
@@ -518,11 +628,12 @@ const getPropertyWithRentEstimate = async (property: Property, isPriority: boole
         ratio: rentEstimate / property.price,
         rent_source: 'zillow'
       };
+    } else {
+      console.warn(`Invalid rent estimate data for ${property.address}:`, rentResponse.data);
+      throw new Error('Invalid rent estimate data');
     }
   } catch (error) {
     console.error(`Error getting rent estimate for ${property.address}:`, error);
+    throw error; // Propagate error for retry logic
   }
-  
-  // If we couldn't get a rent estimate, return the original property
-  return property;
 };
