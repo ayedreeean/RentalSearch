@@ -1,4 +1,3 @@
-import React from 'react';
 import axios from 'axios';
 
 // Define the property interface
@@ -22,121 +21,51 @@ export interface Property {
 const RAPIDAPI_KEY = process.env.REACT_APP_RAPIDAPI_KEY || '8d9a4bdab8mshf7bb6f8edad5863p1c1b0ejsn7c4d5dde23f0';
 
 // Cache implementation
-interface CacheItem {
-  data: any;
-  timestamp: number;
-}
+// interface CacheItem {
+//   data: any;
+//   timestamp: number;
+// }
 
 class ApiCache {
-  private cache: Record<string, CacheItem> = {};
-  private readonly TTL: number = 60 * 60 * 1000; // 60 minutes in milliseconds for rent estimates
-  private readonly SEARCH_TTL: number = 30 * 60 * 1000; // 30 minutes for search results
-  private readonly STORAGE_KEY = 'rental_search_cache';
-
   constructor() {
-    // Load cache from localStorage if available
-    this.loadFromStorage();
+    // Remove loading from storage
+    // this.loadFromStorage();
     
-    // Set up interval to clean expired items
-    setInterval(() => this.cleanExpired(), 5 * 60 * 1000); // Clean every 5 minutes
+    // Remove interval timer
+    // setInterval(() => this.cleanExpired(), 5 * 60 * 1000);
   }
 
-  set(key: string, data: any, isRentEstimate: boolean = false): void {
-    this.cache[key] = {
-      data,
-      timestamp: Date.now()
-    };
-    
-    // Save to localStorage
-    this.saveToStorage();
+  set(key: string, data: any /* Remove isRentEstimate */): void {
+    // --- Disable ALL caching --- 
+    return; // Do nothing
   }
 
-  get(key: string, isRentEstimate: boolean = false): any | null {
-    const item = this.cache[key];
-    if (!item) return null;
-    
-    // Check if the cache item has expired
-    const ttl = isRentEstimate || key.startsWith('rent_') ? this.TTL : this.SEARCH_TTL;
-    if (Date.now() - item.timestamp > ttl) {
-      delete this.cache[key];
-      this.saveToStorage();
-      return null;
-    }
-    
-    return item.data;
+  get(key: string /* Remove isRentEstimate */): any | null {
+    // --- Disable ALL caching --- 
+    return null; // Always return null
   }
 
   clear(): void {
-    this.cache = {};
-    localStorage.removeItem(this.STORAGE_KEY);
-  }
-  
-  // Clean expired items from cache
-  private cleanExpired(): void {
-    const now = Date.now();
-    let hasChanges = false;
-    
-    Object.keys(this.cache).forEach(key => {
-      const ttl = key.startsWith('rent_') ? this.TTL : this.SEARCH_TTL;
-      if (now - this.cache[key].timestamp > ttl) {
-        delete this.cache[key];
-        hasChanges = true;
-      }
-    });
-    
-    if (hasChanges) {
-      this.saveToStorage();
-    }
-  }
-  
-  // Save cache to localStorage
-  private saveToStorage(): void {
+    // Clear in-memory object (though it should be empty)
+    // this.cache = {}; 
+    // Remove from localStorage (if anything was ever stored)
     try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.cache));
-    } catch (error) {
-      console.warn('Failed to save cache to localStorage:', error);
-      
-      // If localStorage is full, clear older items
-      try {
-        // Keep only the most recent 100 items
-        const keys = Object.keys(this.cache);
-        if (keys.length > 100) {
-          // Sort by timestamp (oldest first)
-          const sortedKeys = keys.sort((a, b) => 
-            this.cache[a].timestamp - this.cache[b].timestamp
-          );
-          
-          // Remove oldest items
-          const keysToRemove = sortedKeys.slice(0, keys.length - 100);
-          keysToRemove.forEach(key => {
-            delete this.cache[key];
-          });
-          
-          // Try saving again
-          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.cache));
-        }
-      } catch (e) {
-        console.error('Failed to clean up cache:', e);
-        // Last resort: clear entire cache
-        this.clear();
-      }
+       localStorage.removeItem('rental_search_cache'); // Use literal key if STORAGE_KEY removed
+    } catch (e) { 
+      console.warn('Could not clear potential localStorage cache:', e);
     }
   }
   
-  // Load cache from localStorage
-  private loadFromStorage(): void {
-    try {
-      const storedCache = localStorage.getItem(this.STORAGE_KEY);
-      if (storedCache) {
-        this.cache = JSON.parse(storedCache);
-      }
-    } catch (error) {
-      console.warn('Failed to load cache from localStorage:', error);
-    }
-  }
+  // Remove private methods related to storage and cleaning
+  /*
+  private cleanExpired(): void { ... }
+  private saveToStorage(): void { ... }
+  private loadFromStorage(): void { ... }
+  */
 }
 
-const apiCache = new ApiCache();
+// EXPORT the instance
+export const apiCache = new ApiCache();
 
 // Rate limiter implementation with priority queue
 class RateLimiter {
@@ -147,7 +76,7 @@ class RateLimiter {
     priority: number
   }> = [];
   private isProcessing = false;
-  private readonly requestInterval: number = 1000; // 1 request per second (half of the allowed 2/sec)
+  private readonly requestInterval: number = 1000; // Revert to 1 request per second
 
   async enqueue<T>(apiCall: () => Promise<T>, priority: number = 1): Promise<T> {
     return new Promise((resolve, reject) => {
@@ -178,11 +107,20 @@ class RateLimiter {
     
     if (nextRequest) {
       try {
-        const result = await nextRequest.apiCall();
+        // --- DEBUG LOG --- 
+        console.log(`[RateLimiter] Try block entered for priority ${nextRequest.priority}`);
+        console.log(`[RateLimiter] About to await apiCall for priority ${nextRequest.priority}`); // LOG A
+        const result = await nextRequest.apiCall(); 
+        console.log(`[RateLimiter] Await apiCall finished for priority ${nextRequest.priority}`); // LOG B
         nextRequest.resolve(result);
       } catch (error) {
-        console.error('Error processing queued request:', error);
+        // --- DEBUG LOG --- 
+        console.error(`[RateLimiter] Caught error during apiCall execution for priority ${nextRequest.priority}:`, error); // LOG C
+        console.error('Error processing queued request:', error); // Keep original log
         nextRequest.reject(error);
+      } finally {
+        // --- DEBUG LOG --- 
+        console.log(`[RateLimiter] Finally block reached for priority ${nextRequest.priority}`); // LOG D
       }
       
       // Wait before processing next request
@@ -199,7 +137,7 @@ class BackgroundProcessor {
   private queue: Property[] = [];
   private isProcessing = false;
   private readonly batchSize = 5;
-  private readonly batchInterval = 5000; // 5 seconds between batches
+  private readonly batchInterval = 2000; // Try 2 seconds between batches
   private readonly maxRetries = 3; // Maximum number of retries for each property
   private retryMap: Record<string, number> = {}; // Track retry attempts
   private callbacks: Record<string, ((property: Property) => void)[]> = {}; // Callbacks for property updates
@@ -241,15 +179,29 @@ class BackgroundProcessor {
     this.callbacks[propertyId].push(callback);
   }
   
+  // Global callback for any property update
+  private globalUpdateCallback: ((property: Property) => void) | null = null;
+
+  registerGlobalUpdateCallback(callback: (property: Property) => void): void {
+    this.globalUpdateCallback = callback;
+  }
+
   // Notify callbacks when a property is updated
   private notifyPropertyUpdated(property: Property): void {
     const callbacks = this.callbacks[property.property_id];
     if (callbacks && callbacks.length > 0) {
       callbacks.forEach(callback => callback(property));
     }
+    // Also notify the global callback
+    if (this.globalUpdateCallback) {
+      this.globalUpdateCallback(property);
+    }
   }
   
   private async processQueue() {
+    // --- DEBUG LOG START ---
+    console.log(`[BackgroundProcessor] processQueue called. Queue length: ${this.queue.length}`);
+    // --- DEBUG LOG END ---
     if (this.queue.length === 0) {
       this.isProcessing = false;
       return;
@@ -260,6 +212,9 @@ class BackgroundProcessor {
     // Process in batches
     const batch = this.queue.splice(0, this.batchSize);
     console.log(`Processing background batch of ${batch.length} properties`);
+    // --- DEBUG LOG START ---
+    console.log('[BackgroundProcessor] Batch properties:', batch.map(p => p.address));
+    // --- DEBUG LOG END ---
     
     // Process batch in parallel
     const results = await Promise.all(
@@ -280,9 +235,10 @@ class BackgroundProcessor {
               this.retryMap[property.property_id] = retryCount + 1;
               return { success: false, property, retry: true };
             } else {
-              // Max retries reached - notify with calculated estimate
-              this.notifyPropertyUpdated(updatedProperty);
-              return { success: false, property: updatedProperty, retry: false };
+              // Max retries reached - notify with original property
+              console.log(`[BackgroundProcessor] Max retries reached for ${property.property_id} after API error. Notifying with last known state.`);
+              this.notifyPropertyUpdated(property);
+              return { success: false, property, retry: false };
             }
           }
         } catch (error) {
@@ -296,6 +252,7 @@ class BackgroundProcessor {
             return { success: false, property, retry: true };
           } else {
             // Max retries reached - notify with original property
+            console.log(`[BackgroundProcessor] Max retries reached for ${property.property_id} after API error. Notifying with last known state.`);
             this.notifyPropertyUpdated(property);
             return { success: false, property, retry: false };
           }
@@ -324,40 +281,40 @@ class BackgroundProcessor {
 
 const backgroundProcessor = new BackgroundProcessor();
 
-// Helper function to add delay between API calls
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Expose function to register for updates
+export const registerForPropertyUpdates = (callback: (property: Property) => void) => {
+  backgroundProcessor.registerGlobalUpdateCallback(callback);
+};
 
 // Function to get total properties count for pagination
 export const getTotalPropertiesCount = async (
   location: string,
-  filters: {
-    priceRange?: [number, number],
-    bedroomsFilter?: number[],
-    bathroomsFilter?: number[],
-    minRatio?: number,
-    propertyType?: string
-  } = {}
+  minPrice?: number | null,
+  maxPrice?: number | null,
+  propertyType?: string
 ): Promise<number> => {
   try {
-    // Create cache key based on search parameters
-    const cacheKey = `count_${location}_${JSON.stringify(filters)}`;
-    
-    // Check cache first
-    const cachedData = apiCache.get(cacheKey);
-    if (cachedData) {
-      console.log('Using cached data for property count');
-      return cachedData;
+    // --- Prepare API Params ---
+    const apiParams: any = {
+      location: location,
+      home_type: propertyType && propertyType !== 'All' ? propertyType : 'Houses',
+      page: 1
+    };
+    // --- Use Direct Price Params (Relaxed Check) --- 
+    if (typeof minPrice === 'number' && minPrice >= 0) {
+      apiParams.minPrice = minPrice;
+      console.log('[getTotalPropertiesCount] Adding minPrice param:', apiParams.minPrice);
     }
-    
+    if (typeof maxPrice === 'number' && maxPrice > 0) {
+      apiParams.maxPrice = maxPrice;
+      console.log('[getTotalPropertiesCount] Adding maxPrice param:', apiParams.maxPrice);
+    }
+
     // Search for properties using the Zillow API
     const searchResponse = await rateLimiter.enqueue(() => axios.request({
       method: 'GET',
       url: 'https://zillow-com1.p.rapidapi.com/propertyExtendedSearch',
-      params: {
-        location: location,
-        home_type: filters.propertyType && filters.propertyType !== 'All' ? filters.propertyType : 'Houses',
-        page: 1
-      },
+      params: apiParams, // Use prepared params
       headers: {
         'X-RapidAPI-Key': RAPIDAPI_KEY,
         'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
@@ -372,9 +329,6 @@ export const getTotalPropertiesCount = async (
     
     const totalCount = searchResponse.data.totalResultCount;
     
-    // Cache the count
-    apiCache.set(cacheKey, totalCount);
-    
     return totalCount;
   } catch (error) {
     console.error('Error getting property count:', error);
@@ -384,48 +338,46 @@ export const getTotalPropertiesCount = async (
 
 // Function to search for properties by location with prioritized loading
 export const searchProperties = async (
-  location: string, 
+  location: string,
   page: number = 0,
-  filters: {
-    priceRange?: [number, number],
-    bedroomsFilter?: number[],
-    bathroomsFilter?: number[],
-    minRatio?: number,
-    propertyType?: string
-  } = {},
-  isPrioritized: boolean = false
+  minPrice?: number | null,
+  maxPrice?: number | null,
+  propertyType?: string,
+  minRatio?: number | null
 ): Promise<{
   allProperties: Property[],
   completeProperties: Property[]
 }> => {
   try {
-    console.log(`Searching for properties in ${location}, page ${page + 1}, prioritized: ${isPrioritized}`);
+    console.log(`Searching for properties in ${location}, page ${page + 1}`);
     
-    // Create cache key based on search parameters
-    const cacheKey = `search_${location}_${page}_${JSON.stringify(filters)}`;
-    
-    // Check cache first
-    const cachedData = apiCache.get(cacheKey);
-    if (cachedData) {
-      console.log('Using cached data for property search');
-      return cachedData;
+    // --- Prepare API Params ---
+    const apiParams: any = {
+        location: location,
+        home_type: propertyType && propertyType !== 'All' ? propertyType : 'Houses',
+        page: page + 1 // API uses 1-based indexing
+    };
+    // --- Use Direct Price Params (Relaxed Check) ---
+    if (typeof minPrice === 'number' && minPrice >= 0) {
+      apiParams.minPrice = minPrice;
+      console.log('[searchProperties] Adding minPrice param:', apiParams.minPrice);
     }
-    
+    if (typeof maxPrice === 'number' && maxPrice > 0) {
+      apiParams.maxPrice = maxPrice;
+      console.log('[searchProperties] Adding maxPrice param:', apiParams.maxPrice);
+    }
+
     // Search for properties using the Zillow API
     const searchResponse = await rateLimiter.enqueue(() => axios.request({
       method: 'GET',
       url: 'https://zillow-com1.p.rapidapi.com/propertyExtendedSearch',
-      params: {
-        location: location,
-        home_type: filters.propertyType && filters.propertyType !== 'All' ? filters.propertyType : 'Houses',
-        page: page + 1 // API uses 1-based indexing
-      },
+      params: apiParams, // Use prepared params
       headers: {
         'X-RapidAPI-Key': RAPIDAPI_KEY,
         'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
       },
-      timeout: 10000
-    }), isPrioritized ? 3 : 1); // Higher priority for initial search
+      timeout: 20000 // Increase timeout to 20 seconds
+    }), 1); // Use default priority 1
     
     // Check if we have results
     if (!searchResponse.data || !searchResponse.data.props || searchResponse.data.props.length === 0) {
@@ -437,25 +389,7 @@ export const searchProperties = async (
     let pageProperties = searchResponse.data.props;
     
     // Apply filters (still needed as API doesn't support all our filters)
-    if (filters.priceRange) {
-      pageProperties = pageProperties.filter(
-        (item: any) => item.price >= filters.priceRange![0] && item.price <= filters.priceRange![1]
-      );
-    }
-    
-    if (filters.bedroomsFilter && filters.bedroomsFilter.length > 0) {
-      pageProperties = pageProperties.filter((item: any) => {
-        // Handle 5+ bedrooms
-        if (filters.bedroomsFilter!.includes(5) && item.bedrooms >= 5) return true;
-        return filters.bedroomsFilter!.includes(item.bedrooms);
-      });
-    }
-    
-    if (filters.bathroomsFilter && filters.bathroomsFilter.length > 0) {
-      pageProperties = pageProperties.filter((item: any) => 
-        filters.bathroomsFilter!.includes(item.bathrooms)
-      );
-    }
+    // Price filter is handled by API
     
     // Map the API response to our Property interface
     const allProperties: Property[] = pageProperties.map((item: any) => {
@@ -479,92 +413,23 @@ export const searchProperties = async (
     });
     
     // Filter out properties that don't meet the minimum ratio requirement
-    const filteredProperties = filters.minRatio 
-      ? allProperties.filter(prop => prop.ratio >= filters.minRatio!)
+    const filteredProperties = minRatio !== null && minRatio !== undefined
+      ? allProperties.filter(prop => prop.ratio >= minRatio!)
       : allProperties;
     
-    // For prioritized loading, we'll process the first 10 properties first
-    // For non-prioritized loading, we'll process all properties
-    const priorityCount = isPrioritized ? Math.min(10, filteredProperties.length) : filteredProperties.length;
-    const priorityProperties = filteredProperties.slice(0, priorityCount);
-    const remainingProperties = isPrioritized ? filteredProperties.slice(priorityCount) : [];
-    
-    // Process priority properties to get accurate rent estimates
-    const completeProperties: Property[] = [];
-    
-    // Process priority properties in parallel with controlled concurrency
-    // Use Promise.allSettled to ensure we continue even if some requests fail
-    const results = await Promise.allSettled(
-      priorityProperties.map(async (property) => {
-        try {
-          // Try up to 3 times to get a Zillow rent estimate
-          let updatedProperty = property;
-          let attempts = 0;
-          const maxAttempts = 3;
-          
-          while (attempts < maxAttempts) {
-            try {
-              updatedProperty = await getPropertyWithRentEstimate(property, true);
-              
-              // If we got a Zillow rent estimate, break the loop
-              if (updatedProperty.rent_source === 'zillow') {
-                break;
-              }
-              
-              // If we didn't get a Zillow estimate, try again
-              attempts++;
-              if (attempts < maxAttempts) {
-                await delay(1000); // Wait 1 second before retrying
-              }
-            } catch (error) {
-              console.error(`Attempt ${attempts + 1} failed for ${property.property_id}:`, error);
-              attempts++;
-              if (attempts < maxAttempts) {
-                await delay(1000); // Wait 1 second before retrying
-              }
-            }
-          }
-          
-          return updatedProperty;
-        } catch (error) {
-          console.error(`Error processing property ${property.property_id}:`, error);
-          // If all attempts fail, return the original property
-          return property;
-        }
-      })
-    );
-    
-    // Process results
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        completeProperties.push(result.value);
-      } else {
-        // If the promise was rejected, use the original property
-        console.error(`Property processing rejected: ${result.reason}`);
-        completeProperties.push(priorityProperties[index]);
-      }
-    });
-    
-    // Sort complete properties to match original order
-    completeProperties.sort((a, b) => {
-      const aIndex = filteredProperties.findIndex(p => p.property_id === a.property_id);
-      const bIndex = filteredProperties.findIndex(p => p.property_id === b.property_id);
-      return aIndex - bIndex;
-    });
-    
-    // Start background processing of remaining properties if this is prioritized loading
-    if (isPrioritized && remainingProperties.length > 0) {
-      // Add remaining properties to background processing queue
-      backgroundProcessor.enqueueMany(remainingProperties);
+    // --- Enqueue ALL properties for background processing --- 
+    if (filteredProperties.length > 0) {
+      console.log(`[searchProperties page ${page + 1}] Enqueueing ${filteredProperties.length} properties for background processing.`); // DEBUG
+      backgroundProcessor.enqueueMany(filteredProperties);
+    } else {
+      console.log(`[searchProperties page ${page + 1}] No properties found or filtered out on this page.`); // DEBUG
     }
-    
+
+    // Return basic properties; updates happen via background callback
     const result = {
       allProperties: filteredProperties,
-      completeProperties: completeProperties
+      completeProperties: [] // Return empty array, App.tsx doesn't use this directly anymore
     };
-    
-    // Cache the result
-    apiCache.set(cacheKey, result);
     
     return result;
   } catch (error) {
@@ -577,7 +442,7 @@ export const searchProperties = async (
 const getPropertyWithRentEstimate = async (property: Property, isPriority: boolean = false): Promise<Property> => {
   // Check cache for rent estimate
   const rentEstimateCacheKey = `rent_${property.property_id}`;
-  const cachedRentEstimate = apiCache.get(rentEstimateCacheKey, true);
+  const cachedRentEstimate = apiCache.get(rentEstimateCacheKey);
   
   if (cachedRentEstimate) {
     console.log(`Using cached rent estimate for ${property.address}`);
@@ -590,26 +455,79 @@ const getPropertyWithRentEstimate = async (property: Property, isPriority: boole
   }
   
   try {
-    // Use the Zillow API rentEstimate endpoint with more specific parameters
-    const rentResponse = await rateLimiter.enqueue(() => axios.request({
-      method: 'GET',
-      url: 'https://zillow-com1.p.rapidapi.com/rentEstimate',
-      params: {
-        propertyType: 'SingleFamily',
-        address: property.address,
-        beds: property.bedrooms || 3,
-        baths: property.bathrooms || 2,
-        sqft: property.sqft || 1500,
-        d: 0.5
-      },
-      headers: {
-        'X-RapidAPI-Key': RAPIDAPI_KEY,
-        'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
-      },
-      timeout: 15000 // Increased timeout for rent estimates
-    }), isPriority ? 2 : 0); // Higher priority for visible properties
+    // --- DEBUG LOG --- 
+    console.log(`[getPropertyWithRentEstimate] Attempting to get rent for ${property.address} via RateLimiter. Priority: ${isPriority}`);
     
-    // Validate the response data more thoroughly
+    // Use the Zillow API rentEstimate endpoint with more specific parameters
+    const rentResponse = await rateLimiter.enqueue(() => {
+      // --- DEBUG LOG --- 
+      console.log(`[getPropertyWithRentEstimate] Executing axios request for ${property.address} inside RateLimiter.`);
+      return axios.request({
+        method: 'GET',
+        url: 'https://zillow-com1.p.rapidapi.com/rentEstimate',
+        params: {
+          propertyType: 'SingleFamily',
+          address: property.address,
+          beds: property.bedrooms || 3,
+          baths: property.bathrooms || 2,
+          sqft: property.sqft || 1500,
+          d: 0.5
+        },
+        headers: {
+          'X-RapidAPI-Key': RAPIDAPI_KEY,
+          'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
+        },
+        timeout: 15000 // Increased timeout for rent estimates
+      });
+    }, isPriority ? 2 : 0); // Add priority back (will be 0 since isPriority is false)
+    
+    // --- Updated Validation Logic --- 
+    let rentEstimate: number | null = null;
+    
+    // Option 1: Check for direct 'rent' field
+    if (rentResponse.data && 
+        typeof rentResponse.data === 'object' && 
+        'rent' in rentResponse.data && 
+        typeof rentResponse.data.rent === 'number' && 
+        rentResponse.data.rent > 0) {
+      
+      rentEstimate = rentResponse.data.rent;
+      // Cache the successful rent estimate response data
+      apiCache.set(rentEstimateCacheKey, rentResponse.data);
+
+    // Option 2: Check for 'lowRent' and 'highRent' fields
+    } else if (rentResponse.data && 
+               typeof rentResponse.data === 'object' &&
+               'lowRent' in rentResponse.data && typeof rentResponse.data.lowRent === 'number' &&
+               'highRent' in rentResponse.data && typeof rentResponse.data.highRent === 'number' &&
+               rentResponse.data.lowRent > 0 && rentResponse.data.highRent > 0) {
+      
+      console.log(`Using average of lowRent (${rentResponse.data.lowRent}) and highRent (${rentResponse.data.highRent}) for ${property.address}`);
+      rentEstimate = (rentResponse.data.lowRent + rentResponse.data.highRent) / 2;
+      // Cache the data that was received, even if we averaged it
+      apiCache.set(rentEstimateCacheKey, rentResponse.data);
+      
+    } else {
+      // If neither structure is found, log warning and throw error for retry
+      console.warn(`Invalid or unusable rent estimate data structure for ${property.address}:`, rentResponse.data);
+      throw new Error('Invalid or unusable rent estimate data structure');
+    }
+
+    // Return updated property if we got an estimate
+    if (rentEstimate !== null) {
+       return {
+         ...property,
+         rent_estimate: rentEstimate,
+         ratio: rentEstimate / property.price,
+         rent_source: 'zillow' // Mark as zillow even if averaged from low/high
+       };
+    } else {
+        // This path should ideally not be reached if the above logic is correct,
+        // but throw error just in case to trigger retry.
+        throw new Error('Failed to extract a valid rent estimate');
+    }
+
+    /* --- Original Validation Logic --- 
     if (rentResponse.data && 
         typeof rentResponse.data === 'object' && 
         'rent' in rentResponse.data && 
@@ -619,7 +537,7 @@ const getPropertyWithRentEstimate = async (property: Property, isPriority: boole
       const rentEstimate = rentResponse.data.rent;
       
       // Cache the rent estimate
-      apiCache.set(rentEstimateCacheKey, rentResponse.data, true);
+      apiCache.set(rentEstimateCacheKey, rentResponse.data);
       
       // Return updated property with accurate rent estimate
       return {
@@ -632,6 +550,7 @@ const getPropertyWithRentEstimate = async (property: Property, isPriority: boole
       console.warn(`Invalid rent estimate data for ${property.address}:`, rentResponse.data);
       throw new Error('Invalid rent estimate data');
     }
+    */
   } catch (error) {
     console.error(`Error getting rent estimate for ${property.address}:`, error);
     throw error; // Propagate error for retry logic
