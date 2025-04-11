@@ -1060,11 +1060,19 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             <Typography variant="subtitle2" gutterBottom>Projection Assumptions</Typography>
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 3 }}>
               <Box sx={{ flex: 1 }}>
-                <Typography variant="body2" gutterBottom>Annual Rent Appreciation: {rentAppreciationRate}%</Typography>
+                <Typography variant="body2" gutterBottom>
+                  <Tooltip title="Expected annual increase in rental rates due to inflation and market demand. Historically averages 2-4% in most markets." arrow>
+                    <span>Annual Rent Appreciation: {rentAppreciationRate}%</span>
+                  </Tooltip>
+                </Typography>
                 <Slider value={rentAppreciationRate} onChange={handleRentAppreciationChange} aria-labelledby="rent-appreciation-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#4f46e5' }} />
               </Box>
               <Box sx={{ flex: 1 }}>
-                <Typography variant="body2" gutterBottom>Property Value Increase: {propertyValueIncreaseRate}%</Typography>
+                <Typography variant="body2" gutterBottom>
+                  <Tooltip title="Expected annual increase in property value over time. Historically real estate appreciates at 3-5% annually over the long term." arrow>
+                    <span>Property Value Increase: {propertyValueIncreaseRate}%</span>
+                  </Tooltip>
+                </Typography>
                 <Slider value={propertyValueIncreaseRate} onChange={handlePropertyValueIncreaseChange} aria-labelledby="property-value-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#4f46e5' }} />
               </Box>
             </Box>
