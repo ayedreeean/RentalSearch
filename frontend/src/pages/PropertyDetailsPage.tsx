@@ -14,7 +14,13 @@ import {
   AppBar,
   Toolbar,
   Fab,
-  CssBaseline
+  CssBaseline,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow
 } from '@mui/material';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -25,6 +31,7 @@ import ShareIcon from '@mui/icons-material/Share';
 import EmailIcon from '@mui/icons-material/Email';
 import TuneIcon from '@mui/icons-material/Tune';
 import { Property, Cashflow, CashflowSettings } from '../types';
+// import { LineChart } from '@mui/x-charts/LineChart';
 
 interface PropertyDetailsPageProps {
   properties: Property[];
@@ -33,6 +40,204 @@ interface PropertyDetailsPageProps {
   formatPercent: (percent: number) => string;
   defaultSettings: CashflowSettings;
 }
+
+// Add the interface for long-term cashflow data
+interface YearlyProjection {
+  year: number;
+  propertyValue: number;
+  annualRent: number;
+  yearlyExpenses: number;
+  yearlyCashflow: number;
+  equity: number;
+  roi: number;
+}
+
+// Replace the LineChart placeholder with a simple canvas-based chart
+const SimpleChart = ({ 
+  data, 
+  height = 300
+}: { 
+  data: { 
+    years: number[], 
+    propertyValues: number[],
+    equity: number[],
+    cashflow: number[]
+  },
+  height?: number 
+}) => {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Set canvas dimensions accounting for device pixel ratio
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    ctx.scale(ratio, ratio);
+    
+    const canvasWidth = canvas.offsetWidth;
+    const canvasHeight = canvas.offsetHeight;
+    
+    // Padding
+    const padding = {
+      top: 30,
+      right: 20,
+      bottom: 30,
+      left: 60
+    };
+    
+    const chartWidth = canvasWidth - padding.left - padding.right;
+    const chartHeight = canvasHeight - padding.top - padding.bottom;
+    
+    // Find max values for scaling
+    const maxPropertyValue = Math.max(...data.propertyValues);
+    const maxEquity = Math.max(...data.equity);
+    const maxCashflow = Math.max(...data.cashflow);
+    const minCashflow = Math.min(...data.cashflow, 0);
+    
+    // We'll use property values as our max scale since they're likely the largest
+    const yScale = chartHeight / (maxPropertyValue || 1);
+    const xScale = chartWidth / (data.years.length > 1 ? data.years.length - 1 : 1);
+    
+    // Draw axes
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    
+    // Y-axis
+    ctx.moveTo(padding.left, padding.top);
+    ctx.lineTo(padding.left, canvasHeight - padding.bottom);
+    
+    // X-axis
+    ctx.moveTo(padding.left, canvasHeight - padding.bottom);
+    ctx.lineTo(canvasWidth - padding.right, canvasHeight - padding.bottom);
+    ctx.stroke();
+    
+    // Draw Y-axis labels
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#666';
+    ctx.font = '10px Arial';
+    
+    const yStep = maxPropertyValue / 5;
+    for (let i = 0; i <= 5; i++) {
+      const value = i * yStep;
+      const y = canvasHeight - padding.bottom - (value * yScale);
+      ctx.fillText('$' + Math.round(value).toLocaleString(), padding.left - 5, y);
+    }
+    
+    // Draw X-axis labels (just a few to avoid overcrowding)
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    
+    const yearLabelInterval = Math.max(1, Math.floor(data.years.length / 5));
+    for (let i = 0; i < data.years.length; i += yearLabelInterval) {
+      const x = padding.left + (i * xScale);
+      ctx.fillText('Year ' + data.years[i], x, canvasHeight - padding.bottom + 5);
+    }
+    
+    // Draw legend
+    const legendItems = [
+      { label: 'Property Value', color: '#4f46e5' },
+      { label: 'Equity', color: '#10b981' },
+      { label: 'Annual Cashflow', color: '#f97316' }
+    ];
+    
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = '12px Arial';
+    
+    legendItems.forEach((item, index) => {
+      const x = padding.left + 10 + (index * 150);
+      const y = padding.top / 2;
+      
+      ctx.fillStyle = item.color;
+      ctx.fillRect(x, y - 5, 15, 10);
+      
+      ctx.fillStyle = '#333';
+      ctx.fillText(item.label, x + 20, y);
+    });
+    
+    // Draw property value line
+    if (data.propertyValues.length > 1) {
+      ctx.strokeStyle = '#4f46e5'; // Purple
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      
+      for (let i = 0; i < data.propertyValues.length; i++) {
+        const x = padding.left + (i * xScale);
+        const y = canvasHeight - padding.bottom - (data.propertyValues[i] * yScale);
+        
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      
+      ctx.stroke();
+    }
+    
+    // Draw equity line
+    if (data.equity.length > 1) {
+      ctx.strokeStyle = '#10b981'; // Green
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      
+      for (let i = 0; i < data.equity.length; i++) {
+        const x = padding.left + (i * xScale);
+        const y = canvasHeight - padding.bottom - (data.equity[i] * yScale);
+        
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      
+      ctx.stroke();
+    }
+    
+    // Draw cashflow bars
+    const barWidth = xScale * 0.5;
+    
+    ctx.fillStyle = '#f97316'; // Orange
+    
+    for (let i = 0; i < data.cashflow.length; i++) {
+      const x = padding.left + (i * xScale) - (barWidth / 2);
+      const cashflowHeight = Math.abs(data.cashflow[i] * yScale);
+      
+      if (data.cashflow[i] >= 0) {
+        const y = canvasHeight - padding.bottom - cashflowHeight;
+        ctx.fillRect(x, y, barWidth, cashflowHeight);
+      } else {
+        const y = canvasHeight - padding.bottom;
+        ctx.fillRect(x, y, barWidth, cashflowHeight);
+      }
+    }
+    
+  }, [data, canvasRef]);
+  
+  return (
+    <Box sx={{ width: '100%', height }}>
+      <canvas 
+        ref={canvasRef} 
+        style={{ 
+          width: '100%', 
+          height: '100%' 
+        }}
+      />
+    </Box>
+  );
+};
 
 const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   properties,
@@ -64,6 +269,11 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   
   // Add state for floating panel
   const [isAssumptionsPanelOpen, setIsAssumptionsPanelOpen] = useState(false);
+  
+  // Add state for long-term analysis
+  const [rentAppreciationRate, setRentAppreciationRate] = useState<number>(3); // Default 3%
+  const [propertyValueIncreaseRate, setPropertyValueIncreaseRate] = useState<number>(3); // Default 3%
+  const [yearsToProject, setYearsToProject] = useState<number>(30); // Default 30 years
   
   // Load property data
   useEffect(() => {
@@ -337,6 +547,116 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
     window.open(`mailto:?subject=${subject}&body=${summary}`);
   };
   
+  // Add handler for rent appreciation rate change
+  const handleRentAppreciationChange = (_event: Event, newValue: number | number[]) => {
+    setRentAppreciationRate(newValue as number);
+  };
+  
+  // Add handler for property value increase rate change
+  const handlePropertyValueIncreaseChange = (_event: Event, newValue: number | number[]) => {
+    setPropertyValueIncreaseRate(newValue as number);
+  };
+  
+  // Add handler for years to project change
+  const handleYearsToProjectChange = (_event: Event, newValue: number | number[]) => {
+    setYearsToProject(newValue as number);
+  };
+  
+  // Function to generate long-term cashflow projections
+  const generateLongTermCashflow = (): YearlyProjection[] => {
+    if (!property || !cashflow) return [];
+    
+    const years: YearlyProjection[] = [];
+    // Get the initial monthly rent
+    const initialMonthlyRent = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
+    // Calculate initial annual rent
+    const initialAnnualRent = initialMonthlyRent * 12;
+    let propertyValue = property.price;
+    
+    // Calculate initial equity (down payment)
+    let equity = property.price * (settings.downPaymentPercent / 100);
+    
+    // Calculate loan details
+    const loanAmount = property.price - equity;
+    const monthlyInterestRate = settings.interestRate / 100 / 12;
+    const totalPayments = settings.loanTerm * 12;
+    
+    // Calculate remaining principal as of start
+    let remainingPrincipal = loanAmount;
+    
+    for (let i = 1; i <= yearsToProject; i++) {
+      // Calculate rent with appreciation compounding properly from initial value
+      const yearRent = initialAnnualRent * Math.pow(1 + rentAppreciationRate / 100, i - 1);
+      
+      // Increase property value with appreciation (compounding)
+      propertyValue = property.price * Math.pow(1 + propertyValueIncreaseRate / 100, i - 1);
+      
+      // Calculate expenses
+      const yearlyMortgage = cashflow.monthlyMortgage * 12; // Mortgage stays fixed
+      
+      // Tax and insurance typically increase with property value
+      const yearlyTaxInsurance = cashflow.monthlyTaxInsurance * 12 * Math.pow(1 + propertyValueIncreaseRate / 100, i - 1);
+      
+      // Other expenses are calculated as percentage of rent
+      const yearlyVacancy = yearRent * (settings.vacancyPercent / 100);
+      const yearlyCapex = yearRent * (settings.capexPercent / 100);
+      const yearlyPropertyManagement = yearRent * (settings.propertyManagementPercent / 100);
+      
+      // Total expenses for the year
+      const yearlyExpenses = yearlyMortgage + yearlyTaxInsurance + yearlyVacancy + yearlyCapex + yearlyPropertyManagement;
+      
+      // Cashflow for the year
+      const yearlyCashflow = yearRent - yearlyExpenses;
+      
+      // Calculate principal paid this year using amortization
+      let principalPaidThisYear = 0;
+      
+      // Calculate month by month for the current year
+      const startMonth = (i - 1) * 12 + 1;
+      const endMonth = Math.min(i * 12, totalPayments);
+      
+      // Only calculate if we're still within the loan term
+      if (startMonth <= totalPayments) {
+        // For each month in the current year
+        for (let month = startMonth; month <= endMonth; month++) {
+          // Calculate interest for this month
+          const interestPayment = remainingPrincipal * monthlyInterestRate;
+          
+          // Calculate principal payment for this month (mortgage payment - interest)
+          const principalPayment = cashflow.monthlyMortgage - interestPayment;
+          
+          // Add to yearly principal total
+          principalPaidThisYear += principalPayment;
+          
+          // Reduce remaining principal
+          remainingPrincipal = Math.max(0, remainingPrincipal - principalPayment);
+        }
+      }
+      
+      // Update equity (original down payment + principal paid so far + appreciation)
+      equity = propertyValue - remainingPrincipal;
+      
+      // Calculate ROI
+      const initialInvestment = property.price * (settings.downPaymentPercent / 100) + property.price * 0.03;
+      const cashOnCashReturn = (yearlyCashflow / initialInvestment) * 100;
+      
+      years.push({
+        year: i,
+        propertyValue,
+        annualRent: yearRent,
+        yearlyExpenses,
+        yearlyCashflow,
+        equity,
+        roi: cashOnCashReturn
+      });
+      
+      // No need to update annualRent for the next iteration since we're using the power function
+      // with the initial value for proper compounding
+    }
+    
+    return years;
+  };
+  
   // Display loading state
   if (loading) {
     return (
@@ -371,6 +691,15 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
   
   // Calculate values for display
   const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
+  
+  // Generate long-term cashflow data
+  const longTermCashflowData: YearlyProjection[] = generateLongTermCashflow();
+  
+  // Generate chart data
+  const chartYears = longTermCashflowData.map(data => data.year);
+  const chartPropertyValues = longTermCashflowData.map(data => data.propertyValue);
+  const chartEquity = longTermCashflowData.map(data => data.equity);
+  const chartCashflow = longTermCashflowData.map(data => data.yearlyCashflow);
   
   return (
     <>
@@ -436,7 +765,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           </Box>
         </Box>
         
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4 }}>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4, mb: 4 }}>
           {/* Left column: Property image and details */}
           <Box sx={{ flex: '1', maxWidth: { xs: '100%', md: '40%' } }}>
             <Box>
@@ -501,36 +830,25 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           <Box sx={{ flex: '1', maxWidth: { xs: '100%', md: '60%' } }}>
             {/* Cashflow Header */}
             <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                 <Typography variant="h5">Cashflow Analysis</Typography>
-                <Typography 
-                  variant="h5" 
-                  fontWeight="bold" 
-                  color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}
-                >
-                  {formatCurrency(cashflow.monthlyCashflow)}/mo
-                </Typography>
-              </Box>
-              
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                <Typography variant="body1" sx={{ mr: 2 }}>Rent Estimate:</Typography>
-                <TextField
-                  variant="outlined" 
-                  size="small"
-                  value={isRentEditing ? displayRent : formatCurrency(customRentEstimate !== null ? customRentEstimate : property.rent_estimate)}
-                  onChange={handleRentChange}
-                  onFocus={handleRentFocus}
-                  onBlur={handleRentBlur}
-                  sx={{ maxWidth: '150px' }}
-                  InputProps={{
-                    endAdornment: <EditIcon sx={{ fontSize: 16, color: '#6b7280', opacity: 0.7 }} />,
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      (e.target as HTMLInputElement).blur();
-                    }
-                  }}
-                />
+                <Box>
+                  <Typography 
+                    variant="h5" 
+                    fontWeight="bold" 
+                    color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}
+                    sx={{ textAlign: 'right' }}
+                  >
+                    {formatCurrency(cashflow.monthlyCashflow)}/mo
+                  </Typography>
+                  <Typography 
+                    variant="body2" 
+                    color={cashflow.annualCashflow >= 0 ? 'success.main' : 'error.main'}
+                    sx={{ textAlign: 'right' }}
+                  >
+                    {formatCurrency(cashflow.annualCashflow)}/year
+                  </Typography>
+                </Box>
               </Box>
               
               <Divider sx={{ my: 2 }} />
@@ -539,11 +857,25 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 <Box sx={{ flex: 1 }}>
                   <Box sx={{ bgcolor: '#f9f9f9', p: 2, borderRadius: 2 }}>
                     <Typography variant="subtitle2" gutterBottom fontWeight="bold">Monthly Income</Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5, alignItems: 'center' }}>
                       <Typography variant="body2">Rental Income:</Typography>
-                      <Typography variant="body2" fontWeight="medium">
-                        {formatCurrency(customRentEstimate !== null ? customRentEstimate : property.rent_estimate)}
-                      </Typography>
+                      <TextField
+                        variant="outlined" 
+                        size="small"
+                        value={isRentEditing ? displayRent : formatCurrency(customRentEstimate !== null ? customRentEstimate : property.rent_estimate)}
+                        onChange={handleRentChange}
+                        onFocus={handleRentFocus}
+                        onBlur={handleRentBlur}
+                        sx={{ maxWidth: '120px' }}
+                        InputProps={{
+                          endAdornment: <EditIcon sx={{ fontSize: 16, color: '#6b7280', opacity: 0.7 }} />,
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
+                      />
                     </Box>
                   </Box>
                 </Box>
@@ -551,12 +883,6 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 <Box sx={{ flex: 1 }}>
                   <Box sx={{ bgcolor: '#f0f7ff', p: 2, borderRadius: 2 }}>
                     <Typography variant="subtitle2" gutterBottom fontWeight="bold">Annual Returns</Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                      <Typography variant="body2">Annual Cashflow:</Typography>
-                      <Typography variant="body2" fontWeight="bold" color={cashflow.annualCashflow >= 0 ? 'success.main' : 'error.main'}>
-                        {formatCurrency(cashflow.annualCashflow)}
-                      </Typography>
-                    </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                       <Typography variant="body2">Cash-on-Cash Return:</Typography>
                       <Typography variant="body2" fontWeight="bold" color={cashflow.cashOnCashReturn >= 0 ? 'success.main' : 'error.main'}>
@@ -696,6 +1022,79 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             )}
           </Box>
         </Box>
+        
+        {/* Add new Long-Term Cashflow Analysis Section - Moved outside the columns to span full width */}
+        <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
+          <Typography variant="h5" mb={2}>Long-Term Cashflow Analysis</Typography>
+          
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" gutterBottom>Projection Assumptions</Typography>
+            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 3 }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="body2" gutterBottom>Annual Rent Appreciation: {rentAppreciationRate}%</Typography>
+                <Slider value={rentAppreciationRate} onChange={handleRentAppreciationChange} aria-labelledby="rent-appreciation-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#4f46e5' }} />
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="body2" gutterBottom>Property Value Increase: {propertyValueIncreaseRate}%</Typography>
+                <Slider value={propertyValueIncreaseRate} onChange={handlePropertyValueIncreaseChange} aria-labelledby="property-value-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#4f46e5' }} />
+              </Box>
+            </Box>
+          </Box>
+          
+          <Box sx={{ width: '100%', mb: 4, height: 300 }}>
+            <Typography variant="subtitle2" gutterBottom>Property Value & Equity Growth</Typography>
+            <SimpleChart 
+              data={{
+                years: chartYears,
+                propertyValues: chartPropertyValues,
+                equity: chartEquity,
+                cashflow: chartCashflow
+              }}
+              height={300}
+            />
+          </Box>
+          
+          <Box sx={{ overflowX: 'auto' }}>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Year</TableCell>
+                    <TableCell align="right">Property Value</TableCell>
+                    <TableCell align="right">Annual Rent</TableCell>
+                    <TableCell align="right">Expenses</TableCell>
+                    <TableCell align="right">Cashflow</TableCell>
+                    <TableCell align="right">Equity</TableCell>
+                    <TableCell align="right">ROI</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {longTermCashflowData.filter((_, index) => index % 5 === 0 || index === 0).map((data) => (
+                    <TableRow key={data.year}>
+                      <TableCell>{data.year}</TableCell>
+                      <TableCell align="right">{formatCurrency(data.propertyValue)}</TableCell>
+                      <TableCell align="right">{formatCurrency(data.annualRent)}</TableCell>
+                      <TableCell align="right">{formatCurrency(data.yearlyExpenses)}</TableCell>
+                      <TableCell 
+                        align="right"
+                        sx={{ color: data.yearlyCashflow >= 0 ? 'success.main' : 'error.main' }}
+                      >
+                        {formatCurrency(data.yearlyCashflow)}
+                      </TableCell>
+                      <TableCell align="right">{formatCurrency(data.equity)}</TableCell>
+                      <TableCell 
+                        align="right"
+                        sx={{ color: data.roi >= 0 ? 'success.main' : 'error.main' }}
+                      >
+                        {formatPercent(data.roi)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        </Paper>
       </Container>
     </>
   );
