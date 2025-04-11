@@ -91,21 +91,37 @@ const SimpleChart = ({
     const padding = {
       top: 30,
       right: 20,
-      bottom: 30,
-      left: 60
+      bottom: 40, // Increased for negative values
+      left: 80     // Increased for wider currency values
     };
     
     const chartWidth = canvasWidth - padding.left - padding.right;
     const chartHeight = canvasHeight - padding.top - padding.bottom;
     
-    // Find max values for scaling
+    // Find max/min values for scaling
     const maxPropertyValue = Math.max(...data.propertyValues);
     const maxEquity = Math.max(...data.equity);
     const maxCashflow = Math.max(...data.cashflow);
-    const minCashflow = Math.min(...data.cashflow, 0);
+    const minCashflow = Math.min(...data.cashflow);
     
-    // We'll use property values as our max scale since they're likely the largest
-    const yScale = chartHeight / (maxPropertyValue || 1);
+    // Calculate overall min and max for Y axis
+    // For positive-only data, start at 0. For data with negatives, include the negative range.
+    const minY = Math.min(0, minCashflow);
+    const maxY = Math.max(maxPropertyValue, maxEquity, maxCashflow);
+    
+    // Extend the Y range a bit to give some breathing room
+    const yRangePadding = (maxY - minY) * 0.1;
+    const effectiveMinY = minY - (minY < 0 ? yRangePadding : 0);
+    const effectiveMaxY = maxY + yRangePadding;
+    
+    // Calculate Y scale based on min/max
+    const yScale = chartHeight / (effectiveMaxY - effectiveMinY);
+    
+    // Function to convert a Y value to canvas coordinate
+    const getYCoordinate = (value: number) => {
+      return canvasHeight - padding.bottom - ((value - effectiveMinY) * yScale);
+    };
+    
     const xScale = chartWidth / (data.years.length > 1 ? data.years.length - 1 : 1);
     
     // Draw axes
@@ -117,9 +133,13 @@ const SimpleChart = ({
     ctx.moveTo(padding.left, padding.top);
     ctx.lineTo(padding.left, canvasHeight - padding.bottom);
     
-    // X-axis
-    ctx.moveTo(padding.left, canvasHeight - padding.bottom);
-    ctx.lineTo(canvasWidth - padding.right, canvasHeight - padding.bottom);
+    // X-axis - draw at zero if we have negative values, otherwise at the bottom
+    const xAxisY = effectiveMinY < 0 
+      ? getYCoordinate(0) 
+      : canvasHeight - padding.bottom;
+    
+    ctx.moveTo(padding.left, xAxisY);
+    ctx.lineTo(canvasWidth - padding.right, xAxisY);
     ctx.stroke();
     
     // Draw Y-axis labels
@@ -128,11 +148,34 @@ const SimpleChart = ({
     ctx.fillStyle = '#666';
     ctx.font = '10px Arial';
     
-    const yStep = maxPropertyValue / 5;
-    for (let i = 0; i <= 5; i++) {
-      const value = i * yStep;
-      const y = canvasHeight - padding.bottom - (value * yScale);
-      ctx.fillText('$' + Math.round(value).toLocaleString(), padding.left - 5, y);
+    // Calculate step size for Y axis labels
+    const yValueRange = effectiveMaxY - effectiveMinY;
+    const optimalStepCount = 5; // We want about 5 labels on the Y axis
+    let stepSize = yValueRange / optimalStepCount;
+    
+    // Round step size to a nice number
+    const magnitude = Math.pow(10, Math.floor(Math.log10(stepSize)));
+    stepSize = Math.ceil(stepSize / magnitude) * magnitude;
+    
+    // Start from the lowest multiple of stepSize below effectiveMinY
+    let labelValue = Math.floor(effectiveMinY / stepSize) * stepSize;
+    
+    // Draw Y axis labels
+    while (labelValue <= effectiveMaxY) {
+      const y = getYCoordinate(labelValue);
+      ctx.fillText('$' + Math.round(labelValue).toLocaleString(), padding.left - 5, y);
+      
+      // If we're at zero, make the line a bit darker
+      if (labelValue === 0) {
+        ctx.strokeStyle = '#999';
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(canvasWidth - padding.right, y);
+        ctx.stroke();
+        ctx.strokeStyle = '#ccc'; // Reset for other lines
+      }
+      
+      labelValue += stepSize;
     }
     
     // Draw X-axis labels (just a few to avoid overcrowding)
@@ -175,7 +218,7 @@ const SimpleChart = ({
       
       for (let i = 0; i < data.propertyValues.length; i++) {
         const x = padding.left + (i * xScale);
-        const y = canvasHeight - padding.bottom - (data.propertyValues[i] * yScale);
+        const y = getYCoordinate(data.propertyValues[i]);
         
         if (i === 0) {
           ctx.moveTo(x, y);
@@ -195,7 +238,7 @@ const SimpleChart = ({
       
       for (let i = 0; i < data.equity.length; i++) {
         const x = padding.left + (i * xScale);
-        const y = canvasHeight - padding.bottom - (data.equity[i] * yScale);
+        const y = getYCoordinate(data.equity[i]);
         
         if (i === 0) {
           ctx.moveTo(x, y);
@@ -210,18 +253,23 @@ const SimpleChart = ({
     // Draw cashflow bars
     const barWidth = xScale * 0.5;
     
-    ctx.fillStyle = '#f97316'; // Orange
-    
     for (let i = 0; i < data.cashflow.length; i++) {
       const x = padding.left + (i * xScale) - (barWidth / 2);
-      const cashflowHeight = Math.abs(data.cashflow[i] * yScale);
+      const cashflowValue = data.cashflow[i];
+      const zeroY = getYCoordinate(0);
+      const valueY = getYCoordinate(cashflowValue);
+      const barHeight = Math.abs(zeroY - valueY);
       
-      if (data.cashflow[i] >= 0) {
-        const y = canvasHeight - padding.bottom - cashflowHeight;
-        ctx.fillRect(x, y, barWidth, cashflowHeight);
+      // Set color based on positive/negative cashflow
+      ctx.fillStyle = cashflowValue >= 0 ? '#f97316' : '#ef4444'; // Orange for positive, red for negative
+      
+      // Draw bar from zero baseline
+      if (cashflowValue >= 0) {
+        // Positive cashflow - draw up from zero line
+        ctx.fillRect(x, valueY, barWidth, barHeight);
       } else {
-        const y = canvasHeight - padding.bottom;
-        ctx.fillRect(x, y, barWidth, cashflowHeight);
+        // Negative cashflow - draw down from zero line
+        ctx.fillRect(x, zeroY, barWidth, barHeight);
       }
     }
     
