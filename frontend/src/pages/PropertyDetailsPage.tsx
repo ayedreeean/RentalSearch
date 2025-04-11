@@ -20,7 +20,8 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow
+  TableRow,
+  Tooltip
 } from '@mui/material';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -1059,37 +1060,91 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Year</TableCell>
-                    <TableCell align="right">Property Value</TableCell>
-                    <TableCell align="right">Annual Rent</TableCell>
-                    <TableCell align="right">Expenses</TableCell>
-                    <TableCell align="right">Cashflow</TableCell>
-                    <TableCell align="right">Equity</TableCell>
-                    <TableCell align="right">ROI</TableCell>
+                    <TableCell>
+                      <Tooltip title="Projection year" arrow placement="top">
+                        <span>Year</span>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip 
+                        title="Estimated property value after appreciation. Calculated using the initial property price compounded annually by the property value increase rate." 
+                        arrow 
+                        placement="top"
+                      >
+                        <span>Property Value</span>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip 
+                        title="Projected annual rental income. Calculated using the initial rent amount compounded annually by the rent appreciation rate." 
+                        arrow 
+                        placement="top"
+                      >
+                        <span>Annual Rent</span>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip 
+                        title="Total annual expenses including mortgage, taxes, insurance, vacancy, capital expenditures, and property management." 
+                        arrow 
+                        placement="top"
+                      >
+                        <span>Expenses</span>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip 
+                        title="Annual rental income minus all expenses. Represents your profit or loss each year." 
+                        arrow 
+                        placement="top"
+                      >
+                        <span>Cashflow</span>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip 
+                        title="Your ownership stake in the property. Calculated as property value minus remaining mortgage balance. Grows through principal payments and property appreciation." 
+                        arrow 
+                        placement="top"
+                      >
+                        <span>Equity</span>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip 
+                        title="Return on Investment percentage. Calculated as annual cashflow divided by initial investment (down payment + closing costs)." 
+                        arrow 
+                        placement="top"
+                      >
+                        <span>ROI</span>
+                      </Tooltip>
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {longTermCashflowData.filter((_, index) => index % 5 === 0 || index === 0).map((data) => (
-                    <TableRow key={data.year}>
-                      <TableCell>{data.year}</TableCell>
-                      <TableCell align="right">{formatCurrency(data.propertyValue)}</TableCell>
-                      <TableCell align="right">{formatCurrency(data.annualRent)}</TableCell>
-                      <TableCell align="right">{formatCurrency(data.yearlyExpenses)}</TableCell>
-                      <TableCell 
-                        align="right"
-                        sx={{ color: data.yearlyCashflow >= 0 ? 'success.main' : 'error.main' }}
-                      >
-                        {formatCurrency(data.yearlyCashflow)}
-                      </TableCell>
-                      <TableCell align="right">{formatCurrency(data.equity)}</TableCell>
-                      <TableCell 
-                        align="right"
-                        sx={{ color: data.roi >= 0 ? 'success.main' : 'error.main' }}
-                      >
-                        {formatPercent(data.roi)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {longTermCashflowData
+                    .filter(data => [1, 5, 10, 15, 20, 25, 30].includes(data.year))
+                    .map((data) => (
+                      <TableRow key={data.year}>
+                        <TableCell>{data.year}</TableCell>
+                        <TableCell align="right">{formatCurrency(data.propertyValue)}</TableCell>
+                        <TableCell align="right">{formatCurrency(data.annualRent)}</TableCell>
+                        <TableCell align="right">{formatCurrency(data.yearlyExpenses)}</TableCell>
+                        <TableCell 
+                          align="right"
+                          sx={{ color: data.yearlyCashflow >= 0 ? 'success.main' : 'error.main' }}
+                        >
+                          {formatCurrency(data.yearlyCashflow)}
+                        </TableCell>
+                        <TableCell align="right">{formatCurrency(data.equity)}</TableCell>
+                        <TableCell 
+                          align="right"
+                          sx={{ color: data.roi >= 0 ? 'success.main' : 'error.main' }}
+                        >
+                          {formatPercent(data.roi)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
                 </TableBody>
               </Table>
             </TableContainer>
