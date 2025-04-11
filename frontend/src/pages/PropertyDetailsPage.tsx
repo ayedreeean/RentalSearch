@@ -992,32 +992,60 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 </Typography>
                 {/* Sliders use settings state and handleSettingChange */}
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Interest Rate: {settings.interestRate}%</Typography>
+                  <Typography variant="body2" gutterBottom>
+                    <Tooltip title="The annual interest rate for your mortgage loan. Higher rates increase your monthly payment." arrow>
+                      <span>Interest Rate: {settings.interestRate}%</span>
+                    </Tooltip>
+                  </Typography>
                   <Slider value={settings.interestRate} onChange={handleSettingChange('interestRate')} aria-labelledby="interest-rate-slider" valueLabelDisplay="auto" step={0.1} min={0.1} max={15} sx={{ color: '#4f46e5' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Loan Term: {settings.loanTerm} years</Typography>
+                  <Typography variant="body2" gutterBottom>
+                    <Tooltip title="The number of years you'll be paying your mortgage. Longer terms reduce monthly payments but increase total interest paid." arrow>
+                      <span>Loan Term: {settings.loanTerm} years</span>
+                    </Tooltip>
+                  </Typography>
                   <Slider value={settings.loanTerm} onChange={handleSettingChange('loanTerm')} aria-labelledby="loan-term-slider" valueLabelDisplay="auto" step={1} min={5} max={40} sx={{ color: '#4f46e5' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                   <Typography variant="body2" gutterBottom>Down Payment: {settings.downPaymentPercent}%</Typography>
-                   <Slider value={settings.downPaymentPercent} onChange={handleSettingChange('downPaymentPercent')} aria-labelledby="down-payment-slider" valueLabelDisplay="auto" step={1} min={0} max={100} sx={{ color: '#4f46e5' }} />
+                  <Typography variant="body2" gutterBottom>
+                    <Tooltip title="Percentage of the property price you pay upfront. Higher down payments reduce your loan amount and monthly payments." arrow>
+                      <span>Down Payment: {settings.downPaymentPercent}%</span>
+                    </Tooltip>
+                  </Typography>
+                  <Slider value={settings.downPaymentPercent} onChange={handleSettingChange('downPaymentPercent')} aria-labelledby="down-payment-slider" valueLabelDisplay="auto" step={1} min={0} max={100} sx={{ color: '#4f46e5' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                   <Typography variant="body2" gutterBottom>Property Tax & Insurance: {settings.taxInsurancePercent}%</Typography>
-                   <Slider value={settings.taxInsurancePercent} onChange={handleSettingChange('taxInsurancePercent')} min={0} max={5} step={0.1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+                  <Typography variant="body2" gutterBottom>
+                    <Tooltip title="Annual property taxes and insurance calculated as a percentage of property value. Varies by location." arrow>
+                      <span>Property Tax & Insurance: {settings.taxInsurancePercent}%</span>
+                    </Tooltip>
+                  </Typography>
+                  <Slider value={settings.taxInsurancePercent} onChange={handleSettingChange('taxInsurancePercent')} min={0} max={5} step={0.1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                   <Typography variant="body2" gutterBottom>Vacancy: {settings.vacancyPercent}%</Typography>
-                   <Slider value={settings.vacancyPercent} onChange={handleSettingChange('vacancyPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+                  <Typography variant="body2" gutterBottom>
+                    <Tooltip title="Expected percentage of time the property will be vacant. Higher vacancy rates reduce annual income." arrow>
+                      <span>Vacancy: {settings.vacancyPercent}%</span>
+                    </Tooltip>
+                  </Typography>
+                  <Slider value={settings.vacancyPercent} onChange={handleSettingChange('vacancyPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
-                   <Typography variant="body2" gutterBottom>CapEx: {settings.capexPercent}%</Typography>
-                   <Slider value={settings.capexPercent} onChange={handleSettingChange('capexPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+                  <Typography variant="body2" gutterBottom>
+                    <Tooltip title="Capital Expenditures - funds set aside for major repairs and replacements (roof, HVAC, etc.)." arrow>
+                      <span>CapEx: {settings.capexPercent}%</span>
+                    </Tooltip>
+                  </Typography>
+                  <Slider value={settings.capexPercent} onChange={handleSettingChange('capexPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
                 </Box>
                 <Box sx={{ mb: 0 }}>
-                   <Typography variant="body2" gutterBottom>Property Management: {settings.propertyManagementPercent}%</Typography>
-                   <Slider value={settings.propertyManagementPercent} onChange={handleSettingChange('propertyManagementPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+                  <Typography variant="body2" gutterBottom>
+                    <Tooltip title="Fee for property management services, typically a percentage of monthly rent. Set to 0% if self-managing." arrow>
+                      <span>Property Management: {settings.propertyManagementPercent}%</span>
+                    </Tooltip>
+                  </Typography>
+                  <Slider value={settings.propertyManagementPercent} onChange={handleSettingChange('propertyManagementPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
                 </Box>
               </Paper>
             )}
