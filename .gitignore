@@ -1,0 +1,5 @@
+node_modules/
+deploy_key
+deploy_key.pub
+*.bak
+.DS_Store

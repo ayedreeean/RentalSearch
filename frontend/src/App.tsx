@@ -1367,98 +1367,98 @@ function App() {
                     <Box sx={{ flexBasis: { xs: '100%' } }}>
                       <Box sx={{ mb: 2 }}>
                         <Typography variant="body2" gutterBottom>Interest Rate: {interestRate}%</Typography>
-                        <Slider
-                          value={interestRate}
+              <Slider
+                value={interestRate}
                           onChange={(e, newValue) => setInterestRate(newValue as number)}
                           aria-labelledby="interest-rate-slider"
-                          valueLabelDisplay="auto"
+                valueLabelDisplay="auto"
                           step={0.1}
                           min={0.1}
                           max={15}
                           sx={{ color: '#4f46e5' }} // Apply custom color
-                        />
-                      </Box>
+              />
+            </Box>
                     </Box>
                     {/* Loan Term Slider */}
                     <Box sx={{ flexBasis: { xs: '100%' } }}>
                       <Box sx={{ mb: 2 }}>
                         <Typography variant="body2" gutterBottom>Loan Term: {loanTerm} years</Typography>
-                        <Slider
-                          value={loanTerm}
+              <Slider
+                value={loanTerm}
                           onChange={(e, newValue) => setLoanTerm(newValue as number)}
                           aria-labelledby="loan-term-slider"
-                          valueLabelDisplay="auto"
+                valueLabelDisplay="auto"
                           step={1}
                           min={5}
                           max={40}
                           sx={{ color: '#4f46e5' }} // Apply custom color
-                        />
-                      </Box>
+              />
+            </Box>
                     </Box>
                     {/* Down Payment Slider */}
                     <Box sx={{ flexBasis: { xs: '100%' } }}>
                       <Box sx={{ mb: 2 }}>
                         <Typography variant="body2" gutterBottom>Down Payment: {downPaymentPercent}%</Typography>
-                        <Slider
-                          value={downPaymentPercent}
+              <Slider
+                value={downPaymentPercent}
                           onChange={(e, newValue) => setDownPaymentPercent(newValue as number)}
                           aria-labelledby="down-payment-slider"
-                          valueLabelDisplay="auto"
+                valueLabelDisplay="auto"
                           step={1}
                           min={0}
                           max={100}
                           sx={{ color: '#4f46e5' }} // Apply custom color
-                        />
-                      </Box>
+              />
+            </Box>
                     </Box>
                     {/* Tax & Insurance Slider */}
                     <Box sx={{ flexBasis: { xs: '100%' } }}>
                       <Box sx={{ mb: 2 }}>
                         <Typography variant="body2" gutterBottom>Property Tax & Insurance: {taxInsurancePercent}%</Typography>
-                        <Slider
-                          value={taxInsurancePercent}
+              <Slider
+                value={taxInsurancePercent}
                           onChange={(e, value) => setTaxInsurancePercent(value as number)}
                           min={0}
                           max={5}
-                          step={0.1}
-                          valueLabelDisplay="auto"
-                          valueLabelFormat={(value) => `${value}%`}
+                step={0.1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
                           sx={{ color: '#4f46e5' }} // Apply custom color
-                        />
-                      </Box>
+              />
+            </Box>
                     </Box>
                     {/* Vacancy Slider */}
                     <Box sx={{ flexBasis: { xs: '100%' } }}>
                       <Box sx={{ mb: 2 }}>
                         <Typography variant="body2" gutterBottom>Vacancy: {vacancyPercent}%</Typography>
-                        <Slider
-                          value={vacancyPercent}
+              <Slider
+                value={vacancyPercent}
                           onChange={(e, value) => setVacancyPercent(value as number)}
-                          min={0}
-                          max={10}
-                          step={1}
-                          valueLabelDisplay="auto"
-                          valueLabelFormat={(value) => `${value}%`}
+                min={0}
+                max={10}
+                step={1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
                           sx={{ color: '#4f46e5' }} // Apply custom color
-                        />
-                      </Box>
+              />
+            </Box>
                     </Box>
                     {/* CapEx Slider */}
                     <Box sx={{ flexBasis: { xs: '100%' } }}>
                       <Box sx={{ mb: 2 }}>
                         <Typography variant="body2" gutterBottom>CapEx: {capexPercent}%</Typography>
-                        <Slider
-                          value={capexPercent}
+              <Slider
+                value={capexPercent}
                           onChange={(e, value) => setCapexPercent(value as number)}
-                          min={0}
-                          max={10}
-                          step={1}
-                          valueLabelDisplay="auto"
-                          valueLabelFormat={(value) => `${value}%`}
+                min={0}
+                max={10}
+                step={1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
                           sx={{ color: '#4f46e5' }} // Apply custom color
-                        />
-                      </Box>
-                    </Box>
+              />
+            </Box>
+          </Box>
                     {/* Property Management Slider */}
                     <Box sx={{ flexBasis: { xs: '100%' } }}>
                       <Box sx={{ mb: 0 }}>

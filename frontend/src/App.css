@@ -158,6 +158,31 @@ a:hover {
   z-index: 1;
 }
 
+/* Price and ratio container */
+.price-ratio-container {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 0.75rem !important;
+  flex-wrap: wrap !important;
+}
+
+/* Ratio corner pill position */
+.ratio-corner {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  margin: 0;
+  border-top-left-radius: 0.5rem;
+  border-bottom-right-radius: 0;
+  border-top-right-radius: 0;
+  border-bottom-left-radius: 0;
+  font-size: 0.7rem;
+  padding: 0.35rem 0.6rem;
+  font-weight: 700;
+  z-index: 1;
+}
+
 .property-details {
   flex-grow: 1;
   padding: 1.25rem !important;
@@ -195,7 +220,6 @@ a:hover {
   border-radius: 1rem;
   font-size: 0.75rem;
   font-weight: 600;
-  margin-top: 0.5rem;
 }
 
 .ratio-good {
@@ -228,8 +252,10 @@ a:hover {
   background-color: #e5e7eb;
   color: #4b5563;
   padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-weight: 500;
+  border-radius: 1rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
 }
 
 .property-footer {
@@ -284,7 +310,7 @@ a:hover {
 
 /* Quick links section */
 .quick-links {
-  padding: 1rem 1.25rem;
+  padding: 0.75rem 1.25rem;
   border-top: 1px solid #e5e7eb;
 }
 
@@ -299,19 +325,29 @@ a:hover {
 
 .quick-links-buttons {
   display: flex;
-  gap: 1rem;
+  justify-content: space-between;
+  flex-wrap: nowrap;
 }
 
 .quick-link {
   display: flex;
   align-items: center;
-  font-size: 0.875rem;
+  justify-content: center;
+  font-size: 0.8rem;
   color: #4b5563;
-  transition: color 0.2s;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.25rem;
+  background-color: transparent;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  flex: 1;
+  text-align: center;
 }
 
 .quick-link:hover {
   color: #4f46e5;
+  background-color: rgba(79, 70, 229, 0.08);
 }
 
 .quick-link img {
