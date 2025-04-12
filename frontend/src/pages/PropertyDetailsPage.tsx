@@ -53,7 +53,7 @@ interface YearlyProjection {
   roi: number;
 }
 
-// Update the SimpleChart component to add a secondary Y-axis
+// Improve the SimpleChart component to fix overlapping labels
 const SimpleChart = ({ 
   data, 
   height = 300
@@ -87,12 +87,12 @@ const SimpleChart = ({
     const canvasWidth = canvas.offsetWidth;
     const canvasHeight = canvas.offsetHeight;
     
-    // Padding
+    // Padding - increase to avoid label overlapping
     const padding = {
-      top: 30,
-      right: 80,     // Increased to accommodate secondary Y-axis
-      bottom: 40,    // Increased for negative values
-      left: 80       // Increased for wider currency values
+      top: 40,         // Increased for legend
+      right: 100,      // Increased for secondary Y-axis labels
+      bottom: 50,      // Increased for X-axis labels
+      left: 90         // Increased for primary Y-axis labels
     };
     
     const chartWidth = canvasWidth - padding.left - padding.right;
@@ -135,11 +135,26 @@ const SimpleChart = ({
       return canvasHeight - padding.bottom - ((value - effectiveMinSecondaryY) * secondaryYScale);
     };
     
+    // Calculate X scale with consistent spacing
     const xScale = chartWidth / (data.years.length > 1 ? data.years.length - 1 : 1);
     
-    // Draw primary Y-axis (left)
-    ctx.strokeStyle = '#ccc';
+    // Draw background grid
+    ctx.strokeStyle = '#f0f0f0';
     ctx.lineWidth = 1;
+    
+    // Draw horizontal grid lines for primary axis
+    const primaryGridStep = Math.ceil(effectiveMaxPrimaryY / 5);
+    for (let i = 0; i <= effectiveMaxPrimaryY; i += primaryGridStep) {
+      const y = getPrimaryYCoordinate(i);
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(canvasWidth - padding.right, y);
+      ctx.stroke();
+    }
+    
+    // Draw primary Y-axis (left)
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(padding.left, padding.top);
     ctx.lineTo(padding.left, canvasHeight - padding.bottom);
@@ -167,9 +182,9 @@ const SimpleChart = ({
     ctx.fillStyle = '#666';
     ctx.font = '10px Arial';
     
-    // Calculate step size for primary Y axis labels
+    // Calculate step size for primary Y axis labels - use fewer labels to avoid overlap
     const optimalStepCount = 5;
-    let primaryStepSize = effectiveMaxPrimaryY / optimalStepCount;
+    let primaryStepSize = Math.ceil(effectiveMaxPrimaryY / optimalStepCount);
     
     // Round step size to a nice number
     const primaryMagnitude = Math.pow(10, Math.floor(Math.log10(primaryStepSize)));
@@ -179,7 +194,18 @@ const SimpleChart = ({
     for (let i = 0; i <= effectiveMaxPrimaryY; i += primaryStepSize) {
       if (i > effectiveMaxPrimaryY) break;
       const y = getPrimaryYCoordinate(i);
-      ctx.fillText('$' + Math.round(i).toLocaleString(), padding.left - 5, y);
+      
+      // Format large numbers with K or M suffix
+      let label;
+      if (i >= 1000000) {
+        label = '$' + (i / 1000000).toFixed(1) + 'M';
+      } else if (i >= 1000) {
+        label = '$' + (i / 1000).toFixed(0) + 'K';
+      } else {
+        label = '$' + i;
+      }
+      
+      ctx.fillText(label, padding.left - 8, y);
     }
     
     // Draw secondary Y-axis labels (right - cashflow)
@@ -199,8 +225,16 @@ const SimpleChart = ({
     while (secondaryLabelValue <= effectiveMaxSecondaryY) {
       const y = getSecondaryYCoordinate(secondaryLabelValue);
       
+      // Format with K suffix for thousands
+      let label;
+      if (Math.abs(secondaryLabelValue) >= 1000) {
+        label = '$' + (secondaryLabelValue / 1000).toFixed(1) + 'K';
+      } else {
+        label = '$' + secondaryLabelValue;
+      }
+      
       // Add cashflow label on right axis
-      ctx.fillText('$' + Math.round(secondaryLabelValue).toLocaleString(), canvasWidth - padding.right + 5, y);
+      ctx.fillText(label, canvasWidth - padding.right + 8, y);
       
       // If we're at zero, make the line a bit darker for both axes
       if (secondaryLabelValue === 0) {
@@ -215,20 +249,37 @@ const SimpleChart = ({
       secondaryLabelValue += secondaryStepSize;
     }
     
-    // Draw X-axis labels (just a few to avoid overcrowding)
+    // Draw X-axis labels (selected years to avoid overcrowding)
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
+    ctx.fillStyle = '#666';
     
-    const yearLabelInterval = Math.max(1, Math.floor(data.years.length / 5));
-    for (let i = 0; i < data.years.length; i += yearLabelInterval) {
-      const x = padding.left + (i * xScale);
-      ctx.fillText('Year ' + data.years[i], x, canvasHeight - padding.bottom + 5);
-    }
+    // Select a subset of years to display (e.g., years 1, 5, 10, 15, 20, 25, 30)
+    const yearsToShow = [1, 5, 10, 15, 20, 25, 30].filter(year => year <= data.years.length);
     
-    // Draw legend
+    // If we have a small number of years, show all of them
+    const displayYears = data.years.length <= 10 ? data.years : yearsToShow;
+    
+    displayYears.forEach(yearToShow => {
+      const index = data.years.indexOf(yearToShow);
+      if (index !== -1) {
+        const x = padding.left + (index * xScale);
+        ctx.fillText('Year ' + yearToShow, x, canvasHeight - padding.bottom + 5);
+        
+        // Add light vertical grid line
+        ctx.strokeStyle = '#f0f0f0';
+        ctx.beginPath();
+        ctx.moveTo(x, padding.top);
+        ctx.lineTo(x, canvasHeight - padding.bottom);
+        ctx.stroke();
+      }
+    });
+    
+    // Draw legend with more spacing
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.font = '12px Arial';
+    ctx.fillStyle = '#333';
     
     const legendItems = [
       { label: 'Property Value', color: '#4f46e5' },
@@ -236,9 +287,12 @@ const SimpleChart = ({
       { label: 'Annual Cashflow', color: '#f97316' }
     ];
     
+    const legendWidth = 150;  // Width allocated for each legend item
+    const legendStartX = padding.left + (chartWidth - (legendItems.length * legendWidth)) / 2;
+    
     legendItems.forEach((item, index) => {
-      const x = padding.left + 10 + (index * 150);
-      const y = padding.top / 2;
+      const x = legendStartX + (index * legendWidth);
+      const y = 15;  // Place at the top of the chart
       
       ctx.fillStyle = item.color;
       ctx.fillRect(x, y - 5, 15, 10);
@@ -247,26 +301,27 @@ const SimpleChart = ({
       ctx.fillText(item.label, x + 20, y);
     });
     
-    // Draw axis titles
+    // Draw axis titles with better positioning
     ctx.textAlign = 'center';
-    ctx.font = 'bold 10px Arial';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillStyle = '#555';
     
     // Primary Y-axis title (left)
     ctx.save();
-    ctx.translate(padding.left - 50, padding.top + chartHeight / 2);
+    ctx.translate(padding.left - 60, padding.top + chartHeight / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.fillText('Property Value & Equity ($)', 0, 0);
     ctx.restore();
     
     // Secondary Y-axis title (right)
     ctx.save();
-    ctx.translate(canvasWidth - padding.right + 50, padding.top + chartHeight / 2);
+    ctx.translate(canvasWidth - padding.right + 60, padding.top + chartHeight / 2);
     ctx.rotate(Math.PI / 2);
     ctx.fillText('Annual Cashflow ($)', 0, 0);
     ctx.restore();
     
     // X-axis title
-    ctx.fillText('Year', padding.left + chartWidth / 2, canvasHeight - 5);
+    ctx.fillText('Year', padding.left + chartWidth / 2, canvasHeight - 10);
     
     // Draw property value line using primary Y-axis
     if (data.propertyValues.length > 1) {
@@ -309,7 +364,7 @@ const SimpleChart = ({
     }
     
     // Draw cashflow bars using secondary Y-axis
-    const barWidth = xScale * 0.5;
+    const barWidth = Math.min(xScale * 0.5, 15); // Limit max width for better appearance
     
     for (let i = 0; i < data.cashflow.length; i++) {
       const x = padding.left + (i * xScale) - (barWidth / 2);
@@ -334,12 +389,12 @@ const SimpleChart = ({
   }, [data, canvasRef]);
   
   return (
-    <Box sx={{ width: '100%', height }}>
+    <Box sx={{ width: '100%', height, mb: 2 }}>
       <canvas 
         ref={canvasRef} 
         style={{ 
           width: '100%', 
-          height: '100%' 
+          height: '100%'
         }}
       />
     </Box>
