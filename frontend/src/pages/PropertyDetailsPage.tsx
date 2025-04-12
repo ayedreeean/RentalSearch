@@ -53,7 +53,7 @@ interface YearlyProjection {
   roi: number;
 }
 
-// Replace the LineChart placeholder with a simple canvas-based chart
+// Update the SimpleChart component to add a secondary Y-axis
 const SimpleChart = ({ 
   data, 
   height = 300
@@ -90,83 +90,120 @@ const SimpleChart = ({
     // Padding
     const padding = {
       top: 30,
-      right: 20,
-      bottom: 40, // Increased for negative values
-      left: 80     // Increased for wider currency values
+      right: 80,     // Increased to accommodate secondary Y-axis
+      bottom: 40,    // Increased for negative values
+      left: 80       // Increased for wider currency values
     };
     
     const chartWidth = canvasWidth - padding.left - padding.right;
     const chartHeight = canvasHeight - padding.top - padding.bottom;
     
-    // Find max/min values for scaling
+    // Calculate scales for primary Y-axis (property values & equity)
     const maxPropertyValue = Math.max(...data.propertyValues);
     const maxEquity = Math.max(...data.equity);
+    const maxPrimaryY = Math.max(maxPropertyValue, maxEquity);
+    
+    // Add padding to primary Y-axis scale
+    const primaryYPadding = maxPrimaryY * 0.1;
+    const effectiveMaxPrimaryY = maxPrimaryY + primaryYPadding;
+    
+    // Calculate scales for secondary Y-axis (cashflow)
     const maxCashflow = Math.max(...data.cashflow);
     const minCashflow = Math.min(...data.cashflow);
     
-    // Calculate overall min and max for Y axis
     // For positive-only data, start at 0. For data with negatives, include the negative range.
-    const minY = Math.min(0, minCashflow);
-    const maxY = Math.max(maxPropertyValue, maxEquity, maxCashflow);
+    const minSecondaryY = Math.min(0, minCashflow);
+    const maxSecondaryY = Math.max(0, maxCashflow);
     
-    // Extend the Y range a bit to give some breathing room
-    const yRangePadding = (maxY - minY) * 0.1;
-    const effectiveMinY = minY - (minY < 0 ? yRangePadding : 0);
-    const effectiveMaxY = maxY + yRangePadding;
+    // Add padding to secondary Y-axis scale
+    const secondaryYRange = maxSecondaryY - minSecondaryY;
+    const secondaryYPadding = secondaryYRange * 0.2; // More padding for cashflow scale
+    const effectiveMinSecondaryY = minSecondaryY - (minSecondaryY < 0 ? secondaryYPadding : 0);
+    const effectiveMaxSecondaryY = maxSecondaryY + secondaryYPadding;
     
-    // Calculate Y scale based on min/max
-    const yScale = chartHeight / (effectiveMaxY - effectiveMinY);
+    // Calculate Y scales
+    const primaryYScale = chartHeight / effectiveMaxPrimaryY;
+    const secondaryYScale = chartHeight / (effectiveMaxSecondaryY - effectiveMinSecondaryY);
     
-    // Function to convert a Y value to canvas coordinate
-    const getYCoordinate = (value: number) => {
-      return canvasHeight - padding.bottom - ((value - effectiveMinY) * yScale);
+    // Function to convert a primary Y value to canvas coordinate
+    const getPrimaryYCoordinate = (value: number) => {
+      return canvasHeight - padding.bottom - (value * primaryYScale);
+    };
+    
+    // Function to convert a secondary Y value to canvas coordinate
+    const getSecondaryYCoordinate = (value: number) => {
+      return canvasHeight - padding.bottom - ((value - effectiveMinSecondaryY) * secondaryYScale);
     };
     
     const xScale = chartWidth / (data.years.length > 1 ? data.years.length - 1 : 1);
     
-    // Draw axes
+    // Draw primary Y-axis (left)
     ctx.strokeStyle = '#ccc';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    
-    // Y-axis
     ctx.moveTo(padding.left, padding.top);
     ctx.lineTo(padding.left, canvasHeight - padding.bottom);
+    ctx.stroke();
     
-    // X-axis - draw at zero if we have negative values, otherwise at the bottom
-    const xAxisY = effectiveMinY < 0 
-      ? getYCoordinate(0) 
+    // Draw secondary Y-axis (right)
+    ctx.beginPath();
+    ctx.moveTo(canvasWidth - padding.right, padding.top);
+    ctx.lineTo(canvasWidth - padding.right, canvasHeight - padding.bottom);
+    ctx.stroke();
+    
+    // Draw X-axis
+    const xAxisY = effectiveMinSecondaryY < 0 
+      ? getSecondaryYCoordinate(0) 
       : canvasHeight - padding.bottom;
     
+    ctx.beginPath();
     ctx.moveTo(padding.left, xAxisY);
     ctx.lineTo(canvasWidth - padding.right, xAxisY);
     ctx.stroke();
     
-    // Draw Y-axis labels
+    // Draw primary Y-axis labels (left - property values & equity)
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#666';
     ctx.font = '10px Arial';
     
-    // Calculate step size for Y axis labels
-    const yValueRange = effectiveMaxY - effectiveMinY;
-    const optimalStepCount = 5; // We want about 5 labels on the Y axis
-    let stepSize = yValueRange / optimalStepCount;
+    // Calculate step size for primary Y axis labels
+    const optimalStepCount = 5;
+    let primaryStepSize = effectiveMaxPrimaryY / optimalStepCount;
     
     // Round step size to a nice number
-    const magnitude = Math.pow(10, Math.floor(Math.log10(stepSize)));
-    stepSize = Math.ceil(stepSize / magnitude) * magnitude;
+    const primaryMagnitude = Math.pow(10, Math.floor(Math.log10(primaryStepSize)));
+    primaryStepSize = Math.ceil(primaryStepSize / primaryMagnitude) * primaryMagnitude;
     
-    // Start from the lowest multiple of stepSize below effectiveMinY
-    let labelValue = Math.floor(effectiveMinY / stepSize) * stepSize;
+    // Draw primary Y axis labels
+    for (let i = 0; i <= effectiveMaxPrimaryY; i += primaryStepSize) {
+      if (i > effectiveMaxPrimaryY) break;
+      const y = getPrimaryYCoordinate(i);
+      ctx.fillText('$' + Math.round(i).toLocaleString(), padding.left - 5, y);
+    }
     
-    // Draw Y axis labels
-    while (labelValue <= effectiveMaxY) {
-      const y = getYCoordinate(labelValue);
-      ctx.fillText('$' + Math.round(labelValue).toLocaleString(), padding.left - 5, y);
+    // Draw secondary Y-axis labels (right - cashflow)
+    ctx.textAlign = 'left';
+    
+    // Calculate step size for secondary Y axis labels
+    let secondaryStepSize = (effectiveMaxSecondaryY - effectiveMinSecondaryY) / optimalStepCount;
+    
+    // Round step size to a nice number
+    const secondaryMagnitude = Math.pow(10, Math.floor(Math.log10(secondaryStepSize)));
+    secondaryStepSize = Math.ceil(secondaryStepSize / secondaryMagnitude) * secondaryMagnitude;
+    
+    // Start from the lowest multiple of stepSize below effectiveMinSecondaryY
+    let secondaryLabelValue = Math.floor(effectiveMinSecondaryY / secondaryStepSize) * secondaryStepSize;
+    
+    // Draw secondary Y axis labels
+    while (secondaryLabelValue <= effectiveMaxSecondaryY) {
+      const y = getSecondaryYCoordinate(secondaryLabelValue);
       
-      // If we're at zero, make the line a bit darker
-      if (labelValue === 0) {
+      // Add cashflow label on right axis
+      ctx.fillText('$' + Math.round(secondaryLabelValue).toLocaleString(), canvasWidth - padding.right + 5, y);
+      
+      // If we're at zero, make the line a bit darker for both axes
+      if (secondaryLabelValue === 0) {
         ctx.strokeStyle = '#999';
         ctx.beginPath();
         ctx.moveTo(padding.left, y);
@@ -175,7 +212,7 @@ const SimpleChart = ({
         ctx.strokeStyle = '#ccc'; // Reset for other lines
       }
       
-      labelValue += stepSize;
+      secondaryLabelValue += secondaryStepSize;
     }
     
     // Draw X-axis labels (just a few to avoid overcrowding)
@@ -189,15 +226,15 @@ const SimpleChart = ({
     }
     
     // Draw legend
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = '12px Arial';
+    
     const legendItems = [
       { label: 'Property Value', color: '#4f46e5' },
       { label: 'Equity', color: '#10b981' },
       { label: 'Annual Cashflow', color: '#f97316' }
     ];
-    
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.font = '12px Arial';
     
     legendItems.forEach((item, index) => {
       const x = padding.left + 10 + (index * 150);
@@ -210,7 +247,28 @@ const SimpleChart = ({
       ctx.fillText(item.label, x + 20, y);
     });
     
-    // Draw property value line
+    // Draw axis titles
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 10px Arial';
+    
+    // Primary Y-axis title (left)
+    ctx.save();
+    ctx.translate(padding.left - 50, padding.top + chartHeight / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Property Value & Equity ($)', 0, 0);
+    ctx.restore();
+    
+    // Secondary Y-axis title (right)
+    ctx.save();
+    ctx.translate(canvasWidth - padding.right + 50, padding.top + chartHeight / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.fillText('Annual Cashflow ($)', 0, 0);
+    ctx.restore();
+    
+    // X-axis title
+    ctx.fillText('Year', padding.left + chartWidth / 2, canvasHeight - 5);
+    
+    // Draw property value line using primary Y-axis
     if (data.propertyValues.length > 1) {
       ctx.strokeStyle = '#4f46e5'; // Purple
       ctx.lineWidth = 2;
@@ -218,7 +276,7 @@ const SimpleChart = ({
       
       for (let i = 0; i < data.propertyValues.length; i++) {
         const x = padding.left + (i * xScale);
-        const y = getYCoordinate(data.propertyValues[i]);
+        const y = getPrimaryYCoordinate(data.propertyValues[i]);
         
         if (i === 0) {
           ctx.moveTo(x, y);
@@ -230,7 +288,7 @@ const SimpleChart = ({
       ctx.stroke();
     }
     
-    // Draw equity line
+    // Draw equity line using primary Y-axis
     if (data.equity.length > 1) {
       ctx.strokeStyle = '#10b981'; // Green
       ctx.lineWidth = 2;
@@ -238,7 +296,7 @@ const SimpleChart = ({
       
       for (let i = 0; i < data.equity.length; i++) {
         const x = padding.left + (i * xScale);
-        const y = getYCoordinate(data.equity[i]);
+        const y = getPrimaryYCoordinate(data.equity[i]);
         
         if (i === 0) {
           ctx.moveTo(x, y);
@@ -250,14 +308,14 @@ const SimpleChart = ({
       ctx.stroke();
     }
     
-    // Draw cashflow bars
+    // Draw cashflow bars using secondary Y-axis
     const barWidth = xScale * 0.5;
     
     for (let i = 0; i < data.cashflow.length; i++) {
       const x = padding.left + (i * xScale) - (barWidth / 2);
       const cashflowValue = data.cashflow[i];
-      const zeroY = getYCoordinate(0);
-      const valueY = getYCoordinate(cashflowValue);
+      const zeroY = getSecondaryYCoordinate(0);
+      const valueY = getSecondaryYCoordinate(cashflowValue);
       const barHeight = Math.abs(zeroY - valueY);
       
       // Set color based on positive/negative cashflow
