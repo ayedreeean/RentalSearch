@@ -604,10 +604,49 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     const foundProperty = properties.find(p => p.property_id === propertyId);
     
     if (!foundProperty) {
-      // Check if property data is in the URL
+      // First check if property data is in the URL using the new format (d parameter)
       const searchParams = new URLSearchParams(location.search);
-      const propertyData = searchParams.get('data');
+      const compressedData = searchParams.get('d');
       
+      if (compressedData) {
+        try {
+          // Restore base64 padding if needed
+          let base64Fixed = compressedData.replace(/-/g, '+').replace(/_/g, '/');
+          // Add padding if needed
+          switch (base64Fixed.length % 4) {
+            case 2: base64Fixed += '=='; break;
+            case 3: base64Fixed += '='; break;
+          }
+          
+          // Decode the base64 string to JSON
+          const jsonString = atob(base64Fixed);
+          
+          // Parse the JSON string to get the property object
+          const decodedProperty = JSON.parse(jsonString) as Property;
+          
+          // Ensure all required fields are present
+          if (decodedProperty && decodedProperty.property_id) {
+            // Use the property data from the URL
+            setProperty(decodedProperty);
+            setLoading(false);
+            
+            // Initialize custom rent to property's rent estimate
+            if (decodedProperty.rent_estimate) {
+              setCustomRentEstimate(decodedProperty.rent_estimate);
+              setDisplayRent(formatCurrency(decodedProperty.rent_estimate));
+            }
+            
+            // Also save the property to localStorage for future use
+            savePropertyToLocalStorage(decodedProperty);
+            return;
+          }
+        } catch (error) {
+          console.error('Error decoding property data from URL parameter d:', error);
+        }
+      }
+      
+      // Fall back to the old format (data parameter) for backwards compatibility
+      const propertyData = searchParams.get('data');
       if (propertyData) {
         try {
           // Decode the property data from the URL
@@ -627,7 +666,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
           savePropertyToLocalStorage(decodedProperty);
           return;
         } catch (error) {
-          console.error('Error decoding property data from URL:', error);
+          console.error('Error decoding property data from URL parameter data:', error);
         }
       }
       
@@ -901,7 +940,8 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       // Get current URL without search parameters
       const url = new URL(window.location.href);
       
-      // Encode essential property data as JSON and make URL-safe
+      // Create a minimal object with only the essential properties
+      // to keep the URL as short as possible
       const minimalProperty = {
         property_id: property.property_id,
         address: property.address,
@@ -914,15 +954,31 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
         sqft: property.sqft,
         url: property.url,
         days_on_market: property.days_on_market,
-        rent_source: property.rent_source
+        rent_source: property.rent_source || "calculated"
       };
       
-      // Encode the property data and add it to the URL
-      const propertyData = encodeURIComponent(JSON.stringify(minimalProperty));
-      url.searchParams.set('data', propertyData);
+      // Compress the data before encoding to create a shorter URL
+      // First, stringify the object to JSON
+      const jsonString = JSON.stringify(minimalProperty);
+      
+      // Base64 encode the JSON string to make it URL-safe
+      // Note: This creates a more compact representation than encodeURIComponent
+      let base64Data = btoa(jsonString);
+      
+      // Make the base64 string URL-safe by replacing + with - and / with _
+      base64Data = base64Data.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      
+      // Set the encoded data as a URL parameter
+      url.searchParams.set('d', base64Data);
+      
+      // Clear any existing 'data' parameter (from previous version)
+      url.searchParams.delete('data');
       
       // Update the URL without reloading the page
       window.history.replaceState({}, '', url.toString());
+      
+      // For debugging - log the URL length to console
+      console.log(`Shareable URL created - Length: ${url.toString().length} characters`);
     } catch (error) {
       console.error('Error creating shareable URL:', error);
     }
