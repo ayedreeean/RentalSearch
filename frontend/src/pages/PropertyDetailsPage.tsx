@@ -1249,7 +1249,10 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
   return (
     <>
       <CssBaseline />
-      <AppBar position="sticky" color="primary" elevation={0} sx={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+      <AppBar position="sticky" elevation={0} sx={{ 
+        borderBottom: '1px solid rgba(255,255,255,0.1)',
+        bgcolor: '#6366f1'
+      }}>
         <Toolbar sx={{ flexWrap: 'wrap' }}>
           <IconButton 
             edge="start" 
@@ -1558,10 +1561,10 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 bottom: 16,
                 right: 16,
                 zIndex: 1250,
-                bgcolor: '#4f46e5',
+                bgcolor: '#6366f1',
                 color: 'white',
                 '&:hover': {
-                  bgcolor: '#4338ca'
+                  bgcolor: '#4f46e5'
                 } 
               }}
             >
@@ -1595,7 +1598,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                       <span>Interest Rate: {settings.interestRate}%</span>
                     </Tooltip>
                   </Typography>
-                  <Slider value={settings.interestRate} onChange={handleSettingChange('interestRate')} aria-labelledby="interest-rate-slider" valueLabelDisplay="auto" step={0.1} min={0.1} max={15} sx={{ color: '#4f46e5' }} />
+                  <Slider value={settings.interestRate} onChange={handleSettingChange('interestRate')} aria-labelledby="interest-rate-slider" valueLabelDisplay="auto" step={0.1} min={0.1} max={15} sx={{ color: '#6366f1' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
@@ -1603,7 +1606,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                       <span>Loan Term: {settings.loanTerm} years</span>
                     </Tooltip>
                   </Typography>
-                  <Slider value={settings.loanTerm} onChange={handleSettingChange('loanTerm')} aria-labelledby="loan-term-slider" valueLabelDisplay="auto" step={1} min={5} max={40} sx={{ color: '#4f46e5' }} />
+                  <Slider value={settings.loanTerm} onChange={handleSettingChange('loanTerm')} aria-labelledby="loan-term-slider" valueLabelDisplay="auto" step={1} min={5} max={40} sx={{ color: '#6366f1' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
@@ -1611,7 +1614,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                       <span>Down Payment: {settings.downPaymentPercent}%</span>
                     </Tooltip>
                   </Typography>
-                  <Slider value={settings.downPaymentPercent} onChange={handleSettingChange('downPaymentPercent')} aria-labelledby="down-payment-slider" valueLabelDisplay="auto" step={1} min={0} max={100} sx={{ color: '#4f46e5' }} />
+                  <Slider value={settings.downPaymentPercent} onChange={handleSettingChange('downPaymentPercent')} aria-labelledby="down-payment-slider" valueLabelDisplay="auto" step={1} min={0} max={100} sx={{ color: '#6366f1' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
@@ -1619,7 +1622,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                       <span>Property Tax & Insurance: {settings.taxInsurancePercent}%</span>
                     </Tooltip>
                   </Typography>
-                  <Slider value={settings.taxInsurancePercent} onChange={handleSettingChange('taxInsurancePercent')} min={0} max={5} step={0.1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+                  <Slider value={settings.taxInsurancePercent} onChange={handleSettingChange('taxInsurancePercent')} min={0} max={5} step={0.1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#6366f1' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
@@ -1627,7 +1630,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                       <span>Vacancy: {settings.vacancyPercent}%</span>
                     </Tooltip>
                   </Typography>
-                  <Slider value={settings.vacancyPercent} onChange={handleSettingChange('vacancyPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+                  <Slider value={settings.vacancyPercent} onChange={handleSettingChange('vacancyPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#6366f1' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
@@ -1635,7 +1638,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                       <span>CapEx: {settings.capexPercent}%</span>
                     </Tooltip>
                   </Typography>
-                  <Slider value={settings.capexPercent} onChange={handleSettingChange('capexPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+                  <Slider value={settings.capexPercent} onChange={handleSettingChange('capexPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#6366f1' }} />
                 </Box>
                 <Box sx={{ mb: 0 }}>
                   <Typography variant="body2" gutterBottom>
@@ -1643,7 +1646,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                       <span>Property Management: {settings.propertyManagementPercent}%</span>
                     </Tooltip>
                   </Typography>
-                  <Slider value={settings.propertyManagementPercent} onChange={handleSettingChange('propertyManagementPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+                  <Slider value={settings.propertyManagementPercent} onChange={handleSettingChange('propertyManagementPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#6366f1' }} />
                 </Box>
               </Paper>
             )}
@@ -1663,7 +1666,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                     <span>Annual Rent Appreciation: {rentAppreciationRate}%</span>
                   </Tooltip>
                 </Typography>
-                <Slider value={rentAppreciationRate} onChange={handleRentAppreciationChange} aria-labelledby="rent-appreciation-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#4f46e5' }} />
+                <Slider value={rentAppreciationRate} onChange={handleRentAppreciationChange} aria-labelledby="rent-appreciation-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#6366f1' }} />
               </Box>
               <Box sx={{ flex: 1 }}>
                 <Typography variant="body2" gutterBottom>
@@ -1671,7 +1674,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                     <span>Property Value Increase: {propertyValueIncreaseRate}%</span>
                   </Tooltip>
                 </Typography>
-                <Slider value={propertyValueIncreaseRate} onChange={handlePropertyValueIncreaseChange} aria-labelledby="property-value-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#4f46e5' }} />
+                <Slider value={propertyValueIncreaseRate} onChange={handlePropertyValueIncreaseChange} aria-labelledby="property-value-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#6366f1' }} />
               </Box>
             </Box>
           </Box>
