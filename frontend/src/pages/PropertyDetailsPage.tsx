@@ -604,6 +604,33 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     const foundProperty = properties.find(p => p.property_id === propertyId);
     
     if (!foundProperty) {
+      // Check if property data is in the URL
+      const searchParams = new URLSearchParams(location.search);
+      const propertyData = searchParams.get('data');
+      
+      if (propertyData) {
+        try {
+          // Decode the property data from the URL
+          const decodedProperty = JSON.parse(decodeURIComponent(propertyData)) as Property;
+          
+          // Use the property data from the URL
+          setProperty(decodedProperty);
+          setLoading(false);
+          
+          // Initialize custom rent to property's rent estimate
+          if (decodedProperty.rent_estimate) {
+            setCustomRentEstimate(decodedProperty.rent_estimate);
+            setDisplayRent(formatCurrency(decodedProperty.rent_estimate));
+          }
+          
+          // Also save the property to localStorage for future use
+          savePropertyToLocalStorage(decodedProperty);
+          return;
+        } catch (error) {
+          console.error('Error decoding property data from URL:', error);
+        }
+      }
+      
       // Try to load from localStorage
       try {
         const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
@@ -640,7 +667,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       setCustomRentEstimate(foundProperty.rent_estimate);
       setDisplayRent(formatCurrency(foundProperty.rent_estimate));
     }
-  }, [propertyId, properties, formatCurrency]);
+  }, [propertyId, properties, formatCurrency, location.search]);
   
   // Update page title when property loads
   useEffect(() => {
@@ -837,6 +864,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     // Save the current property to localStorage to enable shared links to work
     if (property) {
       savePropertyToLocalStorage(property);
+      
+      // Create a shareable URL that includes the property data
+      createShareableUrl();
     }
     
     try {
@@ -853,6 +883,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     // Save the current property to localStorage to enable shared links to work
     if (property) {
       savePropertyToLocalStorage(property);
+      
+      // Create a shareable URL that includes the property data
+      createShareableUrl();
     }
     
     const summary = encodeURIComponent(generatePropertySummary());
@@ -860,6 +893,41 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     window.open(`mailto:?subject=${subject}&body=${summary}`);
   };
   
+  // Create a shareable URL with property data embedded
+  const createShareableUrl = () => {
+    if (!property) return;
+    
+    try {
+      // Get current URL without search parameters
+      const url = new URL(window.location.href);
+      
+      // Encode essential property data as JSON and make URL-safe
+      const minimalProperty = {
+        property_id: property.property_id,
+        address: property.address,
+        price: property.price,
+        rent_estimate: property.rent_estimate,
+        ratio: property.ratio,
+        thumbnail: property.thumbnail,
+        bedrooms: property.bedrooms,
+        bathrooms: property.bathrooms,
+        sqft: property.sqft,
+        url: property.url,
+        days_on_market: property.days_on_market,
+        rent_source: property.rent_source
+      };
+      
+      // Encode the property data and add it to the URL
+      const propertyData = encodeURIComponent(JSON.stringify(minimalProperty));
+      url.searchParams.set('data', propertyData);
+      
+      // Update the URL without reloading the page
+      window.history.replaceState({}, '', url.toString());
+    } catch (error) {
+      console.error('Error creating shareable URL:', error);
+    }
+  };
+
   // Add new function to save property to localStorage
   const savePropertyToLocalStorage = (prop: Property) => {
     try {
