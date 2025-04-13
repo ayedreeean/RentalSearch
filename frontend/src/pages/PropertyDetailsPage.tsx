@@ -21,7 +21,11 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Tooltip
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -594,6 +598,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   const [propertyValueIncreaseRate, setPropertyValueIncreaseRate] = useState<number>(3); // Default 3%
   const [yearsToProject, setYearsToProject] = useState<number>(30); // Default 30 years
   
+  // Add state for copy preview dialog near other state declarations 
+  const [copyPreviewOpen, setCopyPreviewOpen] = useState(false);
+  
   // Load property data
   useEffect(() => {
     if (!propertyId) {
@@ -957,34 +964,32 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     }
   };
 
-  // Update copy to clipboard handler to directly use the created URL
+  // Update the copy to clipboard handler to show preview first
   const handleCopyToClipboard = async () => {
-    // Save the current property to localStorage to enable shared links to work
+    // Show the preview dialog instead of immediately copying
     if (property) {
       savePropertyToLocalStorage(property);
-      
-      // Generate the property summary
+      createShareableUrl();
+      setCopyPreviewOpen(true);
+    } else {
+      console.error('Cannot copy to clipboard: property is undefined');
+    }
+  };
+
+  // Add a function to handle the actual copying when confirmed
+  const handleConfirmCopy = async () => {
+    if (property) {
       const summary = generatePropertySummary();
-      
-      // Create a shareable URL and get the URL string
-      const shareableUrl = createShareableUrl();
-      
       try {
-        // Copy the summary to clipboard
         await navigator.clipboard.writeText(summary);
         setCopySuccess('Copied to clipboard!');
-        
-        // Also log the shareable URL to console for troubleshooting
-        console.log('Shareable URL for clipboard:', shareableUrl);
-        
         setTimeout(() => setCopySuccess(''), 3000);
       } catch (err) {
         setCopySuccess('Failed to copy! Try selecting and copying the text manually.');
         console.error('Clipboard error:', err);
       }
-    } else {
-      console.error('Cannot copy to clipboard: property is undefined');
     }
+    setCopyPreviewOpen(false);
   };
 
   // Update email share handler
@@ -1291,15 +1296,6 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             >
               Copy Analysis
             </Button>
-            <Button 
-              variant="outlined"
-              startIcon={<EmailIcon />}
-              onClick={handleEmailShare}
-              color="inherit"
-              sx={{ borderColor: 'rgba(255,255,255,0.5)' }}
-            >
-              Email
-            </Button>
           </Box>
           
           {/* Mobile menu - only shown on xs screens */}
@@ -1317,12 +1313,6 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               sx={{ mr: 1 }}
             >
               <ShareIcon />
-            </IconButton>
-            <IconButton
-              color="inherit"
-              onClick={handleEmailShare}
-            >
-              <EmailIcon />
             </IconButton>
           </Box>
         </Toolbar>
@@ -1788,6 +1778,27 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           </Box>
         </Paper>
       </Container>
+      
+      {/* Copy Analysis Preview Dialog */}
+      <Dialog 
+        open={copyPreviewOpen} 
+        onClose={() => setCopyPreviewOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Analysis Preview</DialogTitle>
+        <DialogContent>
+          <Paper sx={{ p: 2, fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: '50vh', overflow: 'auto' }}>
+            {property && generatePropertySummary()}
+          </Paper>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCopyPreviewOpen(false)}>Cancel</Button>
+          <Button onClick={handleConfirmCopy} variant="contained" color="primary">
+            Copy to Clipboard
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };
