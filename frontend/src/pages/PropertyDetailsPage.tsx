@@ -896,50 +896,14 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     updateUrlWithSettings({ [paramMap[setting]]: value });
   };
   
-  // Copy to clipboard handler
-  const handleCopyToClipboard = async () => {
-    const summary = generatePropertySummary();
-    
-    // Save the current property to localStorage to enable shared links to work
-    if (property) {
-      savePropertyToLocalStorage(property);
-      
-      // Create a shareable URL that includes the property data
-      createShareableUrl();
-    }
-    
-    try {
-      await navigator.clipboard.writeText(summary);
-      setCopySuccess('Copied to clipboard!');
-      setTimeout(() => setCopySuccess(''), 3000);
-    } catch (err) {
-      setCopySuccess('Failed to copy! Try selecting and copying the text manually.');
-    }
-  };
-
-  // Email share handler
-  const handleEmailShare = () => {
-    // Save the current property to localStorage to enable shared links to work
-    if (property) {
-      savePropertyToLocalStorage(property);
-      
-      // Create a shareable URL that includes the property data
-      createShareableUrl();
-    }
-    
-    const summary = encodeURIComponent(generatePropertySummary());
-    const subject = encodeURIComponent(`Property Investment Analysis: ${property?.address}`);
-    window.open(`mailto:?subject=${subject}&body=${summary}`);
-  };
-  
   // Create a shareable URL with property data embedded
   const createShareableUrl = () => {
-    if (!property) return;
+    if (!property) {
+      console.error('Cannot create shareable URL: property is undefined');
+      return;
+    }
     
     try {
-      // Get current URL without search parameters
-      const url = new URL(window.location.href);
-      
       // Create a minimal object with only the essential properties
       // to keep the URL as short as possible
       const minimalProperty = {
@@ -960,27 +924,88 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       // Compress the data before encoding to create a shorter URL
       // First, stringify the object to JSON
       const jsonString = JSON.stringify(minimalProperty);
+      console.log('Property data JSON length:', jsonString.length);
       
       // Base64 encode the JSON string to make it URL-safe
-      // Note: This creates a more compact representation than encodeURIComponent
       let base64Data = btoa(jsonString);
       
       // Make the base64 string URL-safe by replacing + with - and / with _
       base64Data = base64Data.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      console.log('Base64 encoded data length:', base64Data.length);
       
-      // Set the encoded data as a URL parameter
-      url.searchParams.set('d', base64Data);
+      // Get the base URL (without hash or search params)
+      const url = new URL(window.location.href);
+      const urlBase = url.origin + url.pathname;
       
-      // Clear any existing 'data' parameter (from previous version)
-      url.searchParams.delete('data');
+      // Construct full URL with hash routing and query parameter
+      // This works better with React Router's hash routing
+      const fullUrl = `${urlBase}#/property/${property.property_id}?d=${base64Data}`;
       
       // Update the URL without reloading the page
-      window.history.replaceState({}, '', url.toString());
+      window.history.replaceState({}, '', fullUrl);
       
       // For debugging - log the URL length to console
-      console.log(`Shareable URL created - Length: ${url.toString().length} characters`);
+      console.log(`Shareable URL created - Length: ${fullUrl.length} characters`);
+      console.log(`Shareable URL: ${fullUrl}`);
+      
+      // Return the URL for direct use
+      return fullUrl;
     } catch (error) {
       console.error('Error creating shareable URL:', error);
+      return null;
+    }
+  };
+
+  // Update copy to clipboard handler to directly use the created URL
+  const handleCopyToClipboard = async () => {
+    // Save the current property to localStorage to enable shared links to work
+    if (property) {
+      savePropertyToLocalStorage(property);
+      
+      // Generate the property summary
+      const summary = generatePropertySummary();
+      
+      // Create a shareable URL and get the URL string
+      const shareableUrl = createShareableUrl();
+      
+      try {
+        // Copy the summary to clipboard
+        await navigator.clipboard.writeText(summary);
+        setCopySuccess('Copied to clipboard!');
+        
+        // Also log the shareable URL to console for troubleshooting
+        console.log('Shareable URL for clipboard:', shareableUrl);
+        
+        setTimeout(() => setCopySuccess(''), 3000);
+      } catch (err) {
+        setCopySuccess('Failed to copy! Try selecting and copying the text manually.');
+        console.error('Clipboard error:', err);
+      }
+    } else {
+      console.error('Cannot copy to clipboard: property is undefined');
+    }
+  };
+
+  // Update email share handler
+  const handleEmailShare = () => {
+    // Save the current property to localStorage to enable shared links to work
+    if (property) {
+      savePropertyToLocalStorage(property);
+      
+      // Create a shareable URL and get the URL string
+      const shareableUrl = createShareableUrl();
+      
+      // Include the shareable URL in the email body
+      const summary = encodeURIComponent(generatePropertySummary() + 
+        '\n\nView this property online: ' + shareableUrl);
+      const subject = encodeURIComponent(`Property Investment Analysis: ${property.address}`);
+      
+      // Log the URL for troubleshooting
+      console.log('Shareable URL for email:', shareableUrl);
+      
+      window.open(`mailto:?subject=${subject}&body=${summary}`);
+    } else {
+      console.error('Cannot share via email: property is undefined');
     }
   };
 
