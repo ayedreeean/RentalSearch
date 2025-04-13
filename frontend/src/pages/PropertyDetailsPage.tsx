@@ -31,6 +31,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import ShareIcon from '@mui/icons-material/Share';
 import EmailIcon from '@mui/icons-material/Email';
 import TuneIcon from '@mui/icons-material/Tune';
+import LinkIcon from '@mui/icons-material/Link';
 import { Property, Cashflow, CashflowSettings } from '../types';
 // import { LineChart } from '@mui/x-charts/LineChart';
 
@@ -1176,6 +1177,31 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
 `;
   };
   
+  // Add a handler function to copy just the URL to clipboard
+  const handleShareUrl = async () => {
+    if (property) {
+      // Save the property to localStorage
+      savePropertyToLocalStorage(property);
+      
+      // Create the shareable URL and get the URL string
+      const shareableUrl = createShareableUrl();
+      
+      if (shareableUrl) {
+        try {
+          // Copy the URL to clipboard
+          await navigator.clipboard.writeText(shareableUrl);
+          setCopySuccess('URL copied to clipboard!');
+          setTimeout(() => setCopySuccess(''), 3000);
+        } catch (err) {
+          setCopySuccess('Failed to copy URL. Try copying it from the address bar.');
+          console.error('Clipboard error:', err);
+        }
+      }
+    } else {
+      console.error('Cannot share URL: property is undefined');
+    }
+  };
+  
   // Display loading state
   if (loading) {
     return (
@@ -1238,6 +1264,14 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           <Typography variant="h6" color="inherit" noWrap sx={{ flexGrow: 1 }}>
             RentalSearch
           </Typography>
+          <Button 
+            variant="outlined" 
+            startIcon={<LinkIcon />}
+            onClick={handleShareUrl}
+            sx={{ mr: 1 }}
+          >
+            Share URL
+          </Button>
           <Button 
             variant="outlined" 
             startIcon={<ShareIcon />}
