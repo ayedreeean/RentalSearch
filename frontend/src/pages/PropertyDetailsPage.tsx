@@ -1249,18 +1249,18 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
   return (
     <>
       <CssBaseline />
-      <AppBar position="sticky" color="default" elevation={0} sx={{ borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+      <AppBar position="sticky" color="primary" elevation={0} sx={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <Toolbar sx={{ flexWrap: 'wrap' }}>
           <IconButton 
             edge="start" 
-            color="inherit" 
+            color="inherit"
             aria-label="back" 
             onClick={handleBackToSearch}
             sx={{ mr: 2 }}
           >
             <ArrowBackIcon />
           </IconButton>
-          <HomeWorkIcon sx={{ mr: 1, color: 'primary.main' }} />
+          <HomeWorkIcon sx={{ mr: 1, color: 'white' }} />
           <Typography variant="h6" color="inherit" noWrap sx={{ flexGrow: 1 }}>
             RentalSearch
           </Typography>
@@ -1274,6 +1274,8 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               variant="outlined" 
               startIcon={<LinkIcon />}
               onClick={handleShareUrl}
+              color="inherit"
+              sx={{ borderColor: 'rgba(255,255,255,0.5)' }}
             >
               Share URL
             </Button>
@@ -1281,6 +1283,8 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               variant="outlined" 
               startIcon={<ShareIcon />}
               onClick={handleCopyToClipboard}
+              color="inherit"
+              sx={{ borderColor: 'rgba(255,255,255,0.5)' }}
             >
               Copy Analysis
             </Button>
@@ -1288,6 +1292,8 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               variant="outlined"
               startIcon={<EmailIcon />}
               onClick={handleEmailShare}
+              color="inherit"
+              sx={{ borderColor: 'rgba(255,255,255,0.5)' }}
             >
               Email
             </Button>
@@ -1296,21 +1302,21 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           {/* Mobile menu - only shown on xs screens */}
           <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
             <IconButton
-              color="primary"
+              color="inherit"
               onClick={handleShareUrl}
               sx={{ mr: 1 }}
             >
               <LinkIcon />
             </IconButton>
             <IconButton
-              color="primary"
+              color="inherit"
               onClick={handleCopyToClipboard}
               sx={{ mr: 1 }}
             >
               <ShareIcon />
             </IconButton>
             <IconButton
-              color="primary"
+              color="inherit"
               onClick={handleEmailShare}
             >
               <EmailIcon />
