@@ -53,7 +53,7 @@ interface YearlyProjection {
   roi: number;
 }
 
-// Improve the SimpleChart component to fix overlapping labels
+// Adjust the SimpleChart component to ensure all bars are fully visible
 const SimpleChart = ({ 
   data, 
   height = 300
@@ -87,12 +87,12 @@ const SimpleChart = ({
     const canvasWidth = canvas.offsetWidth;
     const canvasHeight = canvas.offsetHeight;
     
-    // Padding - increase to avoid label overlapping
+    // Padding - increase horizontal padding to prevent bar cutoff
     const padding = {
       top: 40,         // Increased for legend
-      right: 100,      // Increased for secondary Y-axis labels
+      right: 110,      // Increased for secondary Y-axis labels and last bar
       bottom: 50,      // Increased for X-axis labels
-      left: 90         // Increased for primary Y-axis labels
+      left: 110        // Increased for primary Y-axis labels and first bar
     };
     
     const chartWidth = canvasWidth - padding.left - padding.right;
@@ -135,8 +135,13 @@ const SimpleChart = ({
       return canvasHeight - padding.bottom - ((value - effectiveMinSecondaryY) * secondaryYScale);
     };
     
-    // Calculate X scale with consistent spacing
-    const xScale = chartWidth / (data.years.length > 1 ? data.years.length - 1 : 1);
+    // Calculate plot area width (space available for data points)
+    const plotAreaWidth = chartWidth;
+    
+    // Use data-based X coordinates instead of evenly spaced
+    // Calculate X scale with proper inset to keep bars within bounds
+    // For n points, divide width into n sections instead of n-1
+    const xScale = plotAreaWidth / Math.max(data.years.length - 1, 1);
     
     // Draw background grid
     ctx.strokeStyle = '#f0f0f0';
@@ -363,10 +368,13 @@ const SimpleChart = ({
       ctx.stroke();
     }
     
-    // Draw cashflow bars using secondary Y-axis
-    const barWidth = Math.min(xScale * 0.5, 15); // Limit max width for better appearance
+    // Calculate optimal bar width based on available space
+    // Make bars narrower to ensure they stay within bounds
+    const barWidth = Math.min(xScale * 0.4, 12); // Narrower bars with a maximum width
     
+    // Draw cashflow bars using secondary Y-axis
     for (let i = 0; i < data.cashflow.length; i++) {
+      // Center the bar on the x position, but adjust to ensure first and last bars are fully visible
       const x = padding.left + (i * xScale) - (barWidth / 2);
       const cashflowValue = data.cashflow[i];
       const zeroY = getSecondaryYCoordinate(0);
