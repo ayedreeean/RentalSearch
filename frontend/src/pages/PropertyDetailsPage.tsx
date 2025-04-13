@@ -107,9 +107,9 @@ const SimpleChart = ({
     // Padding - increase horizontal padding to prevent bar cutoff
     const padding = {
       top: 50,         // Increased to make room for title
-      right: 110,      // Increased for secondary Y-axis labels and last bar
+      right: 130,      // Increased for secondary Y-axis labels and last bar
       bottom: 80,      // Increased for X-axis labels and legend
-      left: 110        // Increased for primary Y-axis labels and first bar
+      left: 130        // Increased for primary Y-axis labels and first bar
     };
     
     const chartWidth = canvasWidth - padding.left - padding.right;
@@ -131,14 +131,19 @@ const SimpleChart = ({
     // Calculate ratios to maintain proper scale proportions
     const primaryToSecondaryRatio = maxPrimaryY / maxSecondaryY;
     
-    // Add padding to both scales
-    const primaryYPadding = maxPrimaryY * 0.1;
+    // Add padding to both scales - increase primary Y padding to prevent cut-off
+    const primaryYPadding = maxPrimaryY * 0.2; // Increased from 0.1 to 0.2 (20% padding)
     const secondaryYRange = maxSecondaryY - minSecondaryY;
     const secondaryYPadding = secondaryYRange * 0.2; // More padding for cashflow scale
     
     // Determine the effective min/max for both axes, ensuring full visibility
     const effectiveMinPrimaryY = 0; // Keep primary axis starting at 0
     const effectiveMaxPrimaryY = maxPrimaryY + primaryYPadding;
+    
+    // Round the max value to a 'nice' number to ensure better axis scaling
+    const magnitude = Math.pow(10, Math.floor(Math.log10(effectiveMaxPrimaryY)));
+    const normalizedMaxY = Math.ceil(effectiveMaxPrimaryY / magnitude) * magnitude;
+    const roundedMaxPrimaryY = Math.max(effectiveMaxPrimaryY, normalizedMaxY);
     
     // Adjust secondary axis min/max to ensure all data is visible
     // but maintain proportional relationship with primary axis
@@ -147,10 +152,10 @@ const SimpleChart = ({
     
     // Ensure the secondary scale can represent all data points
     // by applying the primary:secondary ratio to determine appropriate scaling
-    const adjustedMaxSecondary = Math.max(effectiveMaxSecondaryY, effectiveMaxPrimaryY / primaryToSecondaryRatio);
+    const adjustedMaxSecondary = Math.max(effectiveMaxSecondaryY, roundedMaxPrimaryY / primaryToSecondaryRatio);
     
     // Calculate Y scales with adjusted ranges to ensure all data fits
-    const primaryYScale = chartHeight / (effectiveMaxPrimaryY - effectiveMinPrimaryY);
+    const primaryYScale = chartHeight / (roundedMaxPrimaryY - effectiveMinPrimaryY);
     const secondaryYScale = chartHeight / (adjustedMaxSecondary - effectiveMinSecondaryY);
     
     // Calculate zero Y-coordinate position (will be the same for both axes)
@@ -180,8 +185,8 @@ const SimpleChart = ({
     ctx.lineWidth = 1;
     
     // Draw horizontal grid lines for primary axis
-    const primaryGridStep = Math.ceil(effectiveMaxPrimaryY / 5);
-    for (let i = 0; i <= effectiveMaxPrimaryY; i += primaryGridStep) {
+    const primaryGridStep = Math.ceil(roundedMaxPrimaryY / 5);
+    for (let i = 0; i <= roundedMaxPrimaryY; i += primaryGridStep) {
       const y = getPrimaryYCoordinate(i);
       ctx.beginPath();
       ctx.moveTo(padding.left, y);
@@ -221,15 +226,15 @@ const SimpleChart = ({
     
     // Calculate step size for primary Y axis labels - use fewer labels to avoid overlap
     const optimalStepCount = 5;
-    let primaryStepSize = Math.ceil(effectiveMaxPrimaryY / optimalStepCount);
+    let primaryStepSize = Math.ceil(roundedMaxPrimaryY / optimalStepCount);
     
     // Round step size to a nice number
     const primaryMagnitude = Math.pow(10, Math.floor(Math.log10(primaryStepSize)));
     primaryStepSize = Math.ceil(primaryStepSize / primaryMagnitude) * primaryMagnitude;
     
     // Draw primary Y axis labels
-    for (let i = 0; i <= effectiveMaxPrimaryY; i += primaryStepSize) {
-      if (i > effectiveMaxPrimaryY) break;
+    for (let i = 0; i <= roundedMaxPrimaryY; i += primaryStepSize) {
+      if (i > roundedMaxPrimaryY) break;
       const y = getPrimaryYCoordinate(i);
       
       // Format large numbers with K or M suffix
@@ -479,9 +484,9 @@ const SimpleChart = ({
     
     const padding = {
       top: 50,
-      right: 110,
+      right: 130,
       bottom: 80,
-      left: 110
+      left: 130
     };
     
     const chartWidth = canvasWidth - padding.left - padding.right;
