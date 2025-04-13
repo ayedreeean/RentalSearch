@@ -37,7 +37,49 @@ import EmailIcon from '@mui/icons-material/Email';
 import TuneIcon from '@mui/icons-material/Tune';
 import LinkIcon from '@mui/icons-material/Link';
 import { Property, Cashflow, CashflowSettings } from '../types';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
 // import { LineChart } from '@mui/x-charts/LineChart';
+
+// Add explicit CSS styles for Leaflet to ensure it displays correctly
+const mapStyles = `
+  .leaflet-container {
+    height: 100%;
+    width: 100%;
+    border-radius: 8px;
+  }
+  
+  .leaflet-marker-icon {
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
+  }
+  
+  /* Ensure popup text is readable */
+  .leaflet-popup-content {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    color: #333;
+    max-width: 250px;
+    word-wrap: break-word;
+  }
+`;
+
+// Add a style element to the document head
+const MapStyles = () => {
+  React.useEffect(() => {
+    // Create and append style element
+    const styleEl = document.createElement('style');
+    styleEl.textContent = mapStyles;
+    document.head.appendChild(styleEl);
+    
+    // Clean up on unmount
+    return () => {
+      document.head.removeChild(styleEl);
+    };
+  }, []);
+  
+  return null;
+};
 
 interface PropertyDetailsPageProps {
   properties: Property[];
@@ -57,6 +99,114 @@ interface YearlyProjection {
   equity: number;
   roi: number;
 }
+
+// Fix Leaflet marker icon issue and ensure client-side only rendering
+// This is needed because Leaflet's default marker icons use relative URLs which don't work well in React
+const customIcon = new L.Icon({
+  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+// Create a wrapper to handle client-side only rendering of the map
+// This is necessary because Leaflet needs the DOM to be available
+const MapWrapper = ({ address }: { address: string }) => {
+  const [isMounted, setIsMounted] = React.useState(false);
+  
+  // Only render on client side
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
+  
+  if (!isMounted) {
+    return <Box sx={{ height: 300, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading map...</Box>;
+  }
+  
+  return <PropertyMap address={address} />;
+};
+
+// Create a Map component that we'll use in the PropertyDetailsPage
+const PropertyMap = ({ address }: { address: string }) => {
+  const [coordinates, setCoordinates] = React.useState<[number, number] | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // Fetch coordinates using OpenStreetMap's Nominatim API
+  React.useEffect(() => {
+    const fetchCoordinates = async () => {
+      try {
+        setIsLoading(true);
+        // OpenStreetMap's free Nominatim geocoding service
+        const encodedAddress = encodeURIComponent(address);
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1`);
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lon = parseFloat(data[0].lon);
+          setCoordinates([lat, lon]);
+          console.log("Map coordinates loaded:", lat, lon); // Debug log
+        } else {
+          setError('Could not find coordinates for this address');
+          console.error('No coordinates found for address:', address);
+        }
+      } catch (err) {
+        setError('Error fetching coordinates');
+        console.error('Error fetching coordinates:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (address) {
+      fetchCoordinates();
+    }
+  }, [address]);
+
+  if (isLoading) {
+    return <Box sx={{ height: 300, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading map...</Box>;
+  }
+
+  if (error || !coordinates) {
+    return (
+      <Box sx={{ height: 300, display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#f5f5f5', borderRadius: 2 }}>
+        <Typography color="text.secondary">{error || 'Could not load map'}</Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ 
+      height: 300, 
+      borderRadius: 2, 
+      overflow: 'hidden', 
+      mb: 3,
+      border: '1px solid #ddd',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+    }}>
+      <MapContainer 
+        center={coordinates} 
+        zoom={15} 
+        style={{ height: '100%', width: '100%' }}
+        scrollWheelZoom={false}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <Marker position={coordinates} icon={customIcon}>
+          <Popup>
+            {address}
+          </Popup>
+        </Marker>
+      </MapContainer>
+    </Box>
+  );
+};
 
 // Adjust the SimpleChart component to ensure all bars are fully visible
 const SimpleChart = ({ 
@@ -1259,6 +1409,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
   return (
     <>
       <CssBaseline />
+      <MapStyles />
       <AppBar position="sticky" elevation={0} sx={{ 
         borderBottom: '1px solid rgba(255,255,255,0.1)',
         bgcolor: '#6366f1'
@@ -1375,6 +1526,15 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 }}
               />
             </Box>
+            
+            {/* Add Map */}
+            <Paper sx={{ mt: 3, p: { xs: 2, md: 3 }, borderRadius: 2 }}>
+              <Typography variant="h6" gutterBottom>Location</Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                {property.address}
+              </Typography>
+              <MapWrapper address={property.address} />
+            </Paper>
             
             <Paper sx={{ mt: 3, p: { xs: 2, md: 3 }, borderRadius: 2 }}>
               <Typography variant="h6" gutterBottom>Property Details</Typography>
