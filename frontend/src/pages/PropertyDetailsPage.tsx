@@ -68,7 +68,19 @@ const SimpleChart = ({
 }) => {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   
-  React.useEffect(() => {
+  // Add state for tracking hover position and displayed tooltip
+  const [hoverInfo, setHoverInfo] = React.useState<{
+    visible: boolean,
+    x: number,
+    y: number,
+    year: number,
+    propertyValue: number,
+    equity: number,
+    cashflow: number
+  } | null>(null);
+  
+  // Draw chart function
+  const drawChart = React.useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
@@ -89,9 +101,9 @@ const SimpleChart = ({
     
     // Padding - increase horizontal padding to prevent bar cutoff
     const padding = {
-      top: 40,         // Increased for legend
+      top: 50,         // Increased to make room for title
       right: 110,      // Increased for secondary Y-axis labels and last bar
-      bottom: 50,      // Increased for X-axis labels
+      bottom: 80,      // Increased for X-axis labels and legend
       left: 110        // Increased for primary Y-axis labels and first bar
     };
     
@@ -103,10 +115,6 @@ const SimpleChart = ({
     const maxEquity = Math.max(...data.equity);
     const maxPrimaryY = Math.max(maxPropertyValue, maxEquity);
     
-    // Add padding to primary Y-axis scale
-    const primaryYPadding = maxPrimaryY * 0.1;
-    const effectiveMaxPrimaryY = maxPrimaryY + primaryYPadding;
-    
     // Calculate scales for secondary Y-axis (cashflow)
     const maxCashflow = Math.max(...data.cashflow);
     const minCashflow = Math.min(...data.cashflow);
@@ -115,19 +123,38 @@ const SimpleChart = ({
     const minSecondaryY = Math.min(0, minCashflow);
     const maxSecondaryY = Math.max(0, maxCashflow);
     
-    // Add padding to secondary Y-axis scale
+    // Calculate ratios to maintain proper scale proportions
+    const primaryToSecondaryRatio = maxPrimaryY / maxSecondaryY;
+    
+    // Add padding to both scales
+    const primaryYPadding = maxPrimaryY * 0.1;
     const secondaryYRange = maxSecondaryY - minSecondaryY;
     const secondaryYPadding = secondaryYRange * 0.2; // More padding for cashflow scale
+    
+    // Determine the effective min/max for both axes, ensuring full visibility
+    const effectiveMinPrimaryY = 0; // Keep primary axis starting at 0
+    const effectiveMaxPrimaryY = maxPrimaryY + primaryYPadding;
+    
+    // Adjust secondary axis min/max to ensure all data is visible
+    // but maintain proportional relationship with primary axis
     const effectiveMinSecondaryY = minSecondaryY - (minSecondaryY < 0 ? secondaryYPadding : 0);
     const effectiveMaxSecondaryY = maxSecondaryY + secondaryYPadding;
     
-    // Calculate Y scales
-    const primaryYScale = chartHeight / effectiveMaxPrimaryY;
-    const secondaryYScale = chartHeight / (effectiveMaxSecondaryY - effectiveMinSecondaryY);
+    // Ensure the secondary scale can represent all data points
+    // by applying the primary:secondary ratio to determine appropriate scaling
+    const adjustedMaxSecondary = Math.max(effectiveMaxSecondaryY, effectiveMaxPrimaryY / primaryToSecondaryRatio);
+    
+    // Calculate Y scales with adjusted ranges to ensure all data fits
+    const primaryYScale = chartHeight / (effectiveMaxPrimaryY - effectiveMinPrimaryY);
+    const secondaryYScale = chartHeight / (adjustedMaxSecondary - effectiveMinSecondaryY);
+    
+    // Calculate zero Y-coordinate position (will be the same for both axes)
+    const zeroYCoordinate = canvasHeight - padding.bottom - ((0 - effectiveMinSecondaryY) * secondaryYScale);
     
     // Function to convert a primary Y value to canvas coordinate
     const getPrimaryYCoordinate = (value: number) => {
-      return canvasHeight - padding.bottom - (value * primaryYScale);
+      // Align the zero point to match the secondary axis zero point
+      return zeroYCoordinate - ((value - 0) * primaryYScale);
     };
     
     // Function to convert a secondary Y value to canvas coordinate
@@ -217,7 +244,7 @@ const SimpleChart = ({
     ctx.textAlign = 'left';
     
     // Calculate step size for secondary Y axis labels
-    let secondaryStepSize = (effectiveMaxSecondaryY - effectiveMinSecondaryY) / optimalStepCount;
+    let secondaryStepSize = (adjustedMaxSecondary - effectiveMinSecondaryY) / optimalStepCount;
     
     // Round step size to a nice number
     const secondaryMagnitude = Math.pow(10, Math.floor(Math.log10(secondaryStepSize)));
@@ -227,7 +254,7 @@ const SimpleChart = ({
     let secondaryLabelValue = Math.floor(effectiveMinSecondaryY / secondaryStepSize) * secondaryStepSize;
     
     // Draw secondary Y axis labels
-    while (secondaryLabelValue <= effectiveMaxSecondaryY) {
+    while (secondaryLabelValue <= adjustedMaxSecondary) {
       const y = getSecondaryYCoordinate(secondaryLabelValue);
       
       // Format with K suffix for thousands
@@ -269,7 +296,7 @@ const SimpleChart = ({
       const index = data.years.indexOf(yearToShow);
       if (index !== -1) {
         const x = padding.left + (index * xScale);
-        ctx.fillText('Year ' + yearToShow, x, canvasHeight - padding.bottom + 5);
+        ctx.fillText(yearToShow.toString(), x, canvasHeight - padding.bottom + 5);
         
         // Add light vertical grid line
         ctx.strokeStyle = '#f0f0f0';
@@ -278,32 +305,6 @@ const SimpleChart = ({
         ctx.lineTo(x, canvasHeight - padding.bottom);
         ctx.stroke();
       }
-    });
-    
-    // Draw legend with more spacing
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.font = '12px Arial';
-    ctx.fillStyle = '#333';
-    
-    const legendItems = [
-      { label: 'Property Value', color: '#4f46e5' },
-      { label: 'Equity', color: '#10b981' },
-      { label: 'Annual Cashflow', color: '#f97316' }
-    ];
-    
-    const legendWidth = 150;  // Width allocated for each legend item
-    const legendStartX = padding.left + (chartWidth - (legendItems.length * legendWidth)) / 2;
-    
-    legendItems.forEach((item, index) => {
-      const x = legendStartX + (index * legendWidth);
-      const y = 15;  // Place at the top of the chart
-      
-      ctx.fillStyle = item.color;
-      ctx.fillRect(x, y - 5, 15, 10);
-      
-      ctx.fillStyle = '#333';
-      ctx.fillText(item.label, x + 20, y);
     });
     
     // Draw axis titles with better positioning
@@ -374,8 +375,19 @@ const SimpleChart = ({
     
     // Draw cashflow bars using secondary Y-axis
     for (let i = 0; i < data.cashflow.length; i++) {
-      // Center the bar on the x position, but adjust to ensure first and last bars are fully visible
-      const x = padding.left + (i * xScale) - (barWidth / 2);
+      // Calculate x position with special handling for first and last bars to keep them within bounds
+      let x;
+      if (i === 0) {
+        // First bar should start exactly at the left boundary
+        x = padding.left;
+      } else if (i === data.cashflow.length - 1) {
+        // Last bar should end exactly at the right boundary
+        x = (canvasWidth - padding.right) - barWidth;
+      } else {
+        // Center the bars for middle points
+        x = padding.left + (i * xScale) - (barWidth / 2);
+      }
+      
       const cashflowValue = data.cashflow[i];
       const zeroY = getSecondaryYCoordinate(0);
       const valueY = getSecondaryYCoordinate(cashflowValue);
@@ -394,17 +406,153 @@ const SimpleChart = ({
       }
     }
     
-  }, [data, canvasRef]);
+    // Draw legend at the bottom of the chart
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = '12px Arial';
+    ctx.fillStyle = '#333';
+    
+    const legendItems = [
+      { label: 'Property Value', color: '#4f46e5' },
+      { label: 'Equity', color: '#10b981' },
+      { label: 'Annual Cashflow', color: '#f97316' }
+    ];
+    
+    const legendWidth = 150;  // Width allocated for each legend item
+    const legendStartX = (canvasWidth - (legendItems.length * legendWidth)) / 2;
+    const legendY = canvasHeight - 15;  // Place at the bottom
+    
+    // Draw legend background to ensure better visibility
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillRect(legendStartX - 10, legendY - 15, (legendItems.length * legendWidth) + 20, 30);
+    
+    legendItems.forEach((item, index) => {
+      const x = legendStartX + (index * legendWidth);
+      
+      ctx.fillStyle = item.color;
+      ctx.fillRect(x, legendY - 5, 15, 10);
+      
+      ctx.fillStyle = '#333';
+      ctx.fillText(item.label, x + 20, legendY);
+    });
+    
+    // If we have hover data, draw a vertical indicator line
+    if (hoverInfo && hoverInfo.visible) {
+      const hoverX = hoverInfo.x;
+      
+      // Draw vertical hover line
+      ctx.save();
+      ctx.strokeStyle = 'rgba(100, 100, 100, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      ctx.moveTo(hoverX, padding.top);
+      ctx.lineTo(hoverX, canvasHeight - padding.bottom);
+      ctx.stroke();
+      ctx.restore();
+    }
+    
+  }, [data, hoverInfo]);
+  
+  // Draw chart on mount and when data or hover state changes
+  React.useEffect(() => {
+    drawChart();
+  }, [drawChart]);
+  
+  // Add mouse move handler for tooltip
+  const handleMouseMove = React.useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Calculate chart dimensions
+    const canvasWidth = canvas.offsetWidth;
+    const canvasHeight = canvas.offsetHeight;
+    
+    const padding = {
+      top: 50,
+      right: 110,
+      bottom: 80,
+      left: 110
+    };
+    
+    const chartWidth = canvasWidth - padding.left - padding.right;
+    const plotAreaWidth = chartWidth;
+    const xScale = plotAreaWidth / Math.max(data.years.length - 1, 1);
+    
+    // Check if mouse is in chart area
+    if (
+      x >= padding.left && 
+      x <= canvasWidth - padding.right && 
+      y >= padding.top && 
+      y <= canvasHeight - padding.bottom
+    ) {
+      // Find closest data point
+      const dataIndex = Math.round((x - padding.left) / xScale);
+      
+      // Ensure index is within bounds
+      if (dataIndex >= 0 && dataIndex < data.years.length) {
+        // Calculate the exact x position of the data point
+        const dataPointX = padding.left + (dataIndex * xScale);
+        
+        setHoverInfo({
+          visible: true,
+          x: dataPointX,
+          y: y,
+          year: data.years[dataIndex],
+          propertyValue: data.propertyValues[dataIndex],
+          equity: data.equity[dataIndex],
+          cashflow: data.cashflow[dataIndex]
+        });
+        return;
+      }
+    }
+    
+    // Mouse not over data point or chart area
+    setHoverInfo(null);
+  }, [data]);
+  
+  const handleMouseLeave = React.useCallback(() => {
+    setHoverInfo(null);
+  }, []);
   
   return (
-    <Box sx={{ width: '100%', height, mb: 2 }}>
+    <Box sx={{ width: '100%', height, mb: 2, position: 'relative' }}>
       <canvas 
         ref={canvasRef} 
         style={{ 
           width: '100%', 
           height: '100%'
         }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
       />
+      {/* Tooltip */}
+      {hoverInfo && hoverInfo.visible && (
+        <div
+          style={{
+            position: 'absolute',
+            left: `${hoverInfo.x + 10}px`,
+            top: `${hoverInfo.y - 80}px`,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            color: 'white',
+            padding: '8px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            pointerEvents: 'none',
+            zIndex: 1000,
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <div>Year: {hoverInfo.year}</div>
+          <div>Property Value: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.propertyValue)}</div>
+          <div>Equity: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.equity)}</div>
+          <div>Cashflow: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.cashflow)}</div>
+        </div>
+      )}
     </Box>
   );
 };
@@ -454,7 +602,31 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     }
     
     const foundProperty = properties.find(p => p.property_id === propertyId);
+    
     if (!foundProperty) {
+      // Try to load from localStorage
+      try {
+        const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
+        if (savedPropertiesStr) {
+          const savedProperties = JSON.parse(savedPropertiesStr);
+          const savedProperty = savedProperties[propertyId];
+          
+          if (savedProperty) {
+            setProperty(savedProperty);
+            setLoading(false);
+            
+            // Initialize custom rent to property's rent estimate
+            if (savedProperty.rent_estimate) {
+              setCustomRentEstimate(savedProperty.rent_estimate);
+              setDisplayRent(formatCurrency(savedProperty.rent_estimate));
+            }
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error loading property from localStorage:', error);
+      }
+      
       setError('Property not found');
       setLoading(false);
       return;
@@ -659,47 +831,13 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   };
   
   // Copy to clipboard handler
-  const generatePropertySummary = () => {
-    if (!property || !cashflow) return '';
-    
-    const rentValue = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
-    const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
-    
-    return `🏠 Property Investment Analysis 🏠
-
-ADDRESS: ${property.address}
-PRICE: ${formatCurrency(property.price)}
-RENT ESTIMATE: ${formatCurrency(rentValue)}
-RENT-TO-PRICE RATIO: ${formatPercent(property.ratio * 100)}
-
-📊 PROPERTY DETAILS:
-• ${property.bedrooms} beds, ${property.bathrooms} baths
-• ${property.sqft.toLocaleString()} sq. ft.
-${property.days_on_market !== null ? `• Days on market: ${property.days_on_market}` : ''}
-
-💰 CASHFLOW ANALYSIS (Monthly):
-• Down payment (${settings.downPaymentPercent}%): ${formatCurrency(property.price * (settings.downPaymentPercent / 100))}
-• Mortgage payment: ${formatCurrency(cashflow.monthlyMortgage)}
-• Property Tax & Insurance: ${formatCurrency(cashflow.monthlyTaxInsurance)}
-• Vacancy (${settings.vacancyPercent}%): ${formatCurrency(cashflow.monthlyVacancy)}
-• CapEx (${settings.capexPercent}%): ${formatCurrency(cashflow.monthlyCapex)}
-• Property Management (${settings.propertyManagementPercent}%): ${formatCurrency(cashflow.monthlyPropertyManagement)}
-• Total Monthly Expenses: ${formatCurrency(cashflow.totalMonthlyExpenses)}
-• Monthly Cashflow: ${formatCurrency(cashflow.monthlyCashflow)}
-• Annual Cashflow: ${formatCurrency(cashflow.annualCashflow)}
-• Cash-on-Cash Return: ${formatPercent(cashflow.cashOnCashReturn)}
-
-🔗 ZILLOW LISTING: ${property.url}
-🔗 RENTCAST ANALYSIS: ${rentCastUrl}
-
-See full analysis: ${window.location.href}
-
-Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
-`;
-  };
-  
   const handleCopyToClipboard = async () => {
     const summary = generatePropertySummary();
+    
+    // Save the current property to localStorage to enable shared links to work
+    if (property) {
+      savePropertyToLocalStorage(property);
+    }
     
     try {
       await navigator.clipboard.writeText(summary);
@@ -712,9 +850,31 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
 
   // Email share handler
   const handleEmailShare = () => {
+    // Save the current property to localStorage to enable shared links to work
+    if (property) {
+      savePropertyToLocalStorage(property);
+    }
+    
     const summary = encodeURIComponent(generatePropertySummary());
     const subject = encodeURIComponent(`Property Investment Analysis: ${property?.address}`);
     window.open(`mailto:?subject=${subject}&body=${summary}`);
+  };
+  
+  // Add new function to save property to localStorage
+  const savePropertyToLocalStorage = (prop: Property) => {
+    try {
+      // Get existing saved properties
+      const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
+      const savedProperties = savedPropertiesStr ? JSON.parse(savedPropertiesStr) : {};
+      
+      // Add or update this property
+      savedProperties[prop.property_id] = prop;
+      
+      // Save back to localStorage
+      localStorage.setItem('rentToolFinder_properties', JSON.stringify(savedProperties));
+    } catch (error) {
+      console.error('Error saving property to localStorage:', error);
+    }
   };
   
   // Add handler for rent appreciation rate change
@@ -825,6 +985,46 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
     }
     
     return years;
+  };
+  
+  // Copy to clipboard handler
+  const generatePropertySummary = () => {
+    if (!property || !cashflow) return '';
+    
+    const rentValue = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
+    const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
+    
+    return `🏠 Property Investment Analysis 🏠
+
+ADDRESS: ${property.address}
+PRICE: ${formatCurrency(property.price)}
+RENT ESTIMATE: ${formatCurrency(rentValue)}
+RENT-TO-PRICE RATIO: ${formatPercent(property.ratio * 100)}
+
+📊 PROPERTY DETAILS:
+• ${property.bedrooms} beds, ${property.bathrooms} baths
+• ${property.sqft.toLocaleString()} sq. ft.
+${property.days_on_market !== null ? `• Days on market: ${property.days_on_market}` : ''}
+
+💰 CASHFLOW ANALYSIS (Monthly):
+• Down payment (${settings.downPaymentPercent}%): ${formatCurrency(property.price * (settings.downPaymentPercent / 100))}
+• Mortgage payment: ${formatCurrency(cashflow.monthlyMortgage)}
+• Property Tax & Insurance: ${formatCurrency(cashflow.monthlyTaxInsurance)}
+• Vacancy (${settings.vacancyPercent}%): ${formatCurrency(cashflow.monthlyVacancy)}
+• CapEx (${settings.capexPercent}%): ${formatCurrency(cashflow.monthlyCapex)}
+• Property Management (${settings.propertyManagementPercent}%): ${formatCurrency(cashflow.monthlyPropertyManagement)}
+• Total Monthly Expenses: ${formatCurrency(cashflow.totalMonthlyExpenses)}
+• Monthly Cashflow: ${formatCurrency(cashflow.monthlyCashflow)}
+• Annual Cashflow: ${formatCurrency(cashflow.annualCashflow)}
+• Cash-on-Cash Return: ${formatPercent(cashflow.cashOnCashReturn)}
+
+🔗 ZILLOW LISTING: ${property.url}
+🔗 RENTCAST ANALYSIS: ${rentCastUrl}
+
+See full analysis: ${window.location.href}
+
+Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
+`;
   };
   
   // Display loading state
