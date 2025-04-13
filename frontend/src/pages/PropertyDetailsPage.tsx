@@ -1250,7 +1250,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
     <>
       <CssBaseline />
       <AppBar position="sticky" color="default" elevation={0} sx={{ borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-        <Toolbar>
+        <Toolbar sx={{ flexWrap: 'wrap' }}>
           <IconButton 
             edge="start" 
             color="inherit" 
@@ -1264,33 +1264,62 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           <Typography variant="h6" color="inherit" noWrap sx={{ flexGrow: 1 }}>
             RentalSearch
           </Typography>
-          <Button 
-            variant="outlined" 
-            startIcon={<LinkIcon />}
-            onClick={handleShareUrl}
-            sx={{ mr: 1 }}
-          >
-            Share URL
-          </Button>
-          <Button 
-            variant="outlined" 
-            startIcon={<ShareIcon />}
-            onClick={handleCopyToClipboard}
-            sx={{ mr: 1 }}
-          >
-            Copy Analysis
-          </Button>
-          <Button 
-            variant="outlined"
-            startIcon={<EmailIcon />}
-            onClick={handleEmailShare}
-          >
-            Email
-          </Button>
+          
+          {/* Mobile-friendly button group with dropdown on small screens */}
+          <Box sx={{ 
+            display: { xs: 'none', sm: 'flex' }, 
+            gap: 1 
+          }}>
+            <Button 
+              variant="outlined" 
+              startIcon={<LinkIcon />}
+              onClick={handleShareUrl}
+            >
+              Share URL
+            </Button>
+            <Button 
+              variant="outlined" 
+              startIcon={<ShareIcon />}
+              onClick={handleCopyToClipboard}
+            >
+              Copy Analysis
+            </Button>
+            <Button 
+              variant="outlined"
+              startIcon={<EmailIcon />}
+              onClick={handleEmailShare}
+            >
+              Email
+            </Button>
+          </Box>
+          
+          {/* Mobile menu - only shown on xs screens */}
+          <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+            <IconButton
+              color="primary"
+              onClick={handleShareUrl}
+              sx={{ mr: 1 }}
+            >
+              <LinkIcon />
+            </IconButton>
+            <IconButton
+              color="primary"
+              onClick={handleCopyToClipboard}
+              sx={{ mr: 1 }}
+            >
+              <ShareIcon />
+            </IconButton>
+            <IconButton
+              color="primary"
+              onClick={handleEmailShare}
+            >
+              <EmailIcon />
+            </IconButton>
+          </Box>
         </Toolbar>
       </AppBar>
       
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
         {/* Success message for clipboard copy */}
         {copySuccess && (
           <Alert severity="success" sx={{ mb: 3 }}>
@@ -1299,12 +1328,16 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
         )}
         
         {/* Property Header */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" component="h1" gutterBottom>
+        <Box sx={{ mb: { xs: 2, md: 4 } }}>
+          <Typography variant="h4" component="h1" gutterBottom sx={{ 
+            fontSize: { xs: '1.5rem', md: '2.125rem' }
+          }}>
             {property.address}
           </Typography>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', mb: 2 }}>
-            <Typography variant="h5" component="div" fontWeight="bold">
+            <Typography variant="h5" component="div" fontWeight="bold" sx={{
+              fontSize: { xs: '1.25rem', md: '1.5rem' }
+            }}>
               {formatCurrency(property.price)}
             </Typography>
             <span className={`ratio-chip ${property.ratio >= 0.007 ? 'ratio-good' : property.ratio >= 0.004 ? 'ratio-medium' : 'ratio-poor'}`}>
@@ -1318,7 +1351,12 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           </Box>
         </Box>
         
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4, mb: 4 }}>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: { xs: 'column', md: 'row' }, 
+          gap: { xs: 2, md: 4 }, 
+          mb: { xs: 2, md: 4 } 
+        }}>
           {/* Left column: Property image and details */}
           <Box sx={{ flex: '1', maxWidth: { xs: '100%', md: '40%' } }}>
             <Box>
@@ -1334,7 +1372,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               />
             </Box>
             
-            <Paper sx={{ mt: 3, p: 3, borderRadius: 2 }}>
+            <Paper sx={{ mt: 3, p: { xs: 2, md: 3 }, borderRadius: 2 }}>
               <Typography variant="h6" gutterBottom>Property Details</Typography>
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
                 <Box sx={{ textAlign: 'center' }}>
@@ -1354,7 +1392,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               <Divider sx={{ my: 2 }} />
               
               <Typography variant="h6" gutterBottom>External Links</Typography>
-              <Box sx={{ display: 'flex', gap: 2 }}>
+              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
                 <Button 
                   variant="outlined" 
                   startIcon={<HomeIcon />} 
@@ -1362,6 +1400,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                   href={property.url}
                   target="_blank"
                   rel="noopener noreferrer"
+                  size="small"
                 >
                   View on Zillow
                 </Button>
@@ -1372,6 +1411,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                   href={rentCastUrl}
                   target="_blank"
                   rel="noopener noreferrer"
+                  size="small"
                 >
                   Rentcast Analysis
                 </Button>
@@ -1382,22 +1422,22 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           {/* Right column: Cashflow Analysis & Settings */}
           <Box sx={{ flex: '1', maxWidth: { xs: '100%', md: '60%' } }}>
             {/* Cashflow Header */}
-            <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="h5">Cashflow Analysis</Typography>
+            <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 2, mb: 3 }}>
+              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mb: 1 }}>
+                <Typography variant="h5" sx={{ mb: { xs: 1, sm: 0 }, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>Cashflow Analysis</Typography>
                 <Box>
                   <Typography 
                     variant="h5" 
                     fontWeight="bold" 
                     color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}
-                    sx={{ textAlign: 'right' }}
+                    sx={{ textAlign: { xs: 'left', sm: 'right' }, fontSize: { xs: '1.25rem', md: '1.5rem' } }}
                   >
                     {formatCurrency(cashflow.monthlyCashflow)}/mo
                   </Typography>
                   <Typography 
                     variant="body2" 
                     color={cashflow.annualCashflow >= 0 ? 'success.main' : 'error.main'}
-                    sx={{ textAlign: 'right' }}
+                    sx={{ textAlign: { xs: 'left', sm: 'right' } }}
                   >
                     {formatCurrency(cashflow.annualCashflow)}/year
                   </Typography>
@@ -1419,7 +1459,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                         onChange={handleRentChange}
                         onFocus={handleRentFocus}
                         onBlur={handleRentBlur}
-                        sx={{ maxWidth: '120px' }}
+                        sx={{ maxWidth: { xs: '100px', sm: '120px' } }}
                         InputProps={{
                           endAdornment: <EditIcon sx={{ fontSize: 16, color: '#6b7280', opacity: 0.7 }} />,
                         }}
