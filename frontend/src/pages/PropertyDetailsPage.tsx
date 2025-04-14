@@ -218,7 +218,7 @@ const PropertyMap = ({ address }: { address: string }) => {
   );
 };
 
-// Replace the PropertyChart implementation with this simplified version
+// Replace the entire PropertyChart component with this simplified version
 const PropertyChart = ({ 
   data
 }: { 
@@ -230,11 +230,20 @@ const PropertyChart = ({
   }
 }) => {
   // Transform the data into the format Victory expects
-  const chartData = data.years.map((year, index) => ({
-    year,
-    propertyValue: data.propertyValues[index],
-    equity: data.equity[index],
-    cashflow: data.cashflow[index]
+  const propertyValueData = data.years.map((year, index) => ({
+    x: year,
+    y: data.propertyValues[index]
+  }));
+  
+  const equityData = data.years.map((year, index) => ({
+    x: year,
+    y: data.equity[index]
+  }));
+  
+  const cashflowData = data.years.map((year, index) => ({
+    x: year,
+    y: data.cashflow[index],
+    positive: data.cashflow[index] >= 0
   }));
 
   // Format currency for tick labels and tooltips
@@ -252,25 +261,10 @@ const PropertyChart = ({
         width={600}
         padding={{ top: 40, right: 60, bottom: 60, left: 80 }}
         domainPadding={{ x: [20, 20], y: [0, 20] }}
-        containerComponent={
-          <VictoryVoronoiContainer
-            voronoiDimension="x"
-            labels={({ datum }) => `Year: ${datum.year}\nProperty Value: ${formatCurrency(datum.propertyValue)}\nEquity: ${formatCurrency(datum.equity)}\nCashflow: ${formatCurrency(datum.cashflow)}`}
-            labelComponent={
-              <VictoryTooltip
-                cornerRadius={5}
-                flyoutStyle={{ fill: "white", stroke: "#ccc" }}
-                style={{ fontSize: 10 }}
-              />
-            }
-          />
-        }
       >
         {/* Property value line */}
         <VictoryLine
-          data={chartData}
-          x="year"
-          y="propertyValue"
+          data={propertyValueData}
           style={{
             data: { stroke: '#4f46e5', strokeWidth: 2 }
           }}
@@ -278,9 +272,7 @@ const PropertyChart = ({
         
         {/* Equity line */}
         <VictoryLine
-          data={chartData}
-          x="year"
-          y="equity"
+          data={equityData}
           style={{
             data: { stroke: '#10b981', strokeWidth: 2 }
           }}
@@ -288,48 +280,37 @@ const PropertyChart = ({
         
         {/* Cashflow bars */}
         <VictoryBar
-          data={chartData}
-          x="year"
-          y="cashflow"
+          data={cashflowData}
           style={{
             data: {
-              fill: ({ datum }) => datum.cashflow >= 0 ? '#f97316' : '#ef4444',
+              fill: ({ datum }) => datum.positive ? '#f97316' : '#ef4444',
               width: 12
             }
           }}
         />
         
-        {/* Property value and equity Y-axis */}
+        {/* Y-axis for property value and equity */}
         <VictoryAxis dependentAxis
-          label="Property Value & Equity ($)"
-          axisLabelComponent={<VictoryLabel dy={-50} style={{ fontSize: 12 }} />}
           tickFormat={formatCurrency}
           style={{
-            tickLabels: { fontSize: 9, padding: 5 },
-            axisLabel: { fontSize: 10, padding: 30 }
+            tickLabels: { fontSize: 9 }
           }}
         />
         
-        {/* Cashflow Y-axis - on the right side */}
+        {/* Y-axis for cashflow on the right */}
         <VictoryAxis dependentAxis
-          label="Annual Cashflow ($)"
-          axisLabelComponent={<VictoryLabel dy={50} style={{ fontSize: 12 }} />}
-          tickFormat={formatCurrency}
           orientation="right"
+          tickFormat={formatCurrency}
           style={{
-            tickLabels: { fontSize: 9, padding: 5 },
-            axisLabel: { fontSize: 10, padding: 30 }
+            tickLabels: { fontSize: 9 }
           }}
         />
         
         {/* X-axis (years) */}
         <VictoryAxis
-          label="Year"
           tickFormat={(t) => `${t}`}
-          axisLabelComponent={<VictoryLabel dy={30} style={{ fontSize: 12 }} />}
           style={{
-            tickLabels: { fontSize: 9, padding: 5 },
-            axisLabel: { fontSize: 10, padding: 20 }
+            tickLabels: { fontSize: 9 }
           }}
         />
         
@@ -338,8 +319,7 @@ const PropertyChart = ({
           orientation="horizontal"
           gutter={20}
           style={{ 
-            labels: { fontSize: 10 },
-            border: { stroke: "none" } 
+            labels: { fontSize: 10 }
           }}
           data={[
             { name: "Property Value", symbol: { fill: "#4f46e5" } },
