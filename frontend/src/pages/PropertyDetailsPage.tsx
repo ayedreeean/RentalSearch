@@ -246,15 +246,18 @@ const PropertyChart = ({
   
   const maxCashflow = Math.max(0, ...data.cashflow);
   const minCashflow = Math.min(0, ...data.cashflow);
-  // Add padding for better visibility
+  // Add padding for better visibility, but properly handle negative values
   const maxRightAxis = maxCashflow === 0 ? 1000 : maxCashflow * 1.1; 
+  // For negative values, we need to make them "more negative" by multiplying by 1.1
   const minRightAxis = minCashflow === 0 ? 0 : minCashflow * 1.1;
 
   // Format currency for tooltips
   const formatCurrency = (value: number) => {
     if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
     if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
-    return `$${value}`;
+    if (value <= -1000000) return `-$${Math.abs(value / 1000000).toFixed(1)}M`;
+    if (value <= -1000) return `-$${Math.abs(value / 1000).toFixed(0)}K`;
+    return value >= 0 ? `$${value.toFixed(0)}` : `-$${Math.abs(value).toFixed(0)}`;
   };
 
   // Custom tooltip component
@@ -314,17 +317,17 @@ const PropertyChart = ({
     // Use different colors for positive and negative values
     const barFill = value >= 0 ? '#f97316' : '#ef4444';
     
-    // For negative values, the bar should go down from the zero line
-    // Note: In Recharts, for negative values, y is already positioned at the zero line
-    // and height will be positive, so we need to adjust
-    const barY = value >= 0 ? y : y;
+    // For negative values, we need to calculate position differently
+    // In Recharts, for positive values, 'y' is the top of the bar
+    // For negative values, 'y' is the position of the zero line, and we need to draw downward
+    const barY = value >= 0 ? y : y - height;
     const barHeight = Math.abs(height);
     
     return <rect x={x} y={barY} width={width} height={barHeight} fill={barFill} />;
   };
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={350}>
       <ComposedChart
         data={chartData}
         margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
@@ -383,7 +386,8 @@ const PropertyChart = ({
         <Bar 
           yAxisId="right"
           dataKey="cashflow" 
-          barSize={20}
+          barSize={16}
+          isAnimationActive={false}
           shape={<CustomBar />}
         />
       </ComposedChart>
@@ -1508,7 +1512,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             </Box>
           </Box>
           
-          <Box sx={{ width: '100%', mb: 4, height: 300 }}>
+          <Box sx={{ width: '100%', mb: 4, height: 350 }}>
             <Typography variant="subtitle2" gutterBottom>Property Value & Equity Growth</Typography>
             <PropertyChart 
               data={{
