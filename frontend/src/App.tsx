@@ -864,7 +864,7 @@ function App() {
 
   // Add state for FAQ modal
   const [isFaqOpen, setIsFaqOpen] = useState(false);
-  const [activeFaqSection, setActiveFaqSection] = useState('general');
+  const [activeFaqSection, setActiveFaqSection] = useState<'general' | 'search' | 'filters' | 'cashflow' | 'bookmarks'>('general');
 
   // --- Helper function to format currency (Wrap in useCallback) ---
   const formatCurrency = useCallback((amount: number): string => {
@@ -1216,7 +1216,7 @@ function App() {
   };
   
   const handleFaqSectionChange = (section: string) => {
-    setActiveFaqSection(section);
+    setActiveFaqSection(section as 'general' | 'search' | 'filters' | 'cashflow' | 'bookmarks');
   };
   
   // Define the default settings for calculator
@@ -1269,6 +1269,14 @@ function App() {
                       href="#/bookmarks"
                       className="bookmarks-button"
                       startIcon={<BookmarkIcon />}
+                      sx={{ 
+                        color: '#6366f1', 
+                        borderColor: '#6366f1',
+                        '&:hover': {
+                          borderColor: '#4f46e5',
+                          bgcolor: 'rgba(99, 102, 241, 0.04)'
+                        }
+                      }}
                     >
                       Bookmarks
                     </Button>
@@ -1699,117 +1707,177 @@ function App() {
                       >
                         Cashflow Analysis
                       </div>
+                      <div 
+                        className={`faq-nav-item ${activeFaqSection === 'bookmarks' ? 'active' : ''}`}
+                        onClick={() => handleFaqSectionChange('bookmarks')}
+                      >
+                        Bookmarks
+                      </div>
                     </div>
                     
-                    {/* General FAQ Section */}
-                    {activeFaqSection === 'general' && (
-                      <div>
-                        <div className="faq-section">
-                          <div className="faq-question">What is RentalSearch?</div>
-                          <div className="faq-answer">
-                            RentalSearch is a tool designed to help you find potential rental investment properties. It searches for properties on the market and analyzes their potential cash flow based on estimated rent and customizable assumptions.
+                    {/* FAQ Content Container - Wrap all FAQ sections in a single container */}
+                    <div className="faq-sections-container">
+                      {/* General FAQ Section */}
+                      {activeFaqSection === 'general' && (
+                        <div>
+                          <div className="faq-section">
+                            <div className="faq-question">What is RentalSearch?</div>
+                            <div className="faq-answer">
+                              RentalSearch is a tool designed to help you find potential rental investment properties. It searches for properties on the market and analyzes their potential cash flow based on estimated rent and customizable assumptions.
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">How does RentalSearch work?</div>
+                            <div className="faq-answer">
+                              RentalSearch fetches property listings from real estate APIs and then calculates potential cash flow for each property based on rent estimates and your personalized investment criteria. Results are displayed as cards with expandable cashflow analysis.
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">Are the rent estimates accurate?</div>
+                            <div className="faq-answer">
+                              Rent estimates are sourced from market data and algorithms, but they should be considered as general guidelines. For more accurate estimates, we recommend checking the RentCast link available on each property card or consulting with a local real estate professional.
+                            </div>
                           </div>
                         </div>
-                        
-                        <div className="faq-section">
-                          <div className="faq-question">How does RentalSearch work?</div>
-                          <div className="faq-answer">
-                            RentalSearch fetches property listings from real estate APIs and then calculates potential cash flow for each property based on rent estimates and your personalized investment criteria. Results are displayed as cards with expandable cashflow analysis.
+                      )}
+                      
+                      {/* Search FAQ Section */}
+                      {activeFaqSection === 'search' && (
+                        <div>
+                          <div className="faq-section">
+                            <div className="faq-question">How do I search for properties?</div>
+                            <div className="faq-answer">
+                              Enter a location in the search bar at the top of the page. You can use a city name, state, zip code, or a specific property address (e.g., "Austin, TX", "78701", or "123 Main St, Austin, TX"). For specific properties, entering the full address will give you the most accurate results. Then click the "Search Properties" button to see results.
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">Why does searching take time?</div>
+                            <div className="faq-answer">
+                              RentalSearch processes a large amount of property data and performs calculations for each property. The search first fetches basic property data, then progressively enhances it with additional information like rent estimates, which occurs in the background.
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">How can I see more details about a property?</div>
+                            <div className="faq-answer">
+                              Click on the property address or image to visit the original listing. You can also expand the "Cashflow Analysis" section on each property card to see financial details. Additionally, use the "Quick Links" at the bottom of each card to access Zillow and RentCast for more information.
+                            </div>
                           </div>
                         </div>
-                        
-                        <div className="faq-section">
-                          <div className="faq-question">Are the rent estimates accurate?</div>
-                          <div className="faq-answer">
-                            Rent estimates are sourced from market data and algorithms, but they should be considered as general guidelines. For more accurate estimates, we recommend checking the RentCast link available on each property card or consulting with a local real estate professional.
+                      )}
+                      
+                      {/* Filters FAQ Section */}
+                      {activeFaqSection === 'filters' && (
+                        <div>
+                          <div className="faq-section">
+                            <div className="faq-question">How do I use the price filters?</div>
+                            <div className="faq-answer">
+                              After performing a search, you can use the "Min Price" and "Max Price" fields to narrow down the results. Enter the desired price range and the list will automatically update to show only properties within that range.
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">Can I sort the search results?</div>
+                            <div className="faq-answer">
+                              Yes, you can sort the results by various criteria including price, rent estimate, bedrooms, bathrooms, square footage, and the rent-to-price ratio. Use the sort controls to organize the properties in ascending or descending order.
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                    
-                    {/* Search FAQ Section */}
-                    {activeFaqSection === 'search' && (
-                      <div>
-                        <div className="faq-section">
-                          <div className="faq-question">How do I search for properties?</div>
-                          <div className="faq-answer">
-                            Enter a location in the search bar at the top of the page. You can use a city name, state, zip code, or a specific property address (e.g., "Austin, TX", "78701", or "123 Main St, Austin, TX"). For specific properties, entering the full address will give you the most accurate results. Then click the "Search Properties" button to see results.
+                      )}
+                      
+                      {/* Cashflow FAQ Section */}
+                      {activeFaqSection === 'cashflow' && (
+                        <div>
+                          <div className="faq-section">
+                            <div className="faq-question">What is the cashflow analysis?</div>
+                            <div className="faq-answer">
+                              The cashflow analysis provides a detailed breakdown of the potential income and expenses for each property as a rental investment. It includes mortgage payments, tax and insurance costs, vacancy allowances, capital expenditure reserves, and calculates the monthly and annual cash flow as well as cash-on-cash return.
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">Can I adjust the investment assumptions?</div>
+                            <div className="faq-answer">
+                              Yes, you can customize the investment assumptions to match your specific situation. Adjustable parameters include interest rate, loan term, down payment percentage, tax and insurance percentage, vacancy allowance, and capital expenditure (CapEx) reserve.
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">How do I interpret the rent-to-price ratio?</div>
+                            <div className="faq-answer">
+                              The rent-to-price ratio is a quick way to assess a property's potential as a rental investment. It shows the monthly rent as a percentage of the purchase price. Generally, a higher ratio is better:
+                              <ul>
+                                <li>0.7% and above (green): Potentially strong cash flow</li>
+                                <li>0.4% to 0.7% (yellow): Moderate potential</li>
+                                <li>Below 0.4% (red): May be challenging to achieve positive cash flow</li>
+                              </ul>
+                              Remember that this is just one metric and should be considered alongside other factors like location, property condition, and growth potential.
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">Can I edit the rent estimate?</div>
+                            <div className="faq-answer">
+                              Yes, you can edit the rent estimate for any property by clicking on the rent estimate value in the cashflow analysis section. This allows you to input a custom rent amount if you have more accurate information about potential rental income.
+                            </div>
                           </div>
                         </div>
-                        
-                        <div className="faq-section">
-                          <div className="faq-question">Why does searching take time?</div>
-                          <div className="faq-answer">
-                            RentalSearch processes a large amount of property data and performs calculations for each property. The search first fetches basic property data, then progressively enhances it with additional information like rent estimates, which occurs in the background.
+                      )}
+                      
+                      {/* Bookmarks FAQ Section */}
+                      {activeFaqSection === 'bookmarks' && (
+                        <div>
+                          <div className="faq-section">
+                            <div className="faq-question">How do I save properties I'm interested in?</div>
+                            <div className="faq-answer">
+                              When viewing a property's detailed page, click the "Bookmark" button in the header. This will save the property, including all your custom settings and notes, for later reference. You'll see the button change to "Bookmarked" to confirm the property has been saved.
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">Where can I find my bookmarked properties?</div>
+                            <div className="faq-answer">
+                              Click the "Bookmarks" button in the top navigation bar from any page of the application. This will take you to your bookmarks page where you can see all saved properties displayed in a card layout similar to the search results.
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">What information is saved in a bookmark?</div>
+                            <div className="faq-answer">
+                              Bookmarks save the complete property data along with any customizations you've made, including:
+                              <ul>
+                                <li>All property details (price, address, bedrooms, etc.)</li>
+                                <li>Your custom rent estimate (if you modified it)</li>
+                                <li>Your investment assumption settings (interest rate, down payment, etc.)</li>
+                                <li>Custom projection settings for long-term analysis</li>
+                              </ul>
+                              This ensures that when you revisit a bookmarked property, you'll see it exactly as you left it.
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">How do I remove a property from my bookmarks?</div>
+                            <div className="faq-answer">
+                              There are two ways to remove a bookmark:
+                              <ol>
+                                <li>From the bookmarks page, click the "Remove" button on the property card you wish to delete.</li>
+                                <li>From the property details page, click the "Bookmarked" button to toggle it off and remove the bookmark.</li>
+                              </ol>
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">Are my bookmarks saved if I close the browser?</div>
+                            <div className="faq-answer">
+                              Yes, bookmarks are stored in your browser's local storage, which means they'll persist even when you close the browser or shut down your computer. However, they are specific to the device and browser you're using. If you switch devices or browsers, you won't see the same bookmarks.
+                            </div>
                           </div>
                         </div>
-                        
-                        <div className="faq-section">
-                          <div className="faq-question">How can I see more details about a property?</div>
-                          <div className="faq-answer">
-                            Click on the property address or image to visit the original listing. You can also expand the "Cashflow Analysis" section on each property card to see financial details. Additionally, use the "Quick Links" at the bottom of each card to access Zillow and RentCast for more information.
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Filters FAQ Section */}
-                    {activeFaqSection === 'filters' && (
-                      <div>
-                        <div className="faq-section">
-                          <div className="faq-question">How do I use the price filters?</div>
-                          <div className="faq-answer">
-                            After performing a search, you can use the "Min Price" and "Max Price" fields to narrow down the results. Enter the desired price range and the list will automatically update to show only properties within that range.
-                          </div>
-                        </div>
-                        
-                        <div className="faq-section">
-                          <div className="faq-question">Can I sort the search results?</div>
-                          <div className="faq-answer">
-                            Yes, you can sort the results by various criteria including price, rent estimate, bedrooms, bathrooms, square footage, and the rent-to-price ratio. Use the sort controls to organize the properties in ascending or descending order.
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Cashflow FAQ Section */}
-                    {activeFaqSection === 'cashflow' && (
-                      <div>
-                        <div className="faq-section">
-                          <div className="faq-question">What is the cashflow analysis?</div>
-                          <div className="faq-answer">
-                            The cashflow analysis provides a detailed breakdown of the potential income and expenses for each property as a rental investment. It includes mortgage payments, tax and insurance costs, vacancy allowances, capital expenditure reserves, and calculates the monthly and annual cash flow as well as cash-on-cash return.
-                          </div>
-                        </div>
-                        
-                        <div className="faq-section">
-                          <div className="faq-question">Can I adjust the investment assumptions?</div>
-                          <div className="faq-answer">
-                            Yes, you can customize the investment assumptions to match your specific situation. Adjustable parameters include interest rate, loan term, down payment percentage, tax and insurance percentage, vacancy allowance, and capital expenditure (CapEx) reserve.
-                          </div>
-                        </div>
-                        
-                        <div className="faq-section">
-                          <div className="faq-question">How do I interpret the rent-to-price ratio?</div>
-                          <div className="faq-answer">
-                            The rent-to-price ratio is a quick way to assess a property's potential as a rental investment. It shows the monthly rent as a percentage of the purchase price. Generally, a higher ratio is better:
-                            <ul>
-                              <li>0.7% and above (green): Potentially strong cash flow</li>
-                              <li>0.4% to 0.7% (yellow): Moderate potential</li>
-                              <li>Below 0.4% (red): May be challenging to achieve positive cash flow</li>
-                            </ul>
-                            Remember that this is just one metric and should be considered alongside other factors like location, property condition, and growth potential.
-                          </div>
-                        </div>
-                        
-                        <div className="faq-section">
-                          <div className="faq-question">Can I edit the rent estimate?</div>
-                          <div className="faq-answer">
-                            Yes, you can edit the rent estimate for any property by clicking on the rent estimate value in the cashflow analysis section. This allows you to input a custom rent amount if you have more accurate information about potential rental income.
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </Paper>
               </Modal>
