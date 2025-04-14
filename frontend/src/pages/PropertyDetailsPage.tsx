@@ -723,6 +723,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   // Add state for floating panel
   const [isAssumptionsPanelOpen, setIsAssumptionsPanelOpen] = useState(false);
   
+  // Add state for showing text preview
+  const [showTextPreview, setShowTextPreview] = useState(false);
+  
   // Add state for long-term analysis
   const [rentAppreciationRate, setRentAppreciationRate] = useState<number>(3); // Default 3%
   const [propertyValueIncreaseRate, setPropertyValueIncreaseRate] = useState<number>(3); // Default 3%
@@ -1395,7 +1398,10 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
     <>
       <CssBaseline />
       <AppBar position="sticky" elevation={0} sx={{ bgcolor: '#6366f1', color: 'white' }}>
-        <Toolbar>
+        <Toolbar sx={{ 
+          px: { xs: 1, sm: 2 },
+          minHeight: { xs: '56px', sm: '64px' }
+        }}>
           <IconButton 
             edge="start" 
             color="inherit" 
@@ -1409,30 +1415,53 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           <Typography variant="h6" color="inherit" noWrap sx={{ flexGrow: 1 }}>
             RentalSearch
           </Typography>
-          <Button 
-            variant="outlined" 
-            startIcon={<ShareIcon />}
-            onClick={handleShareViaURL}
-            sx={{ mr: 1, color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
-          >
-            Copy URL
-          </Button>
-          <Button 
-            variant="outlined" 
-            startIcon={<ShareIcon />}
-            onClick={handleCopyToClipboard}
-            sx={{ mr: 1, color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
-          >
-            Copy Text
-          </Button>
-          <Button 
-            variant="outlined"
-            startIcon={<EmailIcon />}
-            onClick={handleEmailShare}
-            sx={{ color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
-          >
-            Email
-          </Button>
+          {/* Use a container for buttons with responsive layout */}
+          <Box sx={{ 
+            display: 'flex', 
+            gap: { xs: 1, sm: 2 }, 
+            flexWrap: 'nowrap'
+          }}>
+            <Button 
+              variant="outlined" 
+              startIcon={<ShareIcon />}
+              onClick={handleShareViaURL}
+              size="small"
+              sx={{ 
+                color: 'white', 
+                borderColor: 'white', 
+                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
+                whiteSpace: 'nowrap',
+                minWidth: { xs: '40px', sm: 'auto' },
+                px: { xs: 1, sm: 2 }
+              }}
+            >
+              <Box sx={{ display: { xs: 'none', sm: 'block' } }}>Copy URL</Box>
+              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>URL</Box>
+            </Button>
+            <Button 
+              variant="outlined" 
+              startIcon={<ShareIcon />}
+              onClick={() => {
+                setShowTextPreview(!showTextPreview);
+              }}
+              size="small"
+              sx={{ 
+                color: 'white', 
+                borderColor: 'white', 
+                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
+                whiteSpace: 'nowrap',
+                minWidth: { xs: '40px', sm: 'auto' },
+                px: { xs: 1, sm: 2 }
+              }}
+            >
+              <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+                {showTextPreview ? 'Hide Analysis' : 'Copy Analysis'}
+              </Box>
+              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                {showTextPreview ? 'Hide' : 'Text'}
+              </Box>
+            </Button>
+          </Box>
         </Toolbar>
       </AppBar>
       
@@ -1442,6 +1471,44 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           <Alert severity="success" sx={{ mb: 3 }}>
             {copySuccess}
           </Alert>
+        )}
+        
+        {/* Text Preview Panel */}
+        {showTextPreview && (
+          <Paper 
+            elevation={2} 
+            sx={{ 
+              mb: 3, 
+              p: 3, 
+              borderRadius: 2,
+              position: 'relative',
+              whiteSpace: 'pre-wrap',
+              fontFamily: 'monospace',
+              fontSize: '0.9rem',
+              maxHeight: '300px',
+              overflowY: 'auto'
+            }}
+          >
+            <Typography variant="h6" gutterBottom>Analysis Text Preview</Typography>
+            <Box sx={{ mb: 2 }}>
+              {generatePropertySummary()}
+            </Box>
+            <Button 
+              variant="contained" 
+              color="primary"
+              startIcon={<ShareIcon />}
+              onClick={handleCopyToClipboard}
+              sx={{ 
+                position: 'sticky', 
+                bottom: 16, 
+                float: 'right',
+                bgcolor: '#6366f1',
+                '&:hover': { bgcolor: '#4338ca' }
+              }}
+            >
+              Copy to Clipboard
+            </Button>
+          </Paper>
         )}
         
         {/* Property Header */}
