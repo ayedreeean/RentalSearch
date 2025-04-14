@@ -354,7 +354,7 @@ const PropertyChart = ({
           allowDataOverflow={false}
         />
         <RechartsTooltip content={<CustomTooltip />} />
-        <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" />
+        <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" yAxisId="right" />
         <Legend 
           wrapperStyle={{ paddingTop: 10 }}
           formatter={(value) => {
