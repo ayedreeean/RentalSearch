@@ -105,7 +105,24 @@ const BookmarksPage: React.FC = () => {
   } => {
     try {
       const urlObj = new URL(url);
-      const params = new URLSearchParams(urlObj.search);
+      
+      // Handle both formats:
+      // 1. Regular URL parameters in the search part
+      // 2. Parameters after hash fragment (common with HashRouter in React)
+      let params: URLSearchParams;
+      
+      if (urlObj.hash && urlObj.hash.includes('?')) {
+        // Format: /RentalSearch/#/property/123?re=2000&ir=7.5
+        const hashParts = urlObj.hash.split('?');
+        if (hashParts.length > 1) {
+          params = new URLSearchParams(hashParts[1]);
+        } else {
+          params = new URLSearchParams(urlObj.search);
+        }
+      } else {
+        // Regular format: /property/123?re=2000&ir=7.5
+        params = new URLSearchParams(urlObj.search);
+      }
       
       return {
         customRent: params.has('re') ? parseFloat(params.get('re')!) : undefined,
