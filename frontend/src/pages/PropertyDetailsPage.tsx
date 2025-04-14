@@ -21,7 +21,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Tooltip
+  Tooltip,
+  CircularProgress
 } from '@mui/material';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -32,7 +33,9 @@ import ShareIcon from '@mui/icons-material/Share';
 import EmailIcon from '@mui/icons-material/Email';
 import TuneIcon from '@mui/icons-material/Tune';
 import { Property, Cashflow, CashflowSettings } from '../types';
-// import { LineChart } from '@mui/x-charts/LineChart';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
 
 interface PropertyDetailsPageProps {
   properties: Property[];
@@ -562,6 +565,129 @@ const SimpleChart = ({
           <div>Cashflow: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.cashflow)}</div>
         </div>
       )}
+    </Box>
+  );
+};
+
+// Fix for the default Leaflet marker icon issue
+const useLeafletFix = () => {
+  useEffect(() => {
+    // Fix default icon issue with Leaflet
+    delete (L.Icon.Default.prototype as any)._getIconUrl;
+    
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+      iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+    });
+  }, []);
+};
+
+// Property Map Component
+const PropertyMap = ({ 
+  address, 
+  lat = null, 
+  lng = null 
+}: { 
+  address: string, 
+  lat: number | null, 
+  lng: number | null 
+}) => {
+  useLeafletFix();
+  const [loading, setLoading] = useState(true);
+  const [coordinates, setCoordinates] = useState<[number, number] | null>(lat && lng ? [lat, lng] : null);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Geocode the address if coordinates aren't provided
+  useEffect(() => {
+    if (coordinates) {
+      setLoading(false);
+      return;
+    }
+    
+    const geocodeAddress = async () => {
+      try {
+        setLoading(true);
+        
+        // Using Nominatim for geocoding (OpenStreetMap's geocoding service)
+        const encodedAddress = encodeURIComponent(address);
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1`);
+        
+        if (!response.ok) {
+          throw new Error('Geocoding request failed');
+        }
+        
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+          setCoordinates([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
+        } else {
+          // Fallback to a default location if geocoding fails
+          setError('Could not find this address on the map');
+          // Use default coordinates (can be center of city)
+          setCoordinates([37.7749, -122.4194]); // Default to San Francisco
+        }
+      } catch (error) {
+        console.error('Error geocoding address:', error);
+        setError('Error loading map location');
+        // Use default coordinates
+        setCoordinates([37.7749, -122.4194]); // Default to San Francisco
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    geocodeAddress();
+  }, [address, coordinates]);
+  
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+  
+  if (error || !coordinates) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: 300, 
+        bgcolor: '#f5f5f5',
+        borderRadius: 2
+      }}>
+        <Typography color="error">{error || 'Map could not be loaded'}</Typography>
+      </Box>
+    );
+  }
+  
+  return (
+    <Box sx={{ 
+      height: 400, 
+      width: '100%', 
+      borderRadius: 2, 
+      overflow: 'hidden',
+      border: '1px solid #e0e0e0',
+      mb: 3
+    }}>
+      <MapContainer 
+        center={coordinates} 
+        zoom={15} 
+        style={{ height: '100%', width: '100%' }}
+        scrollWheelZoom={false}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <Marker position={coordinates}>
+          <Popup>
+            {address}
+          </Popup>
+        </Marker>
+      </MapContainer>
     </Box>
   );
 };
@@ -1461,6 +1587,16 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             )}
           </Box>
         </Box>
+        
+        {/* Property Location Map */}
+        <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
+          <Typography variant="h5" mb={2}>Property Location</Typography>
+          <PropertyMap 
+            address={property.address} 
+            lat={property.latitude || null} 
+            lng={property.longitude || null} 
+          />
+        </Paper>
         
         {/* Add new Long-Term Cashflow Analysis Section - Moved outside the columns to span full width */}
         <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>

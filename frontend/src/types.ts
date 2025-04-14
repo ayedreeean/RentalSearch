@@ -11,6 +11,8 @@ export interface Property {
   ratio: number;
   days_on_market: number | null;
   rent_source?: "zillow" | "calculated";
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Cashflow {
