@@ -50,7 +50,9 @@ interface YearlyProjection {
   yearlyExpenses: number;
   yearlyCashflow: number;
   equity: number;
+  equityGrowth: number;
   roi: number;
+  roiWithEquity: number;
 }
 
 // Adjust the SimpleChart component to ensure all bars are fully visible
@@ -921,6 +923,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     // Calculate remaining principal as of start
     let remainingPrincipal = loanAmount;
     
+    // Initialize previous year equity
+    let previousYearEquity = equity;
+    
     for (let i = 1; i <= yearsToProject; i++) {
       // Calculate rent with appreciation compounding properly from initial value
       const yearRent = initialAnnualRent * Math.pow(1 + rentAppreciationRate / 100, i - 1);
@@ -973,9 +978,17 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       // Update equity (original down payment + principal paid so far + appreciation)
       equity = propertyValue - remainingPrincipal;
       
+      // Calculate equity growth from previous year
+      const equityGrowth = equity - previousYearEquity;
+      previousYearEquity = equity;
+      
       // Calculate ROI
       const initialInvestment = property.price * (settings.downPaymentPercent / 100) + property.price * 0.03;
       const cashOnCashReturn = (yearlyCashflow / initialInvestment) * 100;
+      
+      // Calculate ROI with equity growth included
+      const totalReturn = yearlyCashflow + equityGrowth;
+      const roiWithEquity = (totalReturn / initialInvestment) * 100;
       
       years.push({
         year: i,
@@ -984,7 +997,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
         yearlyExpenses,
         yearlyCashflow,
         equity,
-        roi: cashOnCashReturn
+        equityGrowth,
+        roi: cashOnCashReturn,
+        roiWithEquity
       });
       
       // No need to update annualRent for the next iteration since we're using the power function
@@ -1543,11 +1558,20 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                     </TableCell>
                     <TableCell align="right">
                       <Tooltip 
-                        title="Return on Investment percentage. Calculated as annual cashflow divided by initial investment (down payment + closing costs)." 
+                        title="Return on Investment percentage based on cashflow. Calculated as annual cashflow divided by initial investment." 
                         arrow 
                         placement="top"
                       >
-                        <span>ROI</span>
+                        <span>ROI (Cashflow)</span>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip 
+                        title="Total Return on Investment including both cashflow and equity growth. Calculated as (cashflow + equity growth) divided by initial investment." 
+                        arrow 
+                        placement="top"
+                      >
+                        <span>ROI with Equity</span>
                       </Tooltip>
                     </TableCell>
                   </TableRow>
@@ -1573,6 +1597,12 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                           sx={{ color: data.roi >= 0 ? 'success.main' : 'error.main' }}
                         >
                           {formatPercent(data.roi)}
+                        </TableCell>
+                        <TableCell 
+                          align="right"
+                          sx={{ color: data.roiWithEquity >= 0 ? 'success.main' : 'error.main' }}
+                        >
+                          {formatPercent(data.roiWithEquity)}
                         </TableCell>
                       </TableRow>
                     ))}
