@@ -1420,6 +1420,40 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
     }
   }, [property]);
   
+  // Add a new function to force update of the rental income
+  const forceUpdateRentalIncome = () => {
+    if (!property) return;
+    
+    // Use a random number slightly different than current to force a re-render
+    const newValue = (property.rent_estimate || 1000) * 1.05;
+    setCustomRentEstimate(newValue);
+    setDisplayRent(formatCurrency(newValue));
+    
+    // Also update URL
+    const currentUrl = new URL(window.location.href);
+    const searchParams = new URLSearchParams(currentUrl.search);
+    searchParams.set('re', newValue.toString());
+    
+    const newUrl = `${currentUrl.pathname}?${searchParams.toString()}${currentUrl.hash}`;
+    window.history.replaceState({}, '', newUrl);
+    
+    // Update in localStorage if needed
+    try {
+      const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
+      const savedProperties = savedPropertiesStr ? JSON.parse(savedPropertiesStr) : {};
+      
+      if (savedProperties[property.property_id]) {
+        savedProperties[property.property_id] = {
+          ...savedProperties[property.property_id],
+          rent_estimate: newValue
+        };
+        localStorage.setItem('rentToolFinder_properties', JSON.stringify(savedProperties));
+      }
+    } catch (error) {
+      console.error('Error updating property in localStorage:', error);
+    }
+  };
+  
   // Display loading state
   if (loading) {
     return (
@@ -1707,23 +1741,30 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                     <Typography variant="subtitle2" gutterBottom fontWeight="bold">Monthly Income</Typography>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5, alignItems: 'center' }}>
                       <Typography variant="body2">Rental Income:</Typography>
-                      <TextField
-                        variant="outlined" 
-                        size="small"
-                        value={isRentEditing ? displayRent : formatCurrency(customRentEstimate !== null ? customRentEstimate : property.rent_estimate)}
-                        onChange={handleRentChange}
-                        onFocus={handleRentFocus}
-                        onBlur={handleRentBlur}
-                        sx={{ maxWidth: '120px' }}
-                        InputProps={{
-                          endAdornment: <EditIcon sx={{ fontSize: 16, color: '#6b7280', opacity: 0.7 }} />,
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            (e.target as HTMLInputElement).blur();
-                          }
-                        }}
-                      />
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <TextField
+                          variant="outlined" 
+                          size="small"
+                          value={isRentEditing ? displayRent : formatCurrency(customRentEstimate !== null ? customRentEstimate : property.rent_estimate)}
+                          onChange={handleRentChange}
+                          onFocus={handleRentFocus}
+                          onBlur={handleRentBlur}
+                          sx={{ maxWidth: '120px' }}
+                          InputProps={{
+                            endAdornment: <EditIcon sx={{ fontSize: 16, color: '#6b7280', opacity: 0.7 }} />,
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                        />
+                        <Tooltip title="Edit rental income">
+                          <IconButton size="small" onClick={forceUpdateRentalIncome} sx={{ ml: 1 }}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
                     </Box>
                   </Box>
                 </Box>
