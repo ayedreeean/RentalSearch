@@ -1281,57 +1281,199 @@ function App() {
               {/* Marketing intro section */}
               {showMarketingIntro && (
                 <Paper 
-                  elevation={0} 
+                  elevation={3} 
                   sx={{ 
                     mb: 4, 
-                    p: 3, 
-                    borderRadius: 2,
-                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                    color: 'white',
+                    borderRadius: 3,
+                    overflow: 'hidden',
                     position: 'relative',
-                    overflow: 'hidden'
+                    background: '#ffffff',
+                    boxShadow: '0 10px 30px rgba(79, 70, 229, 0.15)'
                   }}
                 >
-                  {/* Close button removed */}
+                  {/* Colored stripe at the top */}
+                  <Box 
+                    sx={{ 
+                      height: '5px', 
+                      background: 'linear-gradient(90deg, #4f46e5, #6366f1, #818cf8)'
+                    }} 
+                  />
                   
-                  <Typography variant="h4" fontWeight="bold" gutterBottom>
-                    Find Your Next Investment Property
-                  </Typography>
-                  
-                  <Typography variant="body1" sx={{ mb: 2, maxWidth: 800 }}>
-                    RentalSearch helps you discover and analyze potential real estate investments in seconds. 
-                    Get detailed cash flow analysis, long-term equity projections, and returns on investment 
-                    for properties in any location.
-                  </Typography>
-                  
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
-                      <Box sx={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(255,255,255,0.2)', mr: 1.5 }}>
-                        <SearchIcon sx={{ color: 'white' }} />
-                      </Box>
-                      <Box>
-                        <Typography variant="subtitle1" fontWeight="bold">Fast Property Search</Typography>
-                        <Typography variant="body2">Find properties with cashflow potential in any area</Typography>
+                  {/* Main content */}
+                  <Box 
+                    sx={{ 
+                      display: 'flex', 
+                      flexDirection: { xs: 'column', md: 'row' },
+                      alignItems: 'center'
+                    }}
+                  >
+                    {/* Left side content */}
+                    <Box 
+                      sx={{ 
+                        p: 4, 
+                        flex: '1.5',
+                        position: 'relative',
+                        zIndex: 1
+                      }}
+                    >
+                      <Typography 
+                        variant="h3" 
+                        fontWeight="bold" 
+                        sx={{ 
+                          mb: 2, 
+                          color: '#1f2937',
+                          fontSize: { xs: '1.75rem', sm: '2.25rem', md: '2.5rem' }
+                        }}
+                      >
+                        Find Your Ideal
+                        <Box 
+                          component="span" 
+                          sx={{ 
+                            color: '#4f46e5',
+                            display: 'block' 
+                          }}
+                        >
+                          Investment Property
+                        </Box>
+                      </Typography>
+                      
+                      <Typography 
+                        variant="body1" 
+                        sx={{ 
+                          mb: 3, 
+                          color: '#4b5563',
+                          lineHeight: 1.6,
+                          maxWidth: '500px'
+                        }}
+                      >
+                        RentalSearch helps you discover and analyze potential real estate investments in seconds. 
+                        Get detailed cash flow analysis, long-term equity projections, and returns on investment 
+                        for properties in any location.
+                      </Typography>
+                      
+                      <Box 
+                        sx={{ 
+                          display: 'flex', 
+                          flexDirection: { xs: 'column', sm: 'row' },
+                          gap: 2,
+                          mt: 3
+                        }}
+                      >
+                        <Box 
+                          sx={{ 
+                            display: 'flex', 
+                            alignItems: 'flex-start', 
+                            p: 2,
+                            borderRadius: 2,
+                            background: 'rgba(79, 70, 229, 0.05)',
+                            border: '1px solid rgba(79, 70, 229, 0.1)'
+                          }}
+                        >
+                          <Box 
+                            sx={{ 
+                              width: 40, 
+                              height: 40, 
+                              borderRadius: 2,
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              bgcolor: '#4f46e5', 
+                              mr: 2,
+                              flexShrink: 0
+                            }}
+                          >
+                            <SearchIcon sx={{ color: 'white' }} />
+                          </Box>
+                          <Box>
+                            <Typography variant="subtitle1" fontWeight="600" color="#1f2937">
+                              Find Properties Fast
+                            </Typography>
+                            <Typography variant="body2" color="#6b7280">
+                              Discover properties with high cash flow potential in minutes
+                            </Typography>
+                          </Box>
+                        </Box>
+                        
+                        <Box 
+                          sx={{ 
+                            display: 'flex', 
+                            alignItems: 'flex-start', 
+                            p: 2,
+                            borderRadius: 2,
+                            background: 'rgba(79, 70, 229, 0.05)',
+                            border: '1px solid rgba(79, 70, 229, 0.1)'
+                          }}
+                        >
+                          <Box 
+                            sx={{ 
+                              width: 40, 
+                              height: 40, 
+                              borderRadius: 2,
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              bgcolor: '#4f46e5', 
+                              mr: 2,
+                              flexShrink: 0
+                            }}
+                          >
+                            <BarChartIcon sx={{ color: 'white' }} />
+                          </Box>
+                          <Box>
+                            <Typography variant="subtitle1" fontWeight="600" color="#1f2937">
+                              Detailed Analytics
+                            </Typography>
+                            <Typography variant="body2" color="#6b7280">
+                              Get comprehensive financial projections for each property
+                            </Typography>
+                          </Box>
+                        </Box>
                       </Box>
                     </Box>
                     
-                    <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
-                      <Box sx={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(255,255,255,0.2)', mr: 1.5 }}>
-                        <BarChartIcon sx={{ color: 'white' }} />
-                      </Box>
-                      <Box>
-                        <Typography variant="subtitle1" fontWeight="bold">Detailed Analysis</Typography>
-                        <Typography variant="body2">Get comprehensive financial projections for each property</Typography>
-                      </Box>
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
-                      <Box sx={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(255,255,255,0.2)', mr: 1.5 }}>
-                        <ShareIcon sx={{ color: 'white' }} />
-                      </Box>
-                      <Box>
-                        <Typography variant="subtitle1" fontWeight="bold">Easy Sharing</Typography>
-                        <Typography variant="body2">Share property analysis with partners or clients via URL</Typography>
+                    {/* Right side image/graphic element */}
+                    <Box 
+                      sx={{ 
+                        flex: '1',
+                        position: 'relative',
+                        display: { xs: 'none', md: 'block' },
+                        alignSelf: 'stretch'
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          top: 0,
+                          right: 0,
+                          bottom: 0,
+                          left: 0,
+                          background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.8) 0%, rgba(99, 102, 241, 0.8) 100%)',
+                          clipPath: 'polygon(10% 0, 100% 0, 100% 100%, 0% 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            width: '140%',
+                            height: '140%',
+                            opacity: 0.15,
+                            background: 'repeating-linear-gradient(45deg, #ffffff, #ffffff 10px, transparent 10px, transparent 20px)'
+                          }}
+                        />
+                        
+                        <Box sx={{ position: 'relative', zIndex: 1, p: 4, color: 'white', textAlign: 'center' }}>
+                          <HomeWorkIcon sx={{ fontSize: '4rem', mb: 2 }} />
+                          <Typography variant="h5" fontWeight="bold" gutterBottom>
+                            Start Your Search
+                          </Typography>
+                          <Typography variant="body2" sx={{ maxWidth: '250px', mx: 'auto' }}>
+                            Enter a location below to find investment opportunities
+                          </Typography>
+                        </Box>
                       </Box>
                     </Box>
                   </Box>
