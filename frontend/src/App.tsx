@@ -9,6 +9,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import HomeIcon from '@mui/icons-material/Home';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import EditIcon from '@mui/icons-material/Edit';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
@@ -819,7 +820,8 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
 // Define possible sort keys
 type SortableKey = keyof Pick<Property, 'price' | 'rent_estimate' | 'bedrooms' | 'bathrooms' | 'sqft' | 'days_on_market'> | 'ratio' | 'cashflow';
 
-function App() {
+// Create AppContent component that can use hooks
+function AppContent() {
   // State variables
   const [location, setLocation] = useState('');
   const [loading, setLoading] = useState(false);
@@ -828,8 +830,9 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [searchPerformed, setSearchPerformed] = useState(false);
   
-  // New state for marketing intro panel
+  // Changed from showMarketingIntro to expandedMarketingIntro
   const [showMarketingIntro, setShowMarketingIntro] = useState(true);
+  const [expandedMarketing, setExpandedMarketing] = useState(true);
   
   // Mortgage calculator state
   const [interestRate, setInterestRate] = useState(7.5);
@@ -862,207 +865,83 @@ function App() {
 
   // Add state for FAQ modal
   const [isFaqOpen, setIsFaqOpen] = useState(false);
-  const [activeFaqSection, setActiveFaqSection] = useState('general');
+  const [activeFaqSection, setActiveFaqSection] = useState('overview');
 
-  // --- Helper function to format currency (Wrap in useCallback) ---
-  const formatCurrency = useCallback((amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  }, []); // No dependencies, stable function
+  const [searchResultsCount, setSearchResultsCount] = useState(0);
 
-  // --- Price Input Handlers (Wrap formatPriceInput in useCallback) ---
-  const formatPriceInput = useCallback((value: number | string): string => {
-    if (value === '' || value === null || isNaN(Number(value))) return '';
-    return formatCurrency(Number(value)); // Use existing formatCurrency
-  }, [formatCurrency]); // Dependency on formatCurrency
-
-  const parsePriceInput = (displayValue: string): number | string => {
-    if (!displayValue) return '';
-    const num = parseFloat(displayValue.replace(/[^\d.-]/g, '')); // Remove non-numeric chars
-    return isNaN(num) ? '' : num;
-  };
-
-  // Initialize display values when component mounts or raw values change externally
+  // Now we can use useNavigate here
+  const navigate = useNavigate();
+  
+  // Check if user has explicitly dismissed the marketing section
   useEffect(() => {
-    setDisplayMinPrice(formatPriceInput(minPrice));
-  }, [minPrice, formatPriceInput]); // Add formatPriceInput dependency
-
-  useEffect(() => {
-    setDisplayMaxPrice(formatPriceInput(maxPrice));
-  }, [maxPrice, formatPriceInput]); // Add formatPriceInput dependency
-
-  const handleMinPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value;
-    setDisplayMinPrice(rawValue); // Show raw input while typing
-    setMinPrice(parsePriceInput(rawValue)); // Update underlying numeric state
-  };
-
-  const handleMinPriceBlur = () => {
-    setDisplayMinPrice(formatPriceInput(minPrice)); // Format on blur
-  };
-
-  const handleMinPriceFocus = () => {
-    // Show raw number (or empty) on focus
-    setDisplayMinPrice(minPrice === '' ? '' : String(minPrice)); 
-  };
-
-  const handleMaxPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value;
-    setDisplayMaxPrice(rawValue); // Show raw input while typing
-    setMaxPrice(parsePriceInput(rawValue)); // Update underlying numeric state
-  };
-
-  const handleMaxPriceBlur = () => {
-    setDisplayMaxPrice(formatPriceInput(maxPrice)); // Format on blur
-  };
-
-  const handleMaxPriceFocus = () => {
-    // Show raw number (or empty) on focus
-    setDisplayMaxPrice(maxPrice === '' ? '' : String(maxPrice)); 
-  };
-
-  // Function to handle search button click
-  const handleSearch = async () => {
-    console.log('Starting search...');
-    currentSearchId.current += 1;
-    const searchId = currentSearchId.current;
-
-    setSearchPerformed(true);
-    setError(null);
-    setDisplayedProperties([]); // Clear previous results immediately
-    setLoading(true);
-    setInitialLoading(true); // Indicate initial fetch is starting
-    setIsProcessingBackground(false); // Reset background processing state
-
-    try {
-      // --- Prepare Filters & Prices (Relaxed Validation) ---
-      let minP: number | null = null;
-      let maxP: number | null = null;
-
-      // Parse Min Price
-      const parsedMin = typeof minPrice === 'number' ? minPrice : parseFloat(minPrice);
-      if (!isNaN(parsedMin) && parsedMin >= 0) {
-          minP = parsedMin;
-          console.log('Applying Min price filter:', minP);
-      } else {
-          console.log('No valid Min price filter applied.');
-      }
-      
-      // Parse Max Price
-      const parsedMax = typeof maxPrice === 'number' ? maxPrice : parseFloat(maxPrice);
-      if (!isNaN(parsedMax) && parsedMax > 0) {
-          maxP = parsedMax;
-          console.log('Applying Max price filter:', maxP);
-      } else {
-          console.log('No valid Max price filter applied.');
-      }
-      
-      // --- REMOVED max >= min check --- 
-      // Note: If API doesn't support min > max, it might return no results or error.
-      
-      // Define other filters if needed (currently none active)
-      const propertyType = 'Houses'; // Example
-      const minRatio = null; // Example
-
-      // Get total properties first to determine page count
-      console.log('Fetching total property count...');
-      // Pass prices directly
-      const totalCount = await getTotalPropertiesCount(location, minP, maxP, propertyType);
-      setTotalProperties(totalCount);
-      console.log('Total properties found:', totalCount);
-
-      if (totalCount === 0) {
-        setLoading(false);
-        setInitialLoading(false);
-        return; // Exit early if no properties match
-      }
-
-      const totalPages = Math.ceil(totalCount / 42); // Zillow API limit (approx)
-
-      // Function to fetch and process a single page
-      const fetchAndProcessPage = async (page: number) => {
-        if (searchId !== currentSearchId.current) return; // Abort if new search started
-        try {
-          console.log(`Fetching page ${page + 1}/${totalPages}`);
-          // Pass prices directly
-          const results = await searchProperties(location, page, minP, maxP, propertyType, minRatio);
-          if (searchId === currentSearchId.current && results.allProperties.length > 0) {
-            // Append basic property data for immediate display
-            setDisplayedProperties(prev => {
-              // --- Add Logging for Duplicate Check --- 
-              const newProps = results.allProperties.filter(np => {
-                const isDuplicate = prev.some(p => p.property_id === np.property_id);
-                if (isDuplicate) {
-                    console.warn(`[handleSearch] Duplicate property ID detected, filtering out: ${np.property_id} - ${np.address}`);
-                }
-                return !isDuplicate;
-              });
-              if (newProps.length < results.allProperties.length) {
-                   console.log(`[handleSearch] Filtered ${results.allProperties.length - newProps.length} duplicates based on ID from page results.`);
-              }
-              // --- End Logging --- 
-              return [...prev, ...newProps];
-            });
-            // Indicate background processing has started (if not already)
-            if (!isProcessingBackground) setIsProcessingBackground(true); 
-          }
-          console.log(`Completed search for page ${page + 1}`);
-        } catch (pageError) {
-          console.error(`Error fetching page ${page + 1}:`, pageError);
-          // Potentially set an error state for this specific page or retry
-        }
-      };
-
-      // Fetch all pages concurrently
-      console.log(`Starting fetch for ${totalPages} pages.`);
-      const pagePromises = Array.from({ length: totalPages }, (_, i) => fetchAndProcessPage(i));
-      await Promise.all(pagePromises);
-
-      console.log('All page fetches initiated.');
-      setInitialLoading(false); // Initial loading complete, background processing continues
-      
-    } catch (err) {
-      console.error('Search failed:', err);
-      setError('Failed to fetch properties. Please try again.');
-      setLoading(false);
-      setInitialLoading(false);
-      setIsProcessingBackground(false);
-    } finally {
-      // Note: setLoading(false) is handled by the background processor finishing
-      // or if totalCount was 0 initially.
+    const hasExplicitlyDismissed = localStorage.getItem('rentalSearchMarketingDismissed');
+    if (hasExplicitlyDismissed === 'true') {
+      setShowMarketingIntro(false);
+    } else {
+      setShowMarketingIntro(true);
     }
+    
+    // Initialize expanded state
+    const isCollapsed = localStorage.getItem('rentalSearchMarketingCollapsed');
+    if (isCollapsed === 'true') {
+      setExpandedMarketing(false);
+    } else {
+      setExpandedMarketing(true);
+    }
+  }, []);
+
+  // Handler to dismiss marketing section
+  const handleDismissMarketing = () => {
+    setShowMarketingIntro(false);
+    localStorage.setItem('rentalSearchMarketingDismissed', 'true');
   };
   
-  // Function to calculate mortgage payment
-  const calculateMortgage = (price: number): number => {
-    const downPayment = price * (downPaymentPercent / 100);
-    const loanAmount = price - downPayment;
-    const monthlyRate = interestRate / 100 / 12;
-    const payments = loanTerm * 12;
-    
-    if (monthlyRate === 0) return loanAmount / payments;
-    
-    const x = Math.pow(1 + monthlyRate, payments);
-    return loanAmount * (monthlyRate * x) / (x - 1);
+  // Add handler to toggle marketing expansion
+  const handleToggleMarketing = () => {
+    const newState = !expandedMarketing;
+    setExpandedMarketing(newState);
+    localStorage.setItem('rentalSearchMarketingCollapsed', newState ? 'false' : 'true');
   };
   
-  // Function to calculate cashflow
-  const calculateCashflow = (property: Property): Cashflow => {
-    const monthlyMortgage = calculateMortgage(property.price);
-    const monthlyTaxInsurance = property.price * (taxInsurancePercent / 100) / 12;
-    const monthlyVacancy = property.rent_estimate * (vacancyPercent / 100);
-    const monthlyCapex = property.rent_estimate * (capexPercent / 100);
-    const monthlyPropertyManagement = property.rent_estimate * (propertyManagementPercent / 100);
+  // Add FAQ handling functions
+  const handleOpenFaq = () => {
+    setIsFaqOpen(true);
+  };
+  
+  const handleCloseFaq = () => {
+    setIsFaqOpen(false);
+  };
+  
+  const handleFaqSectionChange = (section: string) => {
+    setActiveFaqSection(section);
+  };
+
+  // ... Rest of the component methods ...
+
+  // Define the default settings for calculator
+  const defaultSettings: CashflowSettings = {
+    interestRate,
+    loanTerm,
+    downPaymentPercent,
+    taxInsurancePercent,
+    vacancyPercent,
+    capexPercent,
+    propertyManagementPercent
+  };
+  
+  // Create a function that uses the settings passed in instead of the global state
+  const calculateCashflowWithSettings = (property: Property, settings: CashflowSettings) => {
+    const monthlyMortgage = calculateMortgageWithSettings(property.price, settings);
+    const monthlyTaxInsurance = property.price * (settings.taxInsurancePercent / 100) / 12;
+    const monthlyVacancy = property.rent_estimate * (settings.vacancyPercent / 100);
+    const monthlyCapex = property.rent_estimate * (settings.capexPercent / 100);
+    const monthlyPropertyManagement = property.rent_estimate * (settings.propertyManagementPercent / 100);
     
     const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
     const monthlyCashflow = property.rent_estimate - totalMonthlyExpenses;
     const annualCashflow = monthlyCashflow * 12;
     
-    const downPayment = property.price * (downPaymentPercent / 100);
+    const downPayment = property.price * (settings.downPaymentPercent / 100);
     const closingCosts = property.price * 0.03; // Estimate 3% for closing costs
     const initialInvestment = downPayment + closingCosts;
     
@@ -1081,168 +960,18 @@ function App() {
     };
   };
   
-  // Helper function to format percentage
-  const formatPercent = (percent: number): string => {
-    return `${(percent).toFixed(2)}%`;
-  };
-  
-  // Calculate if all properties are loaded
-  // const allPropertiesLoaded = displayedProperties.length >= totalProperties;
-
-  // --- Add useEffect for handling property updates ---
-  // Memoize the update handler callback
-  const handlePropertyUpdate = useCallback((updatedProperty: Property) => {
-    console.log('[handlePropertyUpdate] Called for property:', updatedProperty?.address);
-    if (!updatedProperty || !updatedProperty.property_id) {
-      console.error('[handlePropertyUpdate] Received invalid property data.');
-      return;
-    }
+  // Helper function to calculate mortgage with specific settings
+  function calculateMortgageWithSettings(price: number, settings: CashflowSettings): number {
+    const downPayment = price * (settings.downPaymentPercent / 100);
+    const loanAmount = price - downPayment;
+    const monthlyRate = settings.interestRate / 100 / 12;
+    const payments = settings.loanTerm * 12;
     
-    setDisplayedProperties(prevProperties => {
-      // --- Add Check: Only update if list isn't cleared by new search --- 
-      if (prevProperties.length === 0) {
-        console.log('[handlePropertyUpdate] Ignoring update, list is empty (likely new search started).');
-        return prevProperties; // Return unchanged state
-      }
-      
-      // Check if property already exists
-      if (prevProperties.some(p => p.property_id === updatedProperty.property_id)) {
-        return prevProperties.map(p =>
-          p.property_id === updatedProperty.property_id ? updatedProperty : p
-        );
-      } else {
-        // Add the newly completed property
-        const newPropertyList = [...prevProperties, updatedProperty];
-        
-        // --- DEBUG LOGGING START ---
-        console.log(`[handlePropertyUpdate] Adding property. New count: ${newPropertyList.length}, Total expected: ${totalProperties}`);
-        // --- DEBUG LOGGING END ---
-        
-        // Check if all properties have been processed using the latest totalProperties
-        // This check now correctly signifies the end of *all* processing
-        if (totalProperties > 0 && newPropertyList.length >= totalProperties) { // Use >= for safety
-          console.log('All properties processed.');
-          setIsProcessingBackground(false); // Turn off background indicator
-        }
-        return newPropertyList;
-      }
-    });
-  }, [totalProperties]); // Add totalProperties as a dependency
-
-  // --- Add useMemo for sorting ---
-  const sortedProperties = React.useMemo(() => {
-    let sortableItems = [...displayedProperties];
-    if (sortConfig.key !== null) {
-      sortableItems.sort((a, b) => {
-        let valA: number | string | null = null;
-        let valB: number | string | null = null;
-
-        if (sortConfig.key === 'ratio') {
-          valA = a.price > 0 ? a.rent_estimate / a.price : 0;
-          valB = b.price > 0 ? b.rent_estimate / b.price : 0;
-        } else if (sortConfig.key === 'cashflow') {
-          // Calculate cashflow for both properties for comparison
-          const cashflowA = calculateCashflow(a).monthlyCashflow;
-          const cashflowB = calculateCashflow(b).monthlyCashflow;
-          valA = cashflowA;
-          valB = cashflowB;
-        } else {
-          valA = a[sortConfig.key as keyof Property];
-          valB = b[sortConfig.key as keyof Property];
-        }
-        
-        // Basic comparison, assumes numbers or comparable strings
-        // Handle nulls by treating them as lowest value
-        valA = valA === null ? (sortConfig.direction === 'asc' ? -Infinity : Infinity) : valA;
-        valB = valB === null ? (sortConfig.direction === 'asc' ? -Infinity : Infinity) : valB;
-
-        if (valA < valB) {
-          return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (valA > valB) {
-          return sortConfig.direction === 'asc' ? 1 : -1;
-        }
-        return 0;
-      });
-    }
-    return sortableItems;
-  }, [displayedProperties, sortConfig, calculateCashflow, interestRate, loanTerm, downPaymentPercent, taxInsurancePercent, vacancyPercent, capexPercent, propertyManagementPercent]);
-
-  // --- Effect to Register for Updates ---
-  useEffect(() => {
-    console.log('[Effect Register] Registering global update callback.');
-    registerForPropertyUpdates(handlePropertyUpdate);
-
-    // Cleanup function to unregister when component unmounts or callback changes
-    // return () => {
-    //   console.log('[Effect Register] Unregistering global update callback.');
-    //   // Implement unregister logic in propertyApi if needed, currently not exposed
-    //   // unregister(); 
-    // };
-    // }, [handlePropertyUpdate]); // Add the memoized callback as a dependency
-  // }, [handlePropertyUpdate, totalProperties]); // Depend on totalProperties
-  // }, [handlePropertyUpdate, totalProperties]); // Use the memoized callback
-  }, [handlePropertyUpdate]); // Only depend on the stable callback
-
-  // Add handler for rent estimate changes
-  const handleRentEstimateChange = useCallback((propertyId: string, newRentString: string) => {
-    const newRent = parseFloat(newRentString.replace(/[^\d.]/g, '')); // Clean and parse
-
-    if (isNaN(newRent) || newRent < 0) {
-      console.warn(`[handleRentEstimateChange] Invalid rent value entered: ${newRentString}`);
-      // Optionally reset the input or show an error, for now just ignore
-      return;
-    }
-
-    console.log(`[handleRentEstimateChange] Updating rent for ${propertyId} to ${newRent}`);
-    setDisplayedProperties(prev =>
-      prev.map(p =>
-        p.property_id === propertyId
-          ? { ...p, rent_estimate: newRent } // Update the rent estimate
-          : p
-      )
-    );
-  }, []); // No dependencies needed if only using setDisplayedProperties setter form
-  
-  // Add FAQ handling functions
-  const handleOpenFaq = () => {
-    setIsFaqOpen(true);
-  };
-  
-  const handleCloseFaq = () => {
-    setIsFaqOpen(false);
-  };
-  
-  const handleFaqSectionChange = (section: string) => {
-    setActiveFaqSection(section);
-  };
-  
-  // Define the default settings for calculator
-  const defaultSettings: CashflowSettings = {
-    interestRate,
-    loanTerm,
-    downPaymentPercent,
-    taxInsurancePercent,
-    vacancyPercent,
-    capexPercent,
-    propertyManagementPercent
-  };
-  
-  // Check if user has explicitly dismissed the marketing section
-  useEffect(() => {
-    const hasExplicitlyDismissed = localStorage.getItem('rentalSearchMarketingDismissed');
-    if (hasExplicitlyDismissed === 'true') {
-      setShowMarketingIntro(false);
-    } else {
-      setShowMarketingIntro(true);
-    }
-  }, []);
-
-  // Handler to dismiss marketing section
-  const handleDismissMarketing = () => {
-    setShowMarketingIntro(false);
-    localStorage.setItem('rentalSearchMarketingDismissed', 'true');
-  };
+    if (monthlyRate === 0) return loanAmount / payments;
+    
+    const x = Math.pow(1 + monthlyRate, payments);
+    return loanAmount * (monthlyRate * x) / (x - 1);
+  }
   
   return (
     <div className="App">
@@ -1277,78 +1006,87 @@ function App() {
             </header>
             
             <Container maxWidth="lg" sx={{ py: 3 }}>
-              {/* Marketing intro section */}
-              {showMarketingIntro && (
-                <Paper 
-                  elevation={0} 
-                  sx={{ 
-                    mb: 4, 
-                    p: 3, 
-                    borderRadius: 2,
-                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+              {/* Marketing intro section - make collapsible */}
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  mb: 4, 
+                  p: expandedMarketing ? 3 : 2, 
+                  borderRadius: 2,
+                  background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                  color: 'white',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                <IconButton
+                  onClick={handleToggleMarketing}
+                  size="small"
+                  sx={{
+                    position: 'absolute',
+                    right: 8,
+                    top: 8,
                     color: 'white',
-                    position: 'relative',
-                    overflow: 'hidden'
+                    bgcolor: 'rgba(255,255,255,0.2)',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
                   }}
                 >
-                  <IconButton
-                    onClick={handleDismissMarketing}
-                    size="small"
-                    sx={{
-                      position: 'absolute',
-                      right: 8,
-                      top: 8,
-                      color: 'white',
-                      bgcolor: 'rgba(255,255,255,0.2)',
-                      '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
-                    }}
-                  >
-                    <CloseIcon fontSize="small" />
-                  </IconButton>
-                  
-                  <Typography variant="h4" fontWeight="bold" gutterBottom>
-                    Find Your Next Investment Property
-                  </Typography>
-                  
-                  <Typography variant="body1" sx={{ mb: 2, maxWidth: 800 }}>
-                    RentalSearch helps you discover and analyze potential real estate investments in seconds. 
-                    Get detailed cash flow analysis, long-term equity projections, and returns on investment 
-                    for properties in any location.
-                  </Typography>
-                  
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
-                      <Box sx={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(255,255,255,0.2)', mr: 1.5 }}>
-                        <SearchIcon sx={{ color: 'white' }} />
-                      </Box>
-                      <Box>
-                        <Typography variant="subtitle1" fontWeight="bold">Fast Property Search</Typography>
-                        <Typography variant="body2">Find properties with cashflow potential in any area</Typography>
-                      </Box>
-                    </Box>
+                  {expandedMarketing ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                </IconButton>
+                
+                {expandedMarketing ? (
+                  <>
+                    <Typography variant="h4" fontWeight="bold" gutterBottom>
+                      Find Your Next Investment Property
+                    </Typography>
                     
-                    <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
-                      <Box sx={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(255,255,255,0.2)', mr: 1.5 }}>
-                        <BarChartIcon sx={{ color: 'white' }} />
-                      </Box>
-                      <Box>
-                        <Typography variant="subtitle1" fontWeight="bold">Detailed Analysis</Typography>
-                        <Typography variant="body2">Get comprehensive financial projections for each property</Typography>
-                      </Box>
-                    </Box>
+                    <Typography variant="body1" sx={{ mb: 2, maxWidth: 800 }}>
+                      RentalSearch helps you discover and analyze potential real estate investments in seconds. 
+                      Get detailed cash flow analysis, long-term equity projections, and returns on investment 
+                      for properties in any location.
+                    </Typography>
                     
-                    <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
-                      <Box sx={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(255,255,255,0.2)', mr: 1.5 }}>
-                        <ShareIcon sx={{ color: 'white' }} />
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
+                        <Box sx={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(255,255,255,0.2)', mr: 1.5 }}>
+                          <SearchIcon sx={{ color: 'white' }} />
+                        </Box>
+                        <Box>
+                          <Typography variant="subtitle1" fontWeight="bold">Fast Property Search</Typography>
+                          <Typography variant="body2">Find properties with cashflow potential in any area</Typography>
+                        </Box>
                       </Box>
-                      <Box>
-                        <Typography variant="subtitle1" fontWeight="bold">Easy Sharing</Typography>
-                        <Typography variant="body2">Share property analysis with partners or clients via URL</Typography>
+                      
+                      <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
+                        <Box sx={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(255,255,255,0.2)', mr: 1.5 }}>
+                          <BarChartIcon sx={{ color: 'white' }} />
+                        </Box>
+                        <Box>
+                          <Typography variant="subtitle1" fontWeight="bold">Detailed Analysis</Typography>
+                          <Typography variant="body2">Get comprehensive financial projections for each property</Typography>
+                        </Box>
+                      </Box>
+                      
+                      <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
+                        <Box sx={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(255,255,255,0.2)', mr: 1.5 }}>
+                          <ShareIcon sx={{ color: 'white' }} />
+                        </Box>
+                        <Box>
+                          <Typography variant="subtitle1" fontWeight="bold">Easy Sharing</Typography>
+                          <Typography variant="body2">Share property analysis with partners or clients via URL</Typography>
+                        </Box>
                       </Box>
                     </Box>
+                  </>
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Typography variant="h6" fontWeight="bold">
+                      Find Your Next Investment Property - Click to expand
+                    </Typography>
                   </Box>
-                </Paper>
-              )}
+                )}
+              </Paper>
               
               {/* Search Form - Modified to include price filters */}
               <div className="search-container">
@@ -1628,7 +1366,7 @@ function App() {
                       <PropertyCard
                         key={property.property_id}
                         property={property}
-                        calculateCashflow={calculateCashflow}
+                        calculateCashflow={calculateCashflowWithSettings}
                         formatCurrency={formatCurrency}
                         formatPercent={formatPercent}
                         vacancyPercent={vacancyPercent}
@@ -1688,10 +1426,10 @@ function App() {
                     {/* FAQ Navigation */}
                     <div className="faq-nav">
                       <div 
-                        className={`faq-nav-item ${activeFaqSection === 'general' ? 'active' : ''}`}
-                        onClick={() => handleFaqSectionChange('general')}
+                        className={`faq-nav-item ${activeFaqSection === 'overview' ? 'active' : ''}`}
+                        onClick={() => handleFaqSectionChange('overview')}
                       >
-                        General
+                        Overview
                       </div>
                       <div 
                         className={`faq-nav-item ${activeFaqSection === 'search' ? 'active' : ''}`}
@@ -1714,7 +1452,7 @@ function App() {
                     </div>
                     
                     {/* General FAQ Section */}
-                    {activeFaqSection === 'general' && (
+                    {activeFaqSection === 'overview' && (
                       <div>
                         <div className="faq-section">
                           <div className="faq-question">What is RentalSearch?</div>
@@ -1835,65 +1573,40 @@ function App() {
           element={
             <PropertyDetailsPage 
               properties={displayedProperties}
-              calculateCashflow={(property, settings) => {
-                // Create a function that uses the settings passed in instead of the global state
-                const calculateCashflowWithSettings = (property: Property, settings: CashflowSettings) => {
-                  const monthlyMortgage = calculateMortgageWithSettings(property.price, settings);
-                  const monthlyTaxInsurance = property.price * (settings.taxInsurancePercent / 100) / 12;
-                  const monthlyVacancy = property.rent_estimate * (settings.vacancyPercent / 100);
-                  const monthlyCapex = property.rent_estimate * (settings.capexPercent / 100);
-                  const monthlyPropertyManagement = property.rent_estimate * (settings.propertyManagementPercent / 100);
-                  
-                  const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
-                  const monthlyCashflow = property.rent_estimate - totalMonthlyExpenses;
-                  const annualCashflow = monthlyCashflow * 12;
-                  
-                  const downPayment = property.price * (settings.downPaymentPercent / 100);
-                  const closingCosts = property.price * 0.03; // Estimate 3% for closing costs
-                  const initialInvestment = downPayment + closingCosts;
-                  
-                  const cashOnCashReturn = (annualCashflow / initialInvestment) * 100;
-                  
-                  return {
-                    monthlyMortgage,
-                    monthlyTaxInsurance,
-                    monthlyVacancy,
-                    monthlyCapex,
-                    monthlyPropertyManagement,
-                    totalMonthlyExpenses,
-                    monthlyCashflow,
-                    annualCashflow,
-                    cashOnCashReturn
-                  };
-                };
-                
-                // Helper function to calculate mortgage with specific settings
-                function calculateMortgageWithSettings(price: number, settings: CashflowSettings): number {
-                  const downPayment = price * (settings.downPaymentPercent / 100);
-                  const loanAmount = price - downPayment;
-                  const monthlyRate = settings.interestRate / 100 / 12;
-                  const payments = settings.loanTerm * 12;
-                  
-                  if (monthlyRate === 0) return loanAmount / payments;
-                  
-                  const x = Math.pow(1 + monthlyRate, payments);
-                  return loanAmount * (monthlyRate * x) / (x - 1);
-                }
-                
-                const propertyForCashflow = {
-                  ...property,
-                  rent_source: property.rent_source ?? "calculated", // Default to 'calculated' if undefined
-                };
-                return calculateCashflowWithSettings(propertyForCashflow, settings);
-              }}
+              calculateCashflow={calculateCashflowWithSettings}
               formatCurrency={formatCurrency}
               formatPercent={formatPercent}
               defaultSettings={defaultSettings}
             />
           } 
         />
+        
+        {/* 404 route */}
+        <Route path="*" element={
+          <div className="not-found">
+            <Typography variant="h4" component="h1">404 - Page Not Found</Typography>
+            <Typography variant="body1">The page you're looking for doesn't exist.</Typography>
+            <Button 
+              variant="contained" 
+              onClick={() => navigate('/')} 
+              sx={{ mt: 2 }}
+              startIcon={<HomeIcon />}
+            >
+              Go Home
+            </Button>
+          </div>
+        } />
       </Routes>
     </div>
+  );
+}
+
+// Main App component that wraps the AppContent with Router
+function App() {
+  return (
+    <Router>
+      <AppContent />
+    </Router>
   );
 }
 
