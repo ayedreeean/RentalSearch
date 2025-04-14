@@ -1,36 +1,50 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
+  Container, 
+  Box, 
   Typography, 
-  Box,
-  Paper, 
   Button, 
-  Slider,
+  Paper, 
+  AppBar, 
+  Toolbar, 
+  IconButton, 
+  CssBaseline, 
+  Slider, 
+  Grid, 
+  Alert, 
+  Tooltip, 
+  Divider, 
+  Tabs, 
+  Tab, 
+  useMediaQuery, 
+  useTheme, 
+  Card, 
+  CardContent,
   TextField,
-  Divider,
-  IconButton,
-  Alert,
-  Container,
-  AppBar,
-  Toolbar,
   Fab,
-  CssBaseline,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Tooltip,
   CircularProgress
 } from '@mui/material';
+import { styled } from '@mui/material/styles';
+import { 
+  ArrowBack as ArrowBackIcon, 
+  Share as ShareIcon, 
+  Home as HomeIcon, 
+  BarChart as BarChartIcon, 
+  Info as InfoIcon, 
+  Tune as TuneIcon, 
+  Email as EmailIcon, 
+  Bookmark as BookmarkIcon, 
+  BookmarkBorder as BookmarkBorderIcon 
+} from '@mui/icons-material';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import HomeIcon from '@mui/icons-material/Home';
-import BarChartIcon from '@mui/icons-material/BarChart';
 import EditIcon from '@mui/icons-material/Edit';
-import ShareIcon from '@mui/icons-material/Share';
-import TuneIcon from '@mui/icons-material/Tune';
 import { Property, Cashflow, CashflowSettings } from '../types';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -730,6 +744,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   const [propertyValueIncreaseRate, setPropertyValueIncreaseRate] = useState<number>(3); // Default 3%
   const [yearsToProject, /* setYearsToProject removed */ ] = useState<number>(30); // Default 30 years
   
+  // Add state for bookmarking
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  
   // Load property data
   useEffect(() => {
     if (!propertyId) {
@@ -1319,6 +1336,61 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
     }
   };
   
+  // Add function to handle bookmarking properties
+  const handleBookmarkToggle = () => {
+    if (!property) return;
+
+    // Generate the shareable URL that contains all settings/customizations
+    const shareableURL = generateShareableURL();
+    
+    // Get current bookmarks from localStorage
+    const bookmarksStr = localStorage.getItem('rentToolFinder_bookmarks');
+    let bookmarks: Record<string, {url: string, property: Property, date: string}> = {};
+    
+    try {
+      bookmarks = bookmarksStr ? JSON.parse(bookmarksStr) : {};
+    } catch (e) {
+      console.error('Error parsing bookmarks:', e);
+    }
+    
+    if (isBookmarked) {
+      // Remove bookmark
+      if (property.property_id in bookmarks) {
+        delete bookmarks[property.property_id];
+        setIsBookmarked(false);
+        setCopySuccess('Property removed from bookmarks');
+      }
+    } else {
+      // Add bookmark
+      bookmarks[property.property_id] = {
+        url: shareableURL,
+        property: property,
+        date: new Date().toISOString()
+      };
+      setIsBookmarked(true);
+      setCopySuccess('Property bookmarked!');
+    }
+    
+    // Save updated bookmarks back to localStorage
+    localStorage.setItem('rentToolFinder_bookmarks', JSON.stringify(bookmarks));
+    
+    // Clear the success message after 3 seconds
+    setTimeout(() => setCopySuccess(''), 3000);
+  };
+  
+  // Check if property is bookmarked on component mount
+  useEffect(() => {
+    if (!property) return;
+    
+    const bookmarksStr = localStorage.getItem('rentToolFinder_bookmarks');
+    try {
+      const bookmarks = bookmarksStr ? JSON.parse(bookmarksStr) : {};
+      setIsBookmarked(!!bookmarks[property.property_id]);
+    } catch (e) {
+      console.error('Error checking bookmark status:', e);
+    }
+  }, [property]);
+  
   // Display loading state
   if (loading) {
     return (
@@ -1393,6 +1465,29 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             gap: { xs: 1, sm: 2 }, 
             flexWrap: 'nowrap'
           }}>
+            {/* Add Bookmark Button */}
+            <Button
+              variant="outlined"
+              startIcon={isBookmarked ? <BookmarkIcon /> : <BookmarkBorderIcon />}
+              onClick={handleBookmarkToggle}
+              size="small"
+              sx={{ 
+                color: 'white', 
+                borderColor: 'white', 
+                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
+                whiteSpace: 'nowrap',
+                minWidth: { xs: '40px', sm: 'auto' },
+                px: { xs: 1, sm: 2 }
+              }}
+            >
+              <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+                {isBookmarked ? 'Bookmarked' : 'Bookmark'}
+              </Box>
+              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                {isBookmarked ? '' : ''}
+              </Box>
+            </Button>
+            
             <Button 
               variant="outlined" 
               startIcon={<ShareIcon />}

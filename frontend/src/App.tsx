@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { HashRouter as Router, Route, Routes, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { HashRouter as Router, Route, Routes, useNavigate, Link } from 'react-router-dom';
 import {
   Typography, Container, TextField, Button, Box, CircularProgress, 
   Paper, InputAdornment, IconButton, Alert,
@@ -19,10 +19,12 @@ import TuneIcon from '@mui/icons-material/Tune';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import CloseIcon from '@mui/icons-material/Close';
 import ShareIcon from '@mui/icons-material/Share';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
 import './App.css';
 import { searchProperties, getTotalPropertiesCount, Property, registerForPropertyUpdates } from './api/propertyApi';
 import PropertyDetailsPage from './pages/PropertyDetailsPage';
 import { CashflowSettings } from './types';
+import BookmarksPage from './pages/BookmarksPage';
 
 // Define cashflow interface
 interface Cashflow {
@@ -1246,7 +1248,7 @@ function App() {
                     <Typography className="app-title" variant="h4" component="h1">
                       <HomeWorkIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1.85rem' }} />
                       RentalSearch
-      </Typography>
+                    </Typography>
                     <Typography className="app-subtitle" variant="subtitle1" component="p">
                       Find properties with investment potential
                     </Typography>
@@ -1257,8 +1259,18 @@ function App() {
                       onClick={handleOpenFaq}
                       className="help-button"
                       startIcon={<HelpOutlineIcon />}
+                      sx={{ mr: 2 }}
                     >
                       Help & FAQ
+                    </Button>
+                    <Button 
+                      variant="outlined" 
+                      component={Link}
+                      to="/bookmarks"
+                      className="bookmarks-button"
+                      startIcon={<BookmarkIcon />}
+                    >
+                      Bookmarks
                     </Button>
                   </div>
                 </div>
@@ -1867,6 +1879,12 @@ function App() {
               defaultSettings={defaultSettings}
             />
           } 
+        />
+        
+        {/* Bookmarks Route */}
+        <Route 
+          path="/bookmarks" 
+          element={<BookmarksPage />} 
         />
       </Routes>
     </div>
