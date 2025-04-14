@@ -1675,10 +1675,8 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               startIcon={isBookmarked ? <BookmarkIcon /> : <BookmarkBorderIcon />}
               onClick={handleBookmarkToggle}
               size="small"
+              className="property-action-button"
               sx={{ 
-                color: 'white', 
-                borderColor: 'white', 
-                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
                 minWidth: { xs: '40px', sm: 'auto' },
                 px: { xs: 1, sm: 2 }
@@ -1697,10 +1695,8 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               startIcon={<ShareIcon />}
               onClick={handleShareViaURL}
               size="small"
+              className="property-action-button"
               sx={{ 
-                color: 'white', 
-                borderColor: 'white', 
-                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
                 minWidth: { xs: '40px', sm: 'auto' },
                 px: { xs: 1, sm: 2 }
@@ -1716,10 +1712,8 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 setShowTextPreview(!showTextPreview);
               }}
               size="small"
+              className="property-action-button"
               sx={{ 
-                color: 'white', 
-                borderColor: 'white', 
-                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
                 minWidth: { xs: '40px', sm: 'auto' },
                 px: { xs: 1, sm: 2 }
