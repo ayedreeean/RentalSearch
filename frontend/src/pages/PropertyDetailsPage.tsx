@@ -21,11 +21,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Tooltip as MuiTooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions
+  Tooltip
 } from '@mui/material';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -35,63 +31,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import ShareIcon from '@mui/icons-material/Share';
 import EmailIcon from '@mui/icons-material/Email';
 import TuneIcon from '@mui/icons-material/Tune';
-import LinkIcon from '@mui/icons-material/Link';
 import { Property, Cashflow, CashflowSettings } from '../types';
-import { MapContainer, TileLayer, Marker, Popup as LeafletPopup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
-import { 
-  ResponsiveContainer, 
-  ComposedChart, 
-  Line, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip as RechartsTooltip, 
-  Legend,
-  TooltipProps,
-  ReferenceLine
-} from 'recharts';
-
-// Add explicit CSS styles for Leaflet to ensure it displays correctly
-const mapStyles = `
-  .leaflet-container {
-    height: 100%;
-    width: 100%;
-    border-radius: 8px;
-  }
-  
-  .leaflet-marker-icon {
-    filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
-  }
-  
-  /* Ensure popup text is readable */
-  .leaflet-popup-content {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 14px;
-    color: #333;
-    max-width: 250px;
-    word-wrap: break-word;
-  }
-`;
-
-// Add a style element to the document head
-const MapStyles = () => {
-  React.useEffect(() => {
-    // Create and append style element
-    const styleEl = document.createElement('style');
-    styleEl.textContent = mapStyles;
-    document.head.appendChild(styleEl);
-    
-    // Clean up on unmount
-    return () => {
-      document.head.removeChild(styleEl);
-    };
-  }, []);
-  
-  return null;
-};
+// import { LineChart } from '@mui/x-charts/LineChart';
 
 interface PropertyDetailsPageProps {
   properties: Property[];
@@ -112,302 +53,514 @@ interface YearlyProjection {
   roi: number;
 }
 
-// Fix Leaflet marker icon issue and ensure client-side only rendering
-// This is needed because Leaflet's default marker icons use relative URLs which don't work well in React
-const customIcon = new L.Icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-
-// Create a wrapper to handle client-side only rendering of the map
-// This is necessary because Leaflet needs the DOM to be available
-const MapWrapper = ({ address }: { address: string }) => {
-  const [isMounted, setIsMounted] = React.useState(false);
-  
-  // Only render on client side
-  React.useEffect(() => {
-    setIsMounted(true);
-  }, []);
-  
-  if (!isMounted) {
-    return <Box sx={{ height: 300, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading map...</Box>;
-  }
-  
-  return <PropertyMap address={address} />;
-};
-
-// Create a Map component that we'll use in the PropertyDetailsPage
-const PropertyMap = ({ address }: { address: string }) => {
-  const [coordinates, setCoordinates] = React.useState<[number, number] | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-
-  // Fetch coordinates using OpenStreetMap's Nominatim API
-  React.useEffect(() => {
-    const fetchCoordinates = async () => {
-      try {
-        setIsLoading(true);
-        // OpenStreetMap's free Nominatim geocoding service
-        const encodedAddress = encodeURIComponent(address);
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1`);
-        const data = await response.json();
-        
-        if (data && data.length > 0) {
-          const lat = parseFloat(data[0].lat);
-          const lon = parseFloat(data[0].lon);
-          setCoordinates([lat, lon]);
-          console.log("Map coordinates loaded:", lat, lon); // Debug log
-        } else {
-          setError('Could not find coordinates for this address');
-          console.error('No coordinates found for address:', address);
-        }
-      } catch (err) {
-        setError('Error fetching coordinates');
-        console.error('Error fetching coordinates:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (address) {
-      fetchCoordinates();
-    }
-  }, [address]);
-
-  if (isLoading) {
-    return <Box sx={{ height: 300, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading map...</Box>;
-  }
-
-  if (error || !coordinates) {
-    return (
-      <Box sx={{ height: 300, display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#f5f5f5', borderRadius: 2 }}>
-        <Typography color="text.secondary">{error || 'Could not load map'}</Typography>
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ 
-      height: 300, 
-      borderRadius: 2, 
-      overflow: 'hidden', 
-      mb: 3,
-      border: '1px solid #ddd',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-    }}>
-      <MapContainer 
-        center={coordinates} 
-        zoom={15} 
-        style={{ height: '100%', width: '100%' }}
-        scrollWheelZoom={false}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <Marker position={coordinates} icon={customIcon}>
-          <LeafletPopup>
-            {address}
-          </LeafletPopup>
-        </Marker>
-      </MapContainer>
-    </Box>
-  );
-};
-
-// Replace the entire PropertyChart component with this Recharts implementation
-const PropertyChart = ({ 
-  data
+// Adjust the SimpleChart component to ensure all bars are fully visible
+const SimpleChart = ({ 
+  data, 
+  height = 300
 }: { 
   data: { 
     years: number[], 
     propertyValues: number[],
     equity: number[],
     cashflow: number[]
-  }
+  },
+  height?: number 
 }) => {
-  // Transform the data into the format Recharts expects
-  const chartData = data.years.map((year, index) => ({
-    year,
-    propertyValue: data.propertyValues[index],
-    equity: data.equity[index],
-    cashflow: data.cashflow[index]
-  }));
-
-  // Calculate min/max values for proper domain scaling
-  const maxPropertyValue = Math.max(...data.propertyValues);
-  const maxEquity = Math.max(...data.equity);
-  const maxLeftAxis = Math.max(maxPropertyValue, maxEquity) * 1.1; // Add 10% padding for better visibility
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
   
-  const maxCashflow = Math.max(0, ...data.cashflow);
-  const minCashflow = Math.min(0, ...data.cashflow);
-  // Add padding for better visibility, but properly handle negative values
-  const maxRightAxis = maxCashflow === 0 ? 1000 : maxCashflow * 1.1; 
-  // For negative values, we need to make them "more negative" by multiplying by 1.1
-  const minRightAxis = minCashflow === 0 ? 0 : minCashflow * 1.1;
-
-  // Calculate proportional scales to ensure zero-alignment
-  // Calculate the total range for both axes
-  const leftAxisRange = maxLeftAxis;
-  const rightAxisRange = Math.abs(maxRightAxis - minRightAxis);
+  // Add state for tracking hover position and displayed tooltip
+  const [hoverInfo, setHoverInfo] = React.useState<{
+    visible: boolean,
+    x: number,
+    y: number,
+    year: number,
+    propertyValue: number,
+    equity: number,
+    cashflow: number
+  } | null>(null);
   
-  // Calculate the proportion of negative space in the right axis
-  const negativeRightAxisProportion = minRightAxis < 0 
-    ? Math.abs(minRightAxis) / rightAxisRange 
-    : 0;
-
-  // Adjust left axis domain to include a proportional amount of negative space
-  const adjustedMinLeftAxis = negativeRightAxisProportion > 0 
-    ? -1 * (leftAxisRange * negativeRightAxisProportion / (1 - negativeRightAxisProportion)) 
-    : 0;
-
-  // Format currency for tooltips
-  const formatCurrency = (value: number) => {
-    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-    if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
-    if (value <= -1000000) return `-$${Math.abs(value / 1000000).toFixed(1)}M`;
-    if (value <= -1000) return `-$${Math.abs(value / 1000).toFixed(0)}K`;
-    return value >= 0 ? `$${value.toFixed(0)}` : `-$${Math.abs(value).toFixed(0)}`;
-  };
-
-  // Custom tooltip component
-  const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
-    if (active && payload && payload.length > 0) {
-      return (
-        <div style={{
-          background: 'white',
-          padding: '10px',
-          border: '1px solid #ccc',
-          borderRadius: '4px',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-        }}>
-          <p style={{ margin: '0 0 5px', fontWeight: 'bold' }}>{`Year ${label}`}</p>
-          {payload.map((entry) => {
-            if (!entry || typeof entry.value === 'undefined') return null;
-            
-            let color = '#666';
-            let name = entry.name || '';
-            
-            // Set color based on data type
-            if (name === 'propertyValue') color = '#4f46e5';
-            else if (name === 'equity') color = '#10b981';
-            else if (name === 'cashflow') {
-              color = entry.value >= 0 ? '#f97316' : '#ef4444';
-            }
-            
-            // Format the name for display
-            let displayName = name;
-            if (name === 'propertyValue') displayName = 'Property Value';
-            else if (name === 'equity') displayName = 'Equity';
-            else if (name === 'cashflow') displayName = 'Annual Cashflow';
-            
-            return (
-              <p key={name} style={{ margin: '0 0 3px', color }}>
-                <span style={{ 
-                  display: 'inline-block', 
-                  width: '10px', 
-                  height: '10px', 
-                  backgroundColor: color, 
-                  marginRight: '5px' 
-                }}></span>
-                {`${displayName}: ${formatCurrency(entry.value as number)}`}
-              </p>
-            );
-          })}
-        </div>
-      );
-    }
-    return null;
-  };
-
-  // Custom bar component for handling positive and negative cashflow values
-  const CustomBar = (props: any) => {
-    const { x, y, width, height, value, fill, background } = props;
+  // Draw chart function
+  const drawChart = React.useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     
-    // Use different colors for positive and negative values
-    const barFill = value >= 0 ? '#f97316' : '#ef4444';
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     
-    if (value >= 0) {
-      // For positive values, bar grows upward from y position
-      return <rect x={x} y={y} width={width} height={height} fill={barFill} />;
-    } else {
-      // For negative values, the y position is actually the position we need to start from
-      // The bar should extend downward from this position by the height amount
-      return <rect x={x} y={y} width={width} height={height} fill={barFill} />;
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Set canvas dimensions accounting for device pixel ratio
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    ctx.scale(ratio, ratio);
+    
+    const canvasWidth = canvas.offsetWidth;
+    const canvasHeight = canvas.offsetHeight;
+    
+    // Padding - increase horizontal padding to prevent bar cutoff
+    const padding = {
+      top: 50,         // Increased to make room for title
+      right: 110,      // Increased for secondary Y-axis labels and last bar
+      bottom: 80,      // Increased for X-axis labels and legend
+      left: 110        // Increased for primary Y-axis labels and first bar
+    };
+    
+    const chartWidth = canvasWidth - padding.left - padding.right;
+    const chartHeight = canvasHeight - padding.top - padding.bottom;
+    
+    // Calculate scales for primary Y-axis (property values & equity)
+    const maxPropertyValue = Math.max(...data.propertyValues);
+    const maxEquity = Math.max(...data.equity);
+    const maxPrimaryY = Math.max(maxPropertyValue, maxEquity);
+    
+    // Calculate scales for secondary Y-axis (cashflow)
+    const maxCashflow = Math.max(...data.cashflow);
+    const minCashflow = Math.min(...data.cashflow);
+    
+    // For positive-only data, start at 0. For data with negatives, include the negative range.
+    const minSecondaryY = Math.min(0, minCashflow);
+    const maxSecondaryY = Math.max(0, maxCashflow);
+    
+    // Calculate ratios to maintain proper scale proportions
+    const primaryToSecondaryRatio = maxPrimaryY / maxSecondaryY;
+    
+    // Add padding to both scales
+    const primaryYPadding = maxPrimaryY * 0.1;
+    const secondaryYRange = maxSecondaryY - minSecondaryY;
+    const secondaryYPadding = secondaryYRange * 0.2; // More padding for cashflow scale
+    
+    // Determine the effective min/max for both axes, ensuring full visibility
+    const effectiveMinPrimaryY = 0; // Keep primary axis starting at 0
+    const effectiveMaxPrimaryY = maxPrimaryY + primaryYPadding;
+    
+    // Adjust secondary axis min/max to ensure all data is visible
+    // but maintain proportional relationship with primary axis
+    const effectiveMinSecondaryY = minSecondaryY - (minSecondaryY < 0 ? secondaryYPadding : 0);
+    const effectiveMaxSecondaryY = maxSecondaryY + secondaryYPadding;
+    
+    // Ensure the secondary scale can represent all data points
+    // by applying the primary:secondary ratio to determine appropriate scaling
+    const adjustedMaxSecondary = Math.max(effectiveMaxSecondaryY, effectiveMaxPrimaryY / primaryToSecondaryRatio);
+    
+    // Calculate Y scales with adjusted ranges to ensure all data fits
+    const primaryYScale = chartHeight / (effectiveMaxPrimaryY - effectiveMinPrimaryY);
+    const secondaryYScale = chartHeight / (adjustedMaxSecondary - effectiveMinSecondaryY);
+    
+    // Calculate zero Y-coordinate position (will be the same for both axes)
+    const zeroYCoordinate = canvasHeight - padding.bottom - ((0 - effectiveMinSecondaryY) * secondaryYScale);
+    
+    // Function to convert a primary Y value to canvas coordinate
+    const getPrimaryYCoordinate = (value: number) => {
+      // Align the zero point to match the secondary axis zero point
+      return zeroYCoordinate - ((value - 0) * primaryYScale);
+    };
+    
+    // Function to convert a secondary Y value to canvas coordinate
+    const getSecondaryYCoordinate = (value: number) => {
+      return canvasHeight - padding.bottom - ((value - effectiveMinSecondaryY) * secondaryYScale);
+    };
+    
+    // Calculate plot area width (space available for data points)
+    const plotAreaWidth = chartWidth;
+    
+    // Use data-based X coordinates instead of evenly spaced
+    // Calculate X scale with proper inset to keep bars within bounds
+    // For n points, divide width into n sections instead of n-1
+    const xScale = plotAreaWidth / Math.max(data.years.length - 1, 1);
+    
+    // Draw background grid
+    ctx.strokeStyle = '#f0f0f0';
+    ctx.lineWidth = 1;
+    
+    // Draw horizontal grid lines for primary axis
+    const primaryGridStep = Math.ceil(effectiveMaxPrimaryY / 5);
+    for (let i = 0; i <= effectiveMaxPrimaryY; i += primaryGridStep) {
+      const y = getPrimaryYCoordinate(i);
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(canvasWidth - padding.right, y);
+      ctx.stroke();
     }
-  };
-
+    
+    // Draw primary Y-axis (left)
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, padding.top);
+    ctx.lineTo(padding.left, canvasHeight - padding.bottom);
+    ctx.stroke();
+    
+    // Draw secondary Y-axis (right)
+    ctx.beginPath();
+    ctx.moveTo(canvasWidth - padding.right, padding.top);
+    ctx.lineTo(canvasWidth - padding.right, canvasHeight - padding.bottom);
+    ctx.stroke();
+    
+    // Draw X-axis
+    const xAxisY = effectiveMinSecondaryY < 0 
+      ? getSecondaryYCoordinate(0) 
+      : canvasHeight - padding.bottom;
+    
+    ctx.beginPath();
+    ctx.moveTo(padding.left, xAxisY);
+    ctx.lineTo(canvasWidth - padding.right, xAxisY);
+    ctx.stroke();
+    
+    // Draw primary Y-axis labels (left - property values & equity)
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#666';
+    ctx.font = '10px Arial';
+    
+    // Calculate step size for primary Y axis labels - use fewer labels to avoid overlap
+    const optimalStepCount = 5;
+    let primaryStepSize = Math.ceil(effectiveMaxPrimaryY / optimalStepCount);
+    
+    // Round step size to a nice number
+    const primaryMagnitude = Math.pow(10, Math.floor(Math.log10(primaryStepSize)));
+    primaryStepSize = Math.ceil(primaryStepSize / primaryMagnitude) * primaryMagnitude;
+    
+    // Draw primary Y axis labels
+    for (let i = 0; i <= effectiveMaxPrimaryY; i += primaryStepSize) {
+      if (i > effectiveMaxPrimaryY) break;
+      const y = getPrimaryYCoordinate(i);
+      
+      // Format large numbers with K or M suffix
+      let label;
+      if (i >= 1000000) {
+        label = '$' + (i / 1000000).toFixed(1) + 'M';
+      } else if (i >= 1000) {
+        label = '$' + (i / 1000).toFixed(0) + 'K';
+      } else {
+        label = '$' + i;
+      }
+      
+      ctx.fillText(label, padding.left - 8, y);
+    }
+    
+    // Draw secondary Y-axis labels (right - cashflow)
+    ctx.textAlign = 'left';
+    
+    // Calculate step size for secondary Y axis labels
+    let secondaryStepSize = (adjustedMaxSecondary - effectiveMinSecondaryY) / optimalStepCount;
+    
+    // Round step size to a nice number
+    const secondaryMagnitude = Math.pow(10, Math.floor(Math.log10(secondaryStepSize)));
+    secondaryStepSize = Math.ceil(secondaryStepSize / secondaryMagnitude) * secondaryMagnitude;
+    
+    // Start from the lowest multiple of stepSize below effectiveMinSecondaryY
+    let secondaryLabelValue = Math.floor(effectiveMinSecondaryY / secondaryStepSize) * secondaryStepSize;
+    
+    // Draw secondary Y axis labels
+    while (secondaryLabelValue <= adjustedMaxSecondary) {
+      const y = getSecondaryYCoordinate(secondaryLabelValue);
+      
+      // Format with K suffix for thousands
+      let label;
+      if (Math.abs(secondaryLabelValue) >= 1000) {
+        label = '$' + (secondaryLabelValue / 1000).toFixed(1) + 'K';
+      } else {
+        label = '$' + secondaryLabelValue;
+      }
+      
+      // Add cashflow label on right axis
+      ctx.fillText(label, canvasWidth - padding.right + 8, y);
+      
+      // If we're at zero, make the line a bit darker for both axes
+      if (secondaryLabelValue === 0) {
+        ctx.strokeStyle = '#999';
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(canvasWidth - padding.right, y);
+        ctx.stroke();
+        ctx.strokeStyle = '#ccc'; // Reset for other lines
+      }
+      
+      secondaryLabelValue += secondaryStepSize;
+    }
+    
+    // Draw X-axis labels (selected years to avoid overcrowding)
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#666';
+    
+    // Select a subset of years to display (e.g., years 1, 5, 10, 15, 20, 25, 30)
+    const yearsToShow = [1, 5, 10, 15, 20, 25, 30].filter(year => year <= data.years.length);
+    
+    // If we have a small number of years, show all of them
+    const displayYears = data.years.length <= 10 ? data.years : yearsToShow;
+    
+    displayYears.forEach(yearToShow => {
+      const index = data.years.indexOf(yearToShow);
+      if (index !== -1) {
+        const x = padding.left + (index * xScale);
+        ctx.fillText(yearToShow.toString(), x, canvasHeight - padding.bottom + 5);
+        
+        // Add light vertical grid line
+        ctx.strokeStyle = '#f0f0f0';
+        ctx.beginPath();
+        ctx.moveTo(x, padding.top);
+        ctx.lineTo(x, canvasHeight - padding.bottom);
+        ctx.stroke();
+      }
+    });
+    
+    // Draw axis titles with better positioning
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillStyle = '#555';
+    
+    // Primary Y-axis title (left)
+    ctx.save();
+    ctx.translate(padding.left - 60, padding.top + chartHeight / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Property Value & Equity ($)', 0, 0);
+    ctx.restore();
+    
+    // Secondary Y-axis title (right)
+    ctx.save();
+    ctx.translate(canvasWidth - padding.right + 60, padding.top + chartHeight / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.fillText('Annual Cashflow ($)', 0, 0);
+    ctx.restore();
+    
+    // X-axis title
+    ctx.fillText('Year', padding.left + chartWidth / 2, canvasHeight - 10);
+    
+    // Draw property value line using primary Y-axis
+    if (data.propertyValues.length > 1) {
+      ctx.strokeStyle = '#4f46e5'; // Purple
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      
+      for (let i = 0; i < data.propertyValues.length; i++) {
+        const x = padding.left + (i * xScale);
+        const y = getPrimaryYCoordinate(data.propertyValues[i]);
+        
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      
+      ctx.stroke();
+    }
+    
+    // Draw equity line using primary Y-axis
+    if (data.equity.length > 1) {
+      ctx.strokeStyle = '#10b981'; // Green
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      
+      for (let i = 0; i < data.equity.length; i++) {
+        const x = padding.left + (i * xScale);
+        const y = getPrimaryYCoordinate(data.equity[i]);
+        
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      
+      ctx.stroke();
+    }
+    
+    // Calculate optimal bar width based on available space
+    // Make bars narrower to ensure they stay within bounds
+    const barWidth = Math.min(xScale * 0.4, 12); // Narrower bars with a maximum width
+    
+    // Draw cashflow bars using secondary Y-axis
+    for (let i = 0; i < data.cashflow.length; i++) {
+      // Calculate x position with special handling for first and last bars to keep them within bounds
+      let x;
+      if (i === 0) {
+        // First bar should start exactly at the left boundary
+        x = padding.left;
+      } else if (i === data.cashflow.length - 1) {
+        // Last bar should end exactly at the right boundary
+        x = (canvasWidth - padding.right) - barWidth;
+      } else {
+        // Center the bars for middle points
+        x = padding.left + (i * xScale) - (barWidth / 2);
+      }
+      
+      const cashflowValue = data.cashflow[i];
+      const zeroY = getSecondaryYCoordinate(0);
+      const valueY = getSecondaryYCoordinate(cashflowValue);
+      
+      // Set color based on positive/negative cashflow
+      ctx.fillStyle = cashflowValue >= 0 ? '#f97316' : '#ef4444'; // Orange for positive, red for negative
+      
+      // Draw bar from zero baseline
+      if (cashflowValue >= 0) {
+        // Positive cashflow - draw up from zero line
+        // Bar starts at valueY (top of bar) and extends up to zeroY
+        ctx.fillRect(x, valueY, barWidth, zeroY - valueY);
+      } else {
+        // Negative cashflow - draw down from zero line
+        // Bar starts at zeroY (zero line) and extends down by height
+        ctx.fillRect(x, zeroY, barWidth, valueY - zeroY);
+      }
+      
+      // Debug - draw a small marker at the zero line
+      if (i % 5 === 0) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x, zeroY - 1, barWidth, 2);
+      }
+    }
+    
+    // Draw legend at the bottom of the chart
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = '12px Arial';
+    ctx.fillStyle = '#333';
+    
+    const legendItems = [
+      { label: 'Property Value', color: '#4f46e5' },
+      { label: 'Equity', color: '#10b981' },
+      { label: 'Annual Cashflow', color: '#f97316' }
+    ];
+    
+    const legendWidth = 150;  // Width allocated for each legend item
+    const legendStartX = (canvasWidth - (legendItems.length * legendWidth)) / 2;
+    const legendY = canvasHeight - 15;  // Place at the bottom
+    
+    // Draw legend background to ensure better visibility
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillRect(legendStartX - 10, legendY - 15, (legendItems.length * legendWidth) + 20, 30);
+    
+    legendItems.forEach((item, index) => {
+      const x = legendStartX + (index * legendWidth);
+      
+      ctx.fillStyle = item.color;
+      ctx.fillRect(x, legendY - 5, 15, 10);
+      
+      ctx.fillStyle = '#333';
+      ctx.fillText(item.label, x + 20, legendY);
+    });
+    
+    // If we have hover data, draw a vertical indicator line
+    if (hoverInfo && hoverInfo.visible) {
+      const hoverX = hoverInfo.x;
+      
+      // Draw vertical hover line
+      ctx.save();
+      ctx.strokeStyle = 'rgba(100, 100, 100, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      ctx.moveTo(hoverX, padding.top);
+      ctx.lineTo(hoverX, canvasHeight - padding.bottom);
+      ctx.stroke();
+      ctx.restore();
+    }
+    
+  }, [data, hoverInfo]);
+  
+  // Draw chart on mount and when data or hover state changes
+  React.useEffect(() => {
+    drawChart();
+  }, [drawChart]);
+  
+  // Add mouse move handler for tooltip
+  const handleMouseMove = React.useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Calculate chart dimensions
+    const canvasWidth = canvas.offsetWidth;
+    const canvasHeight = canvas.offsetHeight;
+    
+    const padding = {
+      top: 50,
+      right: 110,
+      bottom: 80,
+      left: 110
+    };
+    
+    const chartWidth = canvasWidth - padding.left - padding.right;
+    const plotAreaWidth = chartWidth;
+    const xScale = plotAreaWidth / Math.max(data.years.length - 1, 1);
+    
+    // Check if mouse is in chart area
+    if (
+      x >= padding.left && 
+      x <= canvasWidth - padding.right && 
+      y >= padding.top && 
+      y <= canvasHeight - padding.bottom
+    ) {
+      // Find closest data point
+      const dataIndex = Math.round((x - padding.left) / xScale);
+      
+      // Ensure index is within bounds
+      if (dataIndex >= 0 && dataIndex < data.years.length) {
+        // Calculate the exact x position of the data point
+        const dataPointX = padding.left + (dataIndex * xScale);
+        
+        setHoverInfo({
+          visible: true,
+          x: dataPointX,
+          y: y,
+          year: data.years[dataIndex],
+          propertyValue: data.propertyValues[dataIndex],
+          equity: data.equity[dataIndex],
+          cashflow: data.cashflow[dataIndex]
+        });
+        return;
+      }
+    }
+    
+    // Mouse not over data point or chart area
+    setHoverInfo(null);
+  }, [data]);
+  
+  const handleMouseLeave = React.useCallback(() => {
+    setHoverInfo(null);
+  }, []);
+  
   return (
-    <ResponsiveContainer width="100%" height={350}>
-      <ComposedChart
-        data={chartData}
-        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-      >
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis 
-          dataKey="year" 
-          label={{ value: 'Year', position: 'insideBottomRight', offset: -5 }}
-          tick={{ fontSize: 12 }}
-        />
-        <YAxis 
-          yAxisId="left"
-          orientation="left"
-          label={{ value: 'Property Value & Equity ($)', angle: -90, position: 'insideLeft' }}
-          tickFormatter={formatCurrency}
-          tick={{ fontSize: 12 }}
-          domain={[adjustedMinLeftAxis, maxLeftAxis]}
-          allowDataOverflow={false}
-        />
-        <YAxis 
-          yAxisId="right"
-          orientation="right"
-          label={{ value: 'Annual Cashflow ($)', angle: 90, position: 'insideRight' }}
-          tickFormatter={formatCurrency}
-          tick={{ fontSize: 12 }}
-          domain={[minRightAxis, maxRightAxis]}
-          allowDataOverflow={false}
-        />
-        <RechartsTooltip content={<CustomTooltip />} />
-        <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" yAxisId="left" />
-        <Legend 
-          wrapperStyle={{ paddingTop: 10 }}
-          formatter={(value) => {
-            if (value === 'propertyValue') return 'Property Value';
-            if (value === 'equity') return 'Equity';
-            if (value === 'cashflow') return 'Annual Cashflow';
-            return value;
+    <Box sx={{ width: '100%', height, mb: 2, position: 'relative' }}>
+      <canvas 
+        ref={canvasRef} 
+        style={{ 
+          width: '100%', 
+          height: '100%'
+        }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      />
+      {/* Tooltip */}
+      {hoverInfo && hoverInfo.visible && (
+        <div
+          style={{
+            position: 'absolute',
+            left: `${hoverInfo.x + 10}px`,
+            top: `${hoverInfo.y - 80}px`,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            color: 'white',
+            padding: '8px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            pointerEvents: 'none',
+            zIndex: 1000,
+            whiteSpace: 'nowrap'
           }}
-        />
-        <Line 
-          yAxisId="left"
-          type="monotone" 
-          dataKey="propertyValue" 
-          stroke="#4f46e5" 
-          strokeWidth={2}
-          dot={false}
-        />
-        <Line 
-          yAxisId="left"
-          type="monotone" 
-          dataKey="equity" 
-          stroke="#10b981" 
-          strokeWidth={2}
-          dot={false}
-        />
-        <Bar 
-          yAxisId="right"
-          dataKey="cashflow" 
-          barSize={16}
-          isAnimationActive={false}
-          shape={<CustomBar />}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+        >
+          <div>Year: {hoverInfo.year}</div>
+          <div>Property Value: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.propertyValue)}</div>
+          <div>Equity: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.equity)}</div>
+          <div>Cashflow: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.cashflow)}</div>
+        </div>
+      )}
+    </Box>
   );
 };
 
@@ -447,9 +600,6 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   const [propertyValueIncreaseRate, setPropertyValueIncreaseRate] = useState<number>(3); // Default 3%
   const [yearsToProject, setYearsToProject] = useState<number>(30); // Default 30 years
   
-  // Add state for copy preview dialog near other state declarations 
-  const [copyPreviewOpen, setCopyPreviewOpen] = useState(false);
-  
   // Load property data
   useEffect(() => {
     if (!propertyId) {
@@ -461,72 +611,6 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     const foundProperty = properties.find(p => p.property_id === propertyId);
     
     if (!foundProperty) {
-      // First check if property data is in the URL using the new format (d parameter)
-      const searchParams = new URLSearchParams(location.search);
-      const compressedData = searchParams.get('d');
-      
-      if (compressedData) {
-        try {
-          // Restore base64 padding if needed
-          let base64Fixed = compressedData.replace(/-/g, '+').replace(/_/g, '/');
-          // Add padding if needed
-          switch (base64Fixed.length % 4) {
-            case 2: base64Fixed += '=='; break;
-            case 3: base64Fixed += '='; break;
-          }
-          
-          // Decode the base64 string to JSON
-          const jsonString = atob(base64Fixed);
-          
-          // Parse the JSON string to get the property object
-          const decodedProperty = JSON.parse(jsonString) as Property;
-          
-          // Ensure all required fields are present
-          if (decodedProperty && decodedProperty.property_id) {
-            // Use the property data from the URL
-            setProperty(decodedProperty);
-            setLoading(false);
-            
-            // Initialize custom rent to property's rent estimate
-            if (decodedProperty.rent_estimate) {
-              setCustomRentEstimate(decodedProperty.rent_estimate);
-              setDisplayRent(formatCurrency(decodedProperty.rent_estimate));
-            }
-            
-            // Also save the property to localStorage for future use
-            savePropertyToLocalStorage(decodedProperty);
-            return;
-          }
-        } catch (error) {
-          console.error('Error decoding property data from URL parameter d:', error);
-        }
-      }
-      
-      // Fall back to the old format (data parameter) for backwards compatibility
-      const propertyData = searchParams.get('data');
-      if (propertyData) {
-        try {
-          // Decode the property data from the URL
-          const decodedProperty = JSON.parse(decodeURIComponent(propertyData)) as Property;
-          
-          // Use the property data from the URL
-          setProperty(decodedProperty);
-          setLoading(false);
-          
-          // Initialize custom rent to property's rent estimate
-          if (decodedProperty.rent_estimate) {
-            setCustomRentEstimate(decodedProperty.rent_estimate);
-            setDisplayRent(formatCurrency(decodedProperty.rent_estimate));
-          }
-          
-          // Also save the property to localStorage for future use
-          savePropertyToLocalStorage(decodedProperty);
-          return;
-        } catch (error) {
-          console.error('Error decoding property data from URL parameter data:', error);
-        }
-      }
-      
       // Try to load from localStorage
       try {
         const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
@@ -563,7 +647,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       setCustomRentEstimate(foundProperty.rent_estimate);
       setDisplayRent(formatCurrency(foundProperty.rent_estimate));
     }
-  }, [propertyId, properties, formatCurrency, location.search]);
+  }, [propertyId, properties, formatCurrency]);
   
   // Update page title when property loads
   useEffect(() => {
@@ -753,117 +837,36 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     updateUrlWithSettings({ [paramMap[setting]]: value });
   };
   
-  // Create a shareable URL with property data embedded
-  const createShareableUrl = () => {
-    if (!property) {
-      console.error('Cannot create shareable URL: property is undefined');
-      return;
+  // Copy to clipboard handler
+  const handleCopyToClipboard = async () => {
+    const summary = generatePropertySummary();
+    
+    // Save the current property to localStorage to enable shared links to work
+    if (property) {
+      savePropertyToLocalStorage(property);
     }
     
     try {
-      // Create a minimal object with only the essential properties
-      // to keep the URL as short as possible
-      const minimalProperty = {
-        property_id: property.property_id,
-        address: property.address,
-        price: property.price,
-        rent_estimate: property.rent_estimate,
-        ratio: property.ratio,
-        thumbnail: property.thumbnail,
-        bedrooms: property.bedrooms,
-        bathrooms: property.bathrooms,
-        sqft: property.sqft,
-        url: property.url,
-        days_on_market: property.days_on_market,
-        rent_source: property.rent_source || "calculated"
-      };
-      
-      // Compress the data before encoding to create a shorter URL
-      // First, stringify the object to JSON
-      const jsonString = JSON.stringify(minimalProperty);
-      console.log('Property data JSON length:', jsonString.length);
-      
-      // Base64 encode the JSON string to make it URL-safe
-      let base64Data = btoa(jsonString);
-      
-      // Make the base64 string URL-safe by replacing + with - and / with _
-      base64Data = base64Data.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      console.log('Base64 encoded data length:', base64Data.length);
-      
-      // Get the base URL (without hash or search params)
-      const url = new URL(window.location.href);
-      const urlBase = url.origin + url.pathname;
-      
-      // Construct full URL with hash routing and query parameter
-      // This works better with React Router's hash routing
-      const fullUrl = `${urlBase}#/property/${property.property_id}?d=${base64Data}`;
-      
-      // Update the URL without reloading the page
-      window.history.replaceState({}, '', fullUrl);
-      
-      // For debugging - log the URL length to console
-      console.log(`Shareable URL created - Length: ${fullUrl.length} characters`);
-      console.log(`Shareable URL: ${fullUrl}`);
-      
-      // Return the URL for direct use
-      return fullUrl;
-    } catch (error) {
-      console.error('Error creating shareable URL:', error);
-      return null;
+      await navigator.clipboard.writeText(summary);
+      setCopySuccess('Copied to clipboard!');
+      setTimeout(() => setCopySuccess(''), 3000);
+    } catch (err) {
+      setCopySuccess('Failed to copy! Try selecting and copying the text manually.');
     }
   };
 
-  // Update the copy to clipboard handler to show preview first
-  const handleCopyToClipboard = async () => {
-    // Show the preview dialog instead of immediately copying
-    if (property) {
-      savePropertyToLocalStorage(property);
-      createShareableUrl();
-      setCopyPreviewOpen(true);
-    } else {
-      console.error('Cannot copy to clipboard: property is undefined');
-    }
-  };
-
-  // Add a function to handle the actual copying when confirmed
-  const handleConfirmCopy = async () => {
-    if (property) {
-      const summary = generatePropertySummary();
-      try {
-        await navigator.clipboard.writeText(summary);
-        setCopySuccess('Copied to clipboard!');
-        setTimeout(() => setCopySuccess(''), 3000);
-      } catch (err) {
-        setCopySuccess('Failed to copy! Try selecting and copying the text manually.');
-        console.error('Clipboard error:', err);
-      }
-    }
-    setCopyPreviewOpen(false);
-  };
-
-  // Update email share handler
+  // Email share handler
   const handleEmailShare = () => {
     // Save the current property to localStorage to enable shared links to work
     if (property) {
       savePropertyToLocalStorage(property);
-      
-      // Create a shareable URL and get the URL string
-      const shareableUrl = createShareableUrl();
-      
-      // Include the shareable URL in the email body
-      const summary = encodeURIComponent(generatePropertySummary() + 
-        '\n\nView this property online: ' + shareableUrl);
-      const subject = encodeURIComponent(`Property Investment Analysis: ${property.address}`);
-      
-      // Log the URL for troubleshooting
-      console.log('Shareable URL for email:', shareableUrl);
-      
-      window.open(`mailto:?subject=${subject}&body=${summary}`);
-    } else {
-      console.error('Cannot share via email: property is undefined');
     }
+    
+    const summary = encodeURIComponent(generatePropertySummary());
+    const subject = encodeURIComponent(`Property Investment Analysis: ${property?.address}`);
+    window.open(`mailto:?subject=${subject}&body=${summary}`);
   };
-
+  
   // Add new function to save property to localStorage
   const savePropertyToLocalStorage = (prop: Property) => {
     try {
@@ -1031,31 +1034,6 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
 `;
   };
   
-  // Add a handler function to copy just the URL to clipboard
-  const handleShareUrl = async () => {
-    if (property) {
-      // Save the property to localStorage
-      savePropertyToLocalStorage(property);
-      
-      // Create the shareable URL and get the URL string
-      const shareableUrl = createShareableUrl();
-      
-      if (shareableUrl) {
-        try {
-          // Copy the URL to clipboard
-          await navigator.clipboard.writeText(shareableUrl);
-          setCopySuccess('URL copied to clipboard!');
-          setTimeout(() => setCopySuccess(''), 3000);
-        } catch (err) {
-          setCopySuccess('Failed to copy URL. Try copying it from the address bar.');
-          console.error('Clipboard error:', err);
-        }
-      }
-    } else {
-      console.error('Cannot share URL: property is undefined');
-    }
-  };
-  
   // Display loading state
   if (loading) {
     return (
@@ -1100,75 +1078,62 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
   const chartEquity = longTermCashflowData.map(data => data.equity);
   const chartCashflow = longTermCashflowData.map(data => data.yearlyCashflow);
   
+  // Custom bar component for handling positive and negative cashflow values
+  const CustomBar = (props: any) => {
+    const { x, y, width, height, value } = props;
+    
+    // Use different colors for positive and negative values
+    const barFill = value >= 0 ? '#f97316' : '#ef4444';
+    
+    // Let Recharts handle the positioning
+    return (
+      <rect 
+        x={x} 
+        y={y} 
+        width={width} 
+        height={Math.abs(height)} 
+        fill={barFill} 
+      />
+    );
+  };
+  
   return (
     <>
       <CssBaseline />
-      <MapStyles />
-      <AppBar position="sticky" elevation={0} sx={{ 
-        borderBottom: '1px solid rgba(255,255,255,0.1)',
-        bgcolor: '#6366f1'
-      }}>
-        <Toolbar sx={{ flexWrap: 'wrap' }}>
+      <AppBar position="sticky" color="default" elevation={0} sx={{ borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+        <Toolbar>
           <IconButton 
             edge="start" 
-            color="inherit"
+            color="inherit" 
             aria-label="back" 
             onClick={handleBackToSearch}
             sx={{ mr: 2 }}
           >
             <ArrowBackIcon />
           </IconButton>
-          <HomeWorkIcon sx={{ mr: 1, color: 'white' }} />
+          <HomeWorkIcon sx={{ mr: 1, color: 'primary.main' }} />
           <Typography variant="h6" color="inherit" noWrap sx={{ flexGrow: 1 }}>
             RentalSearch
           </Typography>
-          
-          {/* Mobile-friendly button group with dropdown on small screens */}
-          <Box sx={{ 
-            display: { xs: 'none', sm: 'flex' }, 
-            gap: 1 
-          }}>
-            <Button 
-              variant="outlined" 
-              startIcon={<LinkIcon />}
-              onClick={handleShareUrl}
-              color="inherit"
-              sx={{ borderColor: 'rgba(255,255,255,0.5)' }}
-            >
-              Share URL
-            </Button>
-            <Button 
-              variant="outlined" 
-              startIcon={<ShareIcon />}
-              onClick={handleCopyToClipboard}
-              color="inherit"
-              sx={{ borderColor: 'rgba(255,255,255,0.5)' }}
-            >
-              Copy Analysis
-            </Button>
-          </Box>
-          
-          {/* Mobile menu - only shown on xs screens */}
-          <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-            <IconButton
-              color="inherit"
-              onClick={handleShareUrl}
-              sx={{ mr: 1 }}
-            >
-              <LinkIcon />
-            </IconButton>
-            <IconButton
-              color="inherit"
-              onClick={handleCopyToClipboard}
-              sx={{ mr: 1 }}
-            >
-              <ShareIcon />
-            </IconButton>
-          </Box>
+          <Button 
+            variant="outlined" 
+            startIcon={<ShareIcon />}
+            onClick={handleCopyToClipboard}
+            sx={{ mr: 1 }}
+          >
+            Copy Analysis
+          </Button>
+          <Button 
+            variant="outlined"
+            startIcon={<EmailIcon />}
+            onClick={handleEmailShare}
+          >
+            Email
+          </Button>
         </Toolbar>
       </AppBar>
       
-      <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Success message for clipboard copy */}
         {copySuccess && (
           <Alert severity="success" sx={{ mb: 3 }}>
@@ -1177,16 +1142,12 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
         )}
         
         {/* Property Header */}
-        <Box sx={{ mb: { xs: 2, md: 4 } }}>
-          <Typography variant="h4" component="h1" gutterBottom sx={{ 
-            fontSize: { xs: '1.5rem', md: '2.125rem' }
-          }}>
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h4" component="h1" gutterBottom>
             {property.address}
           </Typography>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', mb: 2 }}>
-            <Typography variant="h5" component="div" fontWeight="bold" sx={{
-              fontSize: { xs: '1.25rem', md: '1.5rem' }
-            }}>
+            <Typography variant="h5" component="div" fontWeight="bold">
               {formatCurrency(property.price)}
             </Typography>
             <span className={`ratio-chip ${property.ratio >= 0.007 ? 'ratio-good' : property.ratio >= 0.004 ? 'ratio-medium' : 'ratio-poor'}`}>
@@ -1200,12 +1161,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           </Box>
         </Box>
         
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: { xs: 'column', md: 'row' }, 
-          gap: { xs: 2, md: 4 }, 
-          mb: { xs: 2, md: 4 } 
-        }}>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4, mb: 4 }}>
           {/* Left column: Property image and details */}
           <Box sx={{ flex: '1', maxWidth: { xs: '100%', md: '40%' } }}>
             <Box>
@@ -1221,16 +1177,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               />
             </Box>
             
-            {/* Add Map */}
-            <Paper sx={{ mt: 3, p: { xs: 2, md: 3 }, borderRadius: 2 }}>
-              <Typography variant="h6" gutterBottom>Location</Typography>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                {property.address}
-              </Typography>
-              <MapWrapper address={property.address} />
-            </Paper>
-            
-            <Paper sx={{ mt: 3, p: { xs: 2, md: 3 }, borderRadius: 2 }}>
+            <Paper sx={{ mt: 3, p: 3, borderRadius: 2 }}>
               <Typography variant="h6" gutterBottom>Property Details</Typography>
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
                 <Box sx={{ textAlign: 'center' }}>
@@ -1250,7 +1197,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               <Divider sx={{ my: 2 }} />
               
               <Typography variant="h6" gutterBottom>External Links</Typography>
-              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 2 }}>
                 <Button 
                   variant="outlined" 
                   startIcon={<HomeIcon />} 
@@ -1258,7 +1205,6 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                   href={property.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  size="small"
                 >
                   View on Zillow
                 </Button>
@@ -1269,7 +1215,6 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                   href={rentCastUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  size="small"
                 >
                   Rentcast Analysis
                 </Button>
@@ -1280,22 +1225,22 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           {/* Right column: Cashflow Analysis & Settings */}
           <Box sx={{ flex: '1', maxWidth: { xs: '100%', md: '60%' } }}>
             {/* Cashflow Header */}
-            <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 2, mb: 3 }}>
-              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mb: 1 }}>
-                <Typography variant="h5" sx={{ mb: { xs: 1, sm: 0 }, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>Cashflow Analysis</Typography>
+            <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="h5">Cashflow Analysis</Typography>
                 <Box>
                   <Typography 
                     variant="h5" 
                     fontWeight="bold" 
                     color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}
-                    sx={{ textAlign: { xs: 'left', sm: 'right' }, fontSize: { xs: '1.25rem', md: '1.5rem' } }}
+                    sx={{ textAlign: 'right' }}
                   >
                     {formatCurrency(cashflow.monthlyCashflow)}/mo
                   </Typography>
                   <Typography 
                     variant="body2" 
                     color={cashflow.annualCashflow >= 0 ? 'success.main' : 'error.main'}
-                    sx={{ textAlign: { xs: 'left', sm: 'right' } }}
+                    sx={{ textAlign: 'right' }}
                   >
                     {formatCurrency(cashflow.annualCashflow)}/year
                   </Typography>
@@ -1317,7 +1262,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                         onChange={handleRentChange}
                         onFocus={handleRentFocus}
                         onBlur={handleRentBlur}
-                        sx={{ maxWidth: { xs: '100px', sm: '120px' } }}
+                        sx={{ maxWidth: '120px' }}
                         InputProps={{
                           endAdornment: <EditIcon sx={{ fontSize: 16, color: '#6b7280', opacity: 0.7 }} />,
                         }}
@@ -1410,10 +1355,10 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 bottom: 16,
                 right: 16,
                 zIndex: 1250,
-                bgcolor: '#6366f1',
+                bgcolor: '#4f46e5',
                 color: 'white',
                 '&:hover': {
-                  bgcolor: '#4f46e5'
+                  bgcolor: '#4338ca'
                 } 
               }}
             >
@@ -1443,59 +1388,59 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 {/* Sliders use settings state and handleSettingChange */}
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    <MuiTooltip title="The annual interest rate for your mortgage loan. Higher rates increase your monthly payment." arrow>
+                    <Tooltip title="The annual interest rate for your mortgage loan. Higher rates increase your monthly payment." arrow>
                       <span>Interest Rate: {settings.interestRate}%</span>
-                    </MuiTooltip>
+                    </Tooltip>
                   </Typography>
-                  <Slider value={settings.interestRate} onChange={handleSettingChange('interestRate')} aria-labelledby="interest-rate-slider" valueLabelDisplay="auto" step={0.1} min={0.1} max={15} sx={{ color: '#6366f1' }} />
+                  <Slider value={settings.interestRate} onChange={handleSettingChange('interestRate')} aria-labelledby="interest-rate-slider" valueLabelDisplay="auto" step={0.1} min={0.1} max={15} sx={{ color: '#4f46e5' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    <MuiTooltip title="The number of years you'll be paying your mortgage. Longer terms reduce monthly payments but increase total interest paid." arrow>
+                    <Tooltip title="The number of years you'll be paying your mortgage. Longer terms reduce monthly payments but increase total interest paid." arrow>
                       <span>Loan Term: {settings.loanTerm} years</span>
-                    </MuiTooltip>
+                    </Tooltip>
                   </Typography>
-                  <Slider value={settings.loanTerm} onChange={handleSettingChange('loanTerm')} aria-labelledby="loan-term-slider" valueLabelDisplay="auto" step={1} min={5} max={40} sx={{ color: '#6366f1' }} />
+                  <Slider value={settings.loanTerm} onChange={handleSettingChange('loanTerm')} aria-labelledby="loan-term-slider" valueLabelDisplay="auto" step={1} min={5} max={40} sx={{ color: '#4f46e5' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    <MuiTooltip title="Percentage of the property price you pay upfront. Higher down payments reduce your loan amount and monthly payments." arrow>
+                    <Tooltip title="Percentage of the property price you pay upfront. Higher down payments reduce your loan amount and monthly payments." arrow>
                       <span>Down Payment: {settings.downPaymentPercent}%</span>
-                    </MuiTooltip>
+                    </Tooltip>
                   </Typography>
-                  <Slider value={settings.downPaymentPercent} onChange={handleSettingChange('downPaymentPercent')} aria-labelledby="down-payment-slider" valueLabelDisplay="auto" step={1} min={0} max={100} sx={{ color: '#6366f1' }} />
+                  <Slider value={settings.downPaymentPercent} onChange={handleSettingChange('downPaymentPercent')} aria-labelledby="down-payment-slider" valueLabelDisplay="auto" step={1} min={0} max={100} sx={{ color: '#4f46e5' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    <MuiTooltip title="Annual property taxes and insurance calculated as a percentage of property value. Varies by location." arrow>
+                    <Tooltip title="Annual property taxes and insurance calculated as a percentage of property value. Varies by location." arrow>
                       <span>Property Tax & Insurance: {settings.taxInsurancePercent}%</span>
-                    </MuiTooltip>
+                    </Tooltip>
                   </Typography>
-                  <Slider value={settings.taxInsurancePercent} onChange={handleSettingChange('taxInsurancePercent')} min={0} max={5} step={0.1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#6366f1' }} />
+                  <Slider value={settings.taxInsurancePercent} onChange={handleSettingChange('taxInsurancePercent')} min={0} max={5} step={0.1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    <MuiTooltip title="Expected percentage of time the property will be vacant. Higher vacancy rates reduce annual income." arrow>
+                    <Tooltip title="Expected percentage of time the property will be vacant. Higher vacancy rates reduce annual income." arrow>
                       <span>Vacancy: {settings.vacancyPercent}%</span>
-                    </MuiTooltip>
+                    </Tooltip>
                   </Typography>
-                  <Slider value={settings.vacancyPercent} onChange={handleSettingChange('vacancyPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#6366f1' }} />
+                  <Slider value={settings.vacancyPercent} onChange={handleSettingChange('vacancyPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    <MuiTooltip title="Capital Expenditures - funds set aside for major repairs and replacements (roof, HVAC, etc.)." arrow>
+                    <Tooltip title="Capital Expenditures - funds set aside for major repairs and replacements (roof, HVAC, etc.)." arrow>
                       <span>CapEx: {settings.capexPercent}%</span>
-                    </MuiTooltip>
+                    </Tooltip>
                   </Typography>
-                  <Slider value={settings.capexPercent} onChange={handleSettingChange('capexPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#6366f1' }} />
+                  <Slider value={settings.capexPercent} onChange={handleSettingChange('capexPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
                 </Box>
                 <Box sx={{ mb: 0 }}>
                   <Typography variant="body2" gutterBottom>
-                    <MuiTooltip title="Fee for property management services, typically a percentage of monthly rent. Set to 0% if self-managing." arrow>
+                    <Tooltip title="Fee for property management services, typically a percentage of monthly rent. Set to 0% if self-managing." arrow>
                       <span>Property Management: {settings.propertyManagementPercent}%</span>
-                    </MuiTooltip>
+                    </Tooltip>
                   </Typography>
-                  <Slider value={settings.propertyManagementPercent} onChange={handleSettingChange('propertyManagementPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#6366f1' }} />
+                  <Slider value={settings.propertyManagementPercent} onChange={handleSettingChange('propertyManagementPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
                 </Box>
               </Paper>
             )}
@@ -1511,32 +1456,33 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 3 }}>
               <Box sx={{ flex: 1 }}>
                 <Typography variant="body2" gutterBottom>
-                  <MuiTooltip title="Expected annual increase in rental rates due to inflation and market demand. Historically averages 2-4% in most markets." arrow>
+                  <Tooltip title="Expected annual increase in rental rates due to inflation and market demand. Historically averages 2-4% in most markets." arrow>
                     <span>Annual Rent Appreciation: {rentAppreciationRate}%</span>
-                  </MuiTooltip>
+                  </Tooltip>
                 </Typography>
-                <Slider value={rentAppreciationRate} onChange={handleRentAppreciationChange} aria-labelledby="rent-appreciation-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#6366f1' }} />
+                <Slider value={rentAppreciationRate} onChange={handleRentAppreciationChange} aria-labelledby="rent-appreciation-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#4f46e5' }} />
               </Box>
               <Box sx={{ flex: 1 }}>
                 <Typography variant="body2" gutterBottom>
-                  <MuiTooltip title="Expected annual increase in property value over time. Historically real estate appreciates at 3-5% annually over the long term." arrow>
+                  <Tooltip title="Expected annual increase in property value over time. Historically real estate appreciates at 3-5% annually over the long term." arrow>
                     <span>Property Value Increase: {propertyValueIncreaseRate}%</span>
-                  </MuiTooltip>
+                  </Tooltip>
                 </Typography>
-                <Slider value={propertyValueIncreaseRate} onChange={handlePropertyValueIncreaseChange} aria-labelledby="property-value-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#6366f1' }} />
+                <Slider value={propertyValueIncreaseRate} onChange={handlePropertyValueIncreaseChange} aria-labelledby="property-value-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#4f46e5' }} />
               </Box>
             </Box>
           </Box>
           
-          <Box sx={{ width: '100%', mb: 4, height: 350 }}>
+          <Box sx={{ width: '100%', mb: 4, height: 300 }}>
             <Typography variant="subtitle2" gutterBottom>Property Value & Equity Growth</Typography>
-            <PropertyChart 
+            <SimpleChart 
               data={{
                 years: chartYears,
                 propertyValues: chartPropertyValues,
                 equity: chartEquity,
                 cashflow: chartCashflow
               }}
+              height={300}
             />
           </Box>
           
@@ -1546,63 +1492,63 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 <TableHead>
                   <TableRow>
                     <TableCell>
-                      <MuiTooltip title="Projection year" arrow placement="top">
+                      <Tooltip title="Projection year" arrow placement="top">
                         <span>Year</span>
-                      </MuiTooltip>
+                      </Tooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <MuiTooltip 
+                      <Tooltip 
                         title="Estimated property value after appreciation. Calculated using the initial property price compounded annually by the property value increase rate." 
                         arrow 
                         placement="top"
                       >
                         <span>Property Value</span>
-                      </MuiTooltip>
+                      </Tooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <MuiTooltip 
+                      <Tooltip 
                         title="Projected annual rental income. Calculated using the initial rent amount compounded annually by the rent appreciation rate." 
                         arrow 
                         placement="top"
                       >
                         <span>Annual Rent</span>
-                      </MuiTooltip>
+                      </Tooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <MuiTooltip 
+                      <Tooltip 
                         title="Total annual expenses including mortgage, taxes, insurance, vacancy, capital expenditures, and property management." 
                         arrow 
                         placement="top"
                       >
                         <span>Expenses</span>
-                      </MuiTooltip>
+                      </Tooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <MuiTooltip 
+                      <Tooltip 
                         title="Annual rental income minus all expenses. Represents your profit or loss each year." 
                         arrow 
                         placement="top"
                       >
                         <span>Cashflow</span>
-                      </MuiTooltip>
+                      </Tooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <MuiTooltip 
+                      <Tooltip 
                         title="Your ownership stake in the property. Calculated as property value minus remaining mortgage balance. Grows through principal payments and property appreciation." 
                         arrow 
                         placement="top"
                       >
                         <span>Equity</span>
-                      </MuiTooltip>
+                      </Tooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <MuiTooltip 
+                      <Tooltip 
                         title="Return on Investment percentage. Calculated as annual cashflow divided by initial investment (down payment + closing costs)." 
                         arrow 
                         placement="top"
                       >
                         <span>ROI</span>
-                      </MuiTooltip>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 </TableHead>
@@ -1636,27 +1582,6 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           </Box>
         </Paper>
       </Container>
-      
-      {/* Copy Analysis Preview Dialog */}
-      <Dialog 
-        open={copyPreviewOpen} 
-        onClose={() => setCopyPreviewOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>Analysis Preview</DialogTitle>
-        <DialogContent>
-          <Paper sx={{ p: 2, fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: '50vh', overflow: 'auto' }}>
-            {property && generatePropertySummary()}
-          </Paper>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCopyPreviewOpen(false)}>Cancel</Button>
-          <Button onClick={handleConfirmCopy} variant="contained" color="primary">
-            Copy to Clipboard
-          </Button>
-        </DialogActions>
-      </Dialog>
     </>
   );
 };
