@@ -251,6 +251,21 @@ const PropertyChart = ({
   // For negative values, we need to make them "more negative" by multiplying by 1.1
   const minRightAxis = minCashflow === 0 ? 0 : minCashflow * 1.1;
 
+  // Calculate proportional scales to ensure zero-alignment
+  // Calculate the total range for both axes
+  const leftAxisRange = maxLeftAxis;
+  const rightAxisRange = Math.abs(maxRightAxis - minRightAxis);
+  
+  // Calculate the proportion of negative space in the right axis
+  const negativeRightAxisProportion = minRightAxis < 0 
+    ? Math.abs(minRightAxis) / rightAxisRange 
+    : 0;
+
+  // Adjust left axis domain to include a proportional amount of negative space
+  const adjustedMinLeftAxis = negativeRightAxisProportion > 0 
+    ? -1 * (leftAxisRange * negativeRightAxisProportion / (1 - negativeRightAxisProportion)) 
+    : 0;
+
   // Format currency for tooltips
   const formatCurrency = (value: number) => {
     if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
@@ -317,10 +332,10 @@ const PropertyChart = ({
     // Use different colors for positive and negative values
     const barFill = value >= 0 ? '#f97316' : '#ef4444';
     
-    // For negative values, we need to calculate position differently
-    // In Recharts, for positive values, 'y' is the top of the bar
-    // For negative values, 'y' is the position of the zero line, and we need to draw downward
-    const barY = value >= 0 ? y : y - height;
+    // In Recharts:
+    // - For positive values: y is the top of the bar (smaller y value in SVG coordinates)
+    // - For negative values: y is the zero line position, and the bar should extend downward
+    const barY = value >= 0 ? y : y;
     const barHeight = Math.abs(height);
     
     return <rect x={x} y={barY} width={width} height={barHeight} fill={barFill} />;
@@ -344,7 +359,7 @@ const PropertyChart = ({
           label={{ value: 'Property Value & Equity ($)', angle: -90, position: 'insideLeft' }}
           tickFormatter={formatCurrency}
           tick={{ fontSize: 12 }}
-          domain={[0, maxLeftAxis]}
+          domain={[adjustedMinLeftAxis, maxLeftAxis]}
           allowDataOverflow={false}
         />
         <YAxis 
@@ -357,7 +372,7 @@ const PropertyChart = ({
           allowDataOverflow={false}
         />
         <RechartsTooltip content={<CustomTooltip />} />
-        <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" yAxisId="right" />
+        <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" yAxisId="left" />
         <Legend 
           wrapperStyle={{ paddingTop: 10 }}
           formatter={(value) => {
