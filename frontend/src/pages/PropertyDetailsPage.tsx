@@ -50,7 +50,8 @@ import {
   CartesianGrid, 
   Tooltip as RechartsTooltip, 
   Legend,
-  TooltipProps
+  TooltipProps,
+  ReferenceLine
 } from 'recharts';
 
 // Add explicit CSS styles for Leaflet to ensure it displays correctly
@@ -238,6 +239,17 @@ const PropertyChart = ({
     cashflow: data.cashflow[index]
   }));
 
+  // Calculate min/max values for proper domain scaling
+  const maxPropertyValue = Math.max(...data.propertyValues);
+  const maxEquity = Math.max(...data.equity);
+  const maxLeftAxis = Math.max(maxPropertyValue, maxEquity) * 1.1; // Add 10% padding for better visibility
+  
+  const maxCashflow = Math.max(0, ...data.cashflow);
+  const minCashflow = Math.min(0, ...data.cashflow);
+  // Add padding for better visibility
+  const maxRightAxis = maxCashflow === 0 ? 1000 : maxCashflow * 1.1; 
+  const minRightAxis = minCashflow === 0 ? 0 : minCashflow * 1.1;
+
   // Format currency for tooltips
   const formatCurrency = (value: number) => {
     if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
@@ -295,15 +307,17 @@ const PropertyChart = ({
     return null;
   };
 
-  // Since we have positive and negative cashflow values, define a custom bar shape
+  // Custom bar component for handling positive and negative cashflow values
   const CustomBar = (props: any) => {
-    const { x, y, width, height, fill, dataKey, value } = props;
+    const { x, y, width, height, value } = props;
     
     // Use different colors for positive and negative values
     const barFill = value >= 0 ? '#f97316' : '#ef4444';
     
     // For negative values, the bar should go down from the zero line
-    const barY = value >= 0 ? y : y - height;
+    // Note: In Recharts, for negative values, y is already positioned at the zero line
+    // and height will be positive, so we need to adjust
+    const barY = value >= 0 ? y : y;
     const barHeight = Math.abs(height);
     
     return <rect x={x} y={barY} width={width} height={barHeight} fill={barFill} />;
@@ -327,6 +341,8 @@ const PropertyChart = ({
           label={{ value: 'Property Value & Equity ($)', angle: -90, position: 'insideLeft' }}
           tickFormatter={formatCurrency}
           tick={{ fontSize: 12 }}
+          domain={[0, maxLeftAxis]}
+          allowDataOverflow={false}
         />
         <YAxis 
           yAxisId="right"
@@ -334,8 +350,11 @@ const PropertyChart = ({
           label={{ value: 'Annual Cashflow ($)', angle: 90, position: 'insideRight' }}
           tickFormatter={formatCurrency}
           tick={{ fontSize: 12 }}
+          domain={[minRightAxis, maxRightAxis]}
+          allowDataOverflow={false}
         />
         <RechartsTooltip content={<CustomTooltip />} />
+        <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" />
         <Legend 
           wrapperStyle={{ paddingTop: 10 }}
           formatter={(value) => {
