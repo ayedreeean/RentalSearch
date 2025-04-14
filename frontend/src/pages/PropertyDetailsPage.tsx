@@ -1264,8 +1264,9 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
   const generateShareableURL = (): string => {
     if (!property) return window.location.href;
     
-    // Start with the base URL
-    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    // Instead of using current pathname, create a proper path to the property details page
+    // This ensures the router will handle it correctly when shared
+    const baseUrl = `${window.location.origin}/RentalSearch/#/property/${property.property_id}`;
     
     // Create a URLSearchParams object for the query parameters
     const params = new URLSearchParams();
