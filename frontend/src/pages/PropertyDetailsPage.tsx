@@ -821,7 +821,6 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     };
   }, [property]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   // Handle URL query parameters for settings
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -874,7 +873,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     
     if (vc) {
       const val = parseInt(vc, 10);
-      if (!isNaN(val) && val >= 0 && val <= 20) { // Allow up to 20% vacancy
+      if (!isNaN(val) && val >= 0 && val <= 10) {
         newSettings.vacancyPercent = val;
         updated = true;
       }
@@ -908,8 +907,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
         setDisplayRent(formatCurrency(val));
       }
     }
-    // Ensure customRentEstimate is in the dependency array (line ~809)
-  }, [location.search, defaultSettings, property, formatCurrency, customRentEstimate]); // Added customRentEstimate
+  }, [location.search, defaultSettings, property, formatCurrency, customRentEstimate]);
   
   // Add useEffect for long-term projection settings from URL
   useEffect(() => {
@@ -1168,9 +1166,11 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       
       // Calculate ROI
       const initialInvestment = property.price * (settings.downPaymentPercent / 100) + property.price * 0.03;
-      const cashOnCashReturn = initialInvestment > 0 ? (yearlyCashflow / initialInvestment) * 100 : 0; // Avoid division by zero
+      const cashOnCashReturn = (yearlyCashflow / initialInvestment) * 100;
+      
+      // Calculate ROI with equity growth included
       const totalReturn = yearlyCashflow + equityGrowth;
-      const roiWithEquity = initialInvestment > 0 ? (totalReturn / initialInvestment) * 100 : 0; // Avoid division by zero
+      const roiWithEquity = (totalReturn / initialInvestment) * 100;
       
       years.push({
         year: i,
