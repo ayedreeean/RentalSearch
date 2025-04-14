@@ -1228,19 +1228,20 @@ function App() {
     propertyManagementPercent
   };
   
-  // Check if this is the user's first visit
+  // Check if user has explicitly dismissed the marketing section
   useEffect(() => {
-    const hasVisitedBefore = localStorage.getItem('rentalSearchHasVisited');
-    if (hasVisitedBefore) {
+    const hasExplicitlyDismissed = localStorage.getItem('rentalSearchMarketingDismissed');
+    if (hasExplicitlyDismissed === 'true') {
       setShowMarketingIntro(false);
     } else {
-      localStorage.setItem('rentalSearchHasVisited', 'true');
+      setShowMarketingIntro(true);
     }
   }, []);
 
   // Handler to dismiss marketing section
   const handleDismissMarketing = () => {
     setShowMarketingIntro(false);
+    localStorage.setItem('rentalSearchMarketingDismissed', 'true');
   };
   
   return (
