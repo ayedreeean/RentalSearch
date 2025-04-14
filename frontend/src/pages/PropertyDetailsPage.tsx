@@ -40,7 +40,17 @@ import { Property, Cashflow, CashflowSettings } from '../types';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-// import { LineChart } from '@mui/x-charts/LineChart';
+import { 
+  VictoryChart, 
+  VictoryLine, 
+  VictoryBar, 
+  VictoryAxis, 
+  VictoryLabel, 
+  VictoryTheme, 
+  VictoryTooltip, 
+  VictoryVoronoiContainer,
+  VictoryLegend
+} from 'victory';
 
 // Add explicit CSS styles for Leaflet to ensure it displays correctly
 const mapStyles = `
@@ -208,512 +218,137 @@ const PropertyMap = ({ address }: { address: string }) => {
   );
 };
 
-// Adjust the SimpleChart component to ensure all bars are fully visible
-const SimpleChart = ({ 
-  data, 
-  height = 300
+// Replace the PropertyChart implementation with this simplified version
+const PropertyChart = ({ 
+  data
 }: { 
   data: { 
     years: number[], 
     propertyValues: number[],
     equity: number[],
     cashflow: number[]
-  },
-  height?: number 
+  }
 }) => {
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  
-  // Add state for tracking hover position and displayed tooltip
-  const [hoverInfo, setHoverInfo] = React.useState<{
-    visible: boolean,
-    x: number,
-    y: number,
-    year: number,
-    propertyValue: number,
-    equity: number,
-    cashflow: number
-  } | null>(null);
-  
-  // Draw chart function
-  const drawChart = React.useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Set canvas dimensions accounting for device pixel ratio
-    const ratio = window.devicePixelRatio || 1;
-    canvas.width = canvas.offsetWidth * ratio;
-    canvas.height = canvas.offsetHeight * ratio;
-    ctx.scale(ratio, ratio);
-    
-    const canvasWidth = canvas.offsetWidth;
-    const canvasHeight = canvas.offsetHeight;
-    
-    // Padding - increase horizontal padding to prevent bar cutoff
-    const padding = {
-      top: 50,         // Increased to make room for title
-      right: 130,      // Increased for secondary Y-axis labels and last bar
-      bottom: 80,      // Increased for X-axis labels and legend
-      left: 130        // Increased for primary Y-axis labels and first bar
-    };
-    
-    const chartWidth = canvasWidth - padding.left - padding.right;
-    const chartHeight = canvasHeight - padding.top - padding.bottom;
-    
-    // Calculate scales for primary Y-axis (property values & equity)
-    const maxPropertyValue = Math.max(...data.propertyValues);
-    const maxEquity = Math.max(...data.equity);
-    const maxPrimaryY = Math.max(maxPropertyValue, maxEquity);
-    
-    // Calculate scales for secondary Y-axis (cashflow)
-    const maxCashflow = Math.max(...data.cashflow);
-    const minCashflow = Math.min(...data.cashflow);
-    
-    // For positive-only data, start at 0. For data with negatives, include the negative range.
-    const minSecondaryY = Math.min(0, minCashflow);
-    const maxSecondaryY = Math.max(0, maxCashflow);
-    
-    // Calculate ratios to maintain proper scale proportions
-    const primaryToSecondaryRatio = maxPrimaryY / maxSecondaryY;
-    
-    // Add padding to both scales - increase primary Y padding to prevent cut-off
-    const primaryYPadding = maxPrimaryY * 0.2; // Increased from 0.1 to 0.2 (20% padding)
-    const secondaryYRange = maxSecondaryY - minSecondaryY;
-    const secondaryYPadding = secondaryYRange * 0.2; // More padding for cashflow scale
-    
-    // Determine the effective min/max for both axes, ensuring full visibility
-    const effectiveMinPrimaryY = 0; // Keep primary axis starting at 0
-    const effectiveMaxPrimaryY = maxPrimaryY + primaryYPadding;
-    
-    // Round the max value to a 'nice' number to ensure better axis scaling
-    const magnitude = Math.pow(10, Math.floor(Math.log10(effectiveMaxPrimaryY)));
-    const normalizedMaxY = Math.ceil(effectiveMaxPrimaryY / magnitude) * magnitude;
-    const roundedMaxPrimaryY = Math.max(effectiveMaxPrimaryY, normalizedMaxY);
-    
-    // Adjust secondary axis min/max to ensure all data is visible
-    // but maintain proportional relationship with primary axis
-    const effectiveMinSecondaryY = minSecondaryY - (minSecondaryY < 0 ? secondaryYPadding : 0);
-    const effectiveMaxSecondaryY = maxSecondaryY + secondaryYPadding;
-    
-    // Ensure the secondary scale can represent all data points
-    // by applying the primary:secondary ratio to determine appropriate scaling
-    const adjustedMaxSecondary = Math.max(effectiveMaxSecondaryY, roundedMaxPrimaryY / primaryToSecondaryRatio);
-    
-    // Calculate Y scales with adjusted ranges to ensure all data fits
-    const primaryYScale = chartHeight / (roundedMaxPrimaryY - effectiveMinPrimaryY);
-    const secondaryYScale = chartHeight / (adjustedMaxSecondary - effectiveMinSecondaryY);
-    
-    // Calculate zero Y-coordinate position (will be the same for both axes)
-    const zeroYCoordinate = canvasHeight - padding.bottom - ((0 - effectiveMinSecondaryY) * secondaryYScale);
-    
-    // Function to convert a primary Y value to canvas coordinate
-    const getPrimaryYCoordinate = (value: number) => {
-      // Align the zero point to match the secondary axis zero point
-      return zeroYCoordinate - ((value - 0) * primaryYScale);
-    };
-    
-    // Function to convert a secondary Y value to canvas coordinate
-    const getSecondaryYCoordinate = (value: number) => {
-      return canvasHeight - padding.bottom - ((value - effectiveMinSecondaryY) * secondaryYScale);
-    };
-    
-    // Calculate plot area width (space available for data points)
-    const plotAreaWidth = chartWidth;
-    
-    // Use data-based X coordinates instead of evenly spaced
-    // Calculate X scale with proper inset to keep bars within bounds
-    // For n points, divide width into n sections instead of n-1
-    const xScale = plotAreaWidth / Math.max(data.years.length - 1, 1);
-    
-    // Draw background grid
-    ctx.strokeStyle = '#f0f0f0';
-    ctx.lineWidth = 1;
-    
-    // Draw horizontal grid lines for primary axis
-    const primaryGridStep = Math.ceil(roundedMaxPrimaryY / 5);
-    for (let i = 0; i <= roundedMaxPrimaryY; i += primaryGridStep) {
-      const y = getPrimaryYCoordinate(i);
-      ctx.beginPath();
-      ctx.moveTo(padding.left, y);
-      ctx.lineTo(canvasWidth - padding.right, y);
-      ctx.stroke();
-    }
-    
-    // Draw primary Y-axis (left)
-    ctx.strokeStyle = '#aaa';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(padding.left, padding.top);
-    ctx.lineTo(padding.left, canvasHeight - padding.bottom);
-    ctx.stroke();
-    
-    // Draw secondary Y-axis (right)
-    ctx.beginPath();
-    ctx.moveTo(canvasWidth - padding.right, padding.top);
-    ctx.lineTo(canvasWidth - padding.right, canvasHeight - padding.bottom);
-    ctx.stroke();
-    
-    // Draw X-axis
-    const xAxisY = effectiveMinSecondaryY < 0 
-      ? getSecondaryYCoordinate(0) 
-      : canvasHeight - padding.bottom;
-    
-    ctx.beginPath();
-    ctx.moveTo(padding.left, xAxisY);
-    ctx.lineTo(canvasWidth - padding.right, xAxisY);
-    ctx.stroke();
-    
-    // Draw primary Y-axis labels (left - property values & equity)
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#666';
-    ctx.font = '10px Arial';
-    
-    // Calculate step size for primary Y axis labels - use fewer labels to avoid overlap
-    const optimalStepCount = 5;
-    let primaryStepSize = Math.ceil(roundedMaxPrimaryY / optimalStepCount);
-    
-    // Round step size to a nice number
-    const primaryMagnitude = Math.pow(10, Math.floor(Math.log10(primaryStepSize)));
-    primaryStepSize = Math.ceil(primaryStepSize / primaryMagnitude) * primaryMagnitude;
-    
-    // Draw primary Y axis labels
-    for (let i = 0; i <= roundedMaxPrimaryY; i += primaryStepSize) {
-      if (i > roundedMaxPrimaryY) break;
-      const y = getPrimaryYCoordinate(i);
-      
-      // Format large numbers with K or M suffix
-      let label;
-      if (i >= 1000000) {
-        label = '$' + (i / 1000000).toFixed(1) + 'M';
-      } else if (i >= 1000) {
-        label = '$' + (i / 1000).toFixed(0) + 'K';
-      } else {
-        label = '$' + i;
-      }
-      
-      ctx.fillText(label, padding.left - 8, y);
-    }
-    
-    // Draw secondary Y-axis labels (right - cashflow)
-    ctx.textAlign = 'left';
-    
-    // Calculate step size for secondary Y axis labels
-    let secondaryStepSize = (adjustedMaxSecondary - effectiveMinSecondaryY) / optimalStepCount;
-    
-    // Round step size to a nice number
-    const secondaryMagnitude = Math.pow(10, Math.floor(Math.log10(secondaryStepSize)));
-    secondaryStepSize = Math.ceil(secondaryStepSize / secondaryMagnitude) * secondaryMagnitude;
-    
-    // Start from the lowest multiple of stepSize below effectiveMinSecondaryY
-    let secondaryLabelValue = Math.floor(effectiveMinSecondaryY / secondaryStepSize) * secondaryStepSize;
-    
-    // Draw secondary Y axis labels
-    while (secondaryLabelValue <= adjustedMaxSecondary) {
-      const y = getSecondaryYCoordinate(secondaryLabelValue);
-      
-      // Format with K suffix for thousands
-      let label;
-      if (Math.abs(secondaryLabelValue) >= 1000) {
-        label = '$' + (secondaryLabelValue / 1000).toFixed(1) + 'K';
-      } else {
-        label = '$' + secondaryLabelValue;
-      }
-      
-      // Add cashflow label on right axis
-      ctx.fillText(label, canvasWidth - padding.right + 8, y);
-      
-      // If we're at zero, make the line a bit darker for both axes
-      if (secondaryLabelValue === 0) {
-        ctx.strokeStyle = '#999';
-        ctx.beginPath();
-        ctx.moveTo(padding.left, y);
-        ctx.lineTo(canvasWidth - padding.right, y);
-        ctx.stroke();
-        ctx.strokeStyle = '#ccc'; // Reset for other lines
-      }
-      
-      secondaryLabelValue += secondaryStepSize;
-    }
-    
-    // Draw X-axis labels (selected years to avoid overcrowding)
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = '#666';
-    
-    // Select a subset of years to display (e.g., years 1, 5, 10, 15, 20, 25, 30)
-    const yearsToShow = [1, 5, 10, 15, 20, 25, 30].filter(year => year <= data.years.length);
-    
-    // If we have a small number of years, show all of them
-    const displayYears = data.years.length <= 10 ? data.years : yearsToShow;
-    
-    displayYears.forEach(yearToShow => {
-      const index = data.years.indexOf(yearToShow);
-      if (index !== -1) {
-        const x = padding.left + (index * xScale);
-        ctx.fillText(yearToShow.toString(), x, canvasHeight - padding.bottom + 5);
-        
-        // Add light vertical grid line
-        ctx.strokeStyle = '#f0f0f0';
-        ctx.beginPath();
-        ctx.moveTo(x, padding.top);
-        ctx.lineTo(x, canvasHeight - padding.bottom);
-        ctx.stroke();
-      }
-    });
-    
-    // Draw axis titles with better positioning
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 11px Arial';
-    ctx.fillStyle = '#555';
-    
-    // Primary Y-axis title (left)
-    ctx.save();
-    ctx.translate(padding.left - 60, padding.top + chartHeight / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillText('Property Value & Equity ($)', 0, 0);
-    ctx.restore();
-    
-    // Secondary Y-axis title (right)
-    ctx.save();
-    ctx.translate(canvasWidth - padding.right + 60, padding.top + chartHeight / 2);
-    ctx.rotate(Math.PI / 2);
-    ctx.fillText('Annual Cashflow ($)', 0, 0);
-    ctx.restore();
-    
-    // X-axis title
-    ctx.fillText('Year', padding.left + chartWidth / 2, canvasHeight - 10);
-    
-    // Draw property value line using primary Y-axis
-    if (data.propertyValues.length > 1) {
-      ctx.strokeStyle = '#4f46e5'; // Purple
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      
-      for (let i = 0; i < data.propertyValues.length; i++) {
-        const x = padding.left + (i * xScale);
-        const y = getPrimaryYCoordinate(data.propertyValues[i]);
-        
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-      
-      ctx.stroke();
-    }
-    
-    // Draw equity line using primary Y-axis
-    if (data.equity.length > 1) {
-      ctx.strokeStyle = '#10b981'; // Green
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      
-      for (let i = 0; i < data.equity.length; i++) {
-        const x = padding.left + (i * xScale);
-        const y = getPrimaryYCoordinate(data.equity[i]);
-        
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-      
-      ctx.stroke();
-    }
-    
-    // Calculate optimal bar width based on available space
-    // Make bars narrower to ensure they stay within bounds
-    const barWidth = Math.min(xScale * 0.4, 12); // Narrower bars with a maximum width
-    
-    // Draw cashflow bars using secondary Y-axis
-    for (let i = 0; i < data.cashflow.length; i++) {
-      // Calculate x position with special handling for first and last bars to keep them within bounds
-      let x;
-      if (i === 0) {
-        // First bar should start exactly at the left boundary
-        x = padding.left;
-      } else if (i === data.cashflow.length - 1) {
-        // Last bar should end exactly at the right boundary
-        x = (canvasWidth - padding.right) - barWidth;
-      } else {
-        // Center the bars for middle points
-        x = padding.left + (i * xScale) - (barWidth / 2);
-      }
-      
-      const cashflowValue = data.cashflow[i];
-      const zeroY = getSecondaryYCoordinate(0);
-      const valueY = getSecondaryYCoordinate(cashflowValue);
-      const barHeight = Math.abs(zeroY - valueY);
-      
-      // Set color based on positive/negative cashflow
-      ctx.fillStyle = cashflowValue >= 0 ? '#f97316' : '#ef4444'; // Orange for positive, red for negative
-      
-      // Draw bar from zero baseline
-      if (cashflowValue >= 0) {
-        // Positive cashflow - draw up from zero line
-        ctx.fillRect(x, valueY, barWidth, barHeight);
-      } else {
-        // Negative cashflow - draw down from zero line
-        ctx.fillRect(x, zeroY, barWidth, barHeight);
-      }
-    }
-    
-    // Draw legend at the bottom of the chart
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.font = '12px Arial';
-    ctx.fillStyle = '#333';
-    
-    const legendItems = [
-      { label: 'Property Value', color: '#4f46e5' },
-      { label: 'Equity', color: '#10b981' },
-      { label: 'Annual Cashflow', color: '#f97316' }
-    ];
-    
-    const legendWidth = 150;  // Width allocated for each legend item
-    const legendStartX = (canvasWidth - (legendItems.length * legendWidth)) / 2;
-    const legendY = canvasHeight - 15;  // Place at the bottom
-    
-    // Draw legend background to ensure better visibility
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.fillRect(legendStartX - 10, legendY - 15, (legendItems.length * legendWidth) + 20, 30);
-    
-    legendItems.forEach((item, index) => {
-      const x = legendStartX + (index * legendWidth);
-      
-      ctx.fillStyle = item.color;
-      ctx.fillRect(x, legendY - 5, 15, 10);
-      
-      ctx.fillStyle = '#333';
-      ctx.fillText(item.label, x + 20, legendY);
-    });
-    
-    // If we have hover data, draw a vertical indicator line
-    if (hoverInfo && hoverInfo.visible) {
-      const hoverX = hoverInfo.x;
-      
-      // Draw vertical hover line
-      ctx.save();
-      ctx.strokeStyle = 'rgba(100, 100, 100, 0.5)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([5, 3]);
-      ctx.beginPath();
-      ctx.moveTo(hoverX, padding.top);
-      ctx.lineTo(hoverX, canvasHeight - padding.bottom);
-      ctx.stroke();
-      ctx.restore();
-    }
-    
-  }, [data, hoverInfo]);
-  
-  // Draw chart on mount and when data or hover state changes
-  React.useEffect(() => {
-    drawChart();
-  }, [drawChart]);
-  
-  // Add mouse move handler for tooltip
-  const handleMouseMove = React.useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    // Calculate chart dimensions
-    const canvasWidth = canvas.offsetWidth;
-    const canvasHeight = canvas.offsetHeight;
-    
-    const padding = {
-      top: 50,
-      right: 130,
-      bottom: 80,
-      left: 130
-    };
-    
-    const chartWidth = canvasWidth - padding.left - padding.right;
-    const plotAreaWidth = chartWidth;
-    const xScale = plotAreaWidth / Math.max(data.years.length - 1, 1);
-    
-    // Check if mouse is in chart area
-    if (
-      x >= padding.left && 
-      x <= canvasWidth - padding.right && 
-      y >= padding.top && 
-      y <= canvasHeight - padding.bottom
-    ) {
-      // Find closest data point
-      const dataIndex = Math.round((x - padding.left) / xScale);
-      
-      // Ensure index is within bounds
-      if (dataIndex >= 0 && dataIndex < data.years.length) {
-        // Calculate the exact x position of the data point
-        const dataPointX = padding.left + (dataIndex * xScale);
-        
-        setHoverInfo({
-          visible: true,
-          x: dataPointX,
-          y: y,
-          year: data.years[dataIndex],
-          propertyValue: data.propertyValues[dataIndex],
-          equity: data.equity[dataIndex],
-          cashflow: data.cashflow[dataIndex]
-        });
-        return;
-      }
-    }
-    
-    // Mouse not over data point or chart area
-    setHoverInfo(null);
-  }, [data]);
-  
-  const handleMouseLeave = React.useCallback(() => {
-    setHoverInfo(null);
-  }, []);
-  
+  // Transform the data into the format Victory expects
+  const chartData = data.years.map((year, index) => ({
+    year,
+    propertyValue: data.propertyValues[index],
+    equity: data.equity[index],
+    cashflow: data.cashflow[index]
+  }));
+
+  // Format currency for tick labels and tooltips
+  const formatCurrency = (value: number) => {
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
+    return `$${value}`;
+  };
+
   return (
-    <Box sx={{ width: '100%', height, mb: 2, position: 'relative' }}>
-      <canvas 
-        ref={canvasRef} 
-        style={{ 
-          width: '100%', 
-          height: '100%'
-        }}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-      />
-      {/* Tooltip */}
-      {hoverInfo && hoverInfo.visible && (
-        <div
+    <div style={{ height: 300, width: '100%' }}>
+      <VictoryChart
+        theme={VictoryTheme.material}
+        height={300}
+        width={600}
+        padding={{ top: 40, right: 60, bottom: 60, left: 80 }}
+        domainPadding={{ x: [20, 20], y: [0, 20] }}
+        containerComponent={
+          <VictoryVoronoiContainer
+            voronoiDimension="x"
+            labels={({ datum }) => `Year: ${datum.year}\nProperty Value: ${formatCurrency(datum.propertyValue)}\nEquity: ${formatCurrency(datum.equity)}\nCashflow: ${formatCurrency(datum.cashflow)}`}
+            labelComponent={
+              <VictoryTooltip
+                cornerRadius={5}
+                flyoutStyle={{ fill: "white", stroke: "#ccc" }}
+                style={{ fontSize: 10 }}
+              />
+            }
+          />
+        }
+      >
+        {/* Property value line */}
+        <VictoryLine
+          data={chartData}
+          x="year"
+          y="propertyValue"
           style={{
-            position: 'absolute',
-            left: `${hoverInfo.x + 10}px`,
-            top: `${hoverInfo.y - 80}px`,
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            color: 'white',
-            padding: '8px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            pointerEvents: 'none',
-            zIndex: 1000,
-            whiteSpace: 'nowrap'
+            data: { stroke: '#4f46e5', strokeWidth: 2 }
           }}
-        >
-          <div>Year: {hoverInfo.year}</div>
-          <div>Property Value: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.propertyValue)}</div>
-          <div>Equity: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.equity)}</div>
-          <div>Cashflow: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.cashflow)}</div>
-        </div>
-      )}
-    </Box>
+        />
+        
+        {/* Equity line */}
+        <VictoryLine
+          data={chartData}
+          x="year"
+          y="equity"
+          style={{
+            data: { stroke: '#10b981', strokeWidth: 2 }
+          }}
+        />
+        
+        {/* Cashflow bars */}
+        <VictoryBar
+          data={chartData}
+          x="year"
+          y="cashflow"
+          style={{
+            data: {
+              fill: ({ datum }) => datum.cashflow >= 0 ? '#f97316' : '#ef4444',
+              width: 12
+            }
+          }}
+        />
+        
+        {/* Property value and equity Y-axis */}
+        <VictoryAxis dependentAxis
+          label="Property Value & Equity ($)"
+          axisLabelComponent={<VictoryLabel dy={-50} style={{ fontSize: 12 }} />}
+          tickFormat={formatCurrency}
+          style={{
+            tickLabels: { fontSize: 9, padding: 5 },
+            axisLabel: { fontSize: 10, padding: 30 }
+          }}
+        />
+        
+        {/* Cashflow Y-axis - on the right side */}
+        <VictoryAxis dependentAxis
+          label="Annual Cashflow ($)"
+          axisLabelComponent={<VictoryLabel dy={50} style={{ fontSize: 12 }} />}
+          tickFormat={formatCurrency}
+          orientation="right"
+          style={{
+            tickLabels: { fontSize: 9, padding: 5 },
+            axisLabel: { fontSize: 10, padding: 30 }
+          }}
+        />
+        
+        {/* X-axis (years) */}
+        <VictoryAxis
+          label="Year"
+          tickFormat={(t) => `${t}`}
+          axisLabelComponent={<VictoryLabel dy={30} style={{ fontSize: 12 }} />}
+          style={{
+            tickLabels: { fontSize: 9, padding: 5 },
+            axisLabel: { fontSize: 10, padding: 20 }
+          }}
+        />
+        
+        {/* Legend */}
+        <VictoryLegend x={125} y={10}
+          orientation="horizontal"
+          gutter={20}
+          style={{ 
+            labels: { fontSize: 10 },
+            border: { stroke: "none" } 
+          }}
+          data={[
+            { name: "Property Value", symbol: { fill: "#4f46e5" } },
+            { name: "Equity", symbol: { fill: "#10b981" } },
+            { name: "Annual Cashflow", symbol: { fill: "#f97316" } }
+          ]}
+        />
+      </VictoryChart>
+    </div>
   );
 };
 
@@ -1836,14 +1471,13 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           
           <Box sx={{ width: '100%', mb: 4, height: 300 }}>
             <Typography variant="subtitle2" gutterBottom>Property Value & Equity Growth</Typography>
-            <SimpleChart 
+            <PropertyChart 
               data={{
                 years: chartYears,
                 propertyValues: chartPropertyValues,
                 equity: chartEquity,
                 cashflow: chartCashflow
               }}
-              height={300}
             />
           </Box>
           
