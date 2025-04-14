@@ -21,7 +21,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Tooltip,
+  Tooltip as MuiTooltip,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -37,20 +37,21 @@ import EmailIcon from '@mui/icons-material/Email';
 import TuneIcon from '@mui/icons-material/Tune';
 import LinkIcon from '@mui/icons-material/Link';
 import { Property, Cashflow, CashflowSettings } from '../types';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup as LeafletPopup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { 
-  VictoryChart, 
-  VictoryLine, 
-  VictoryBar, 
-  VictoryAxis, 
-  VictoryLabel, 
-  VictoryTheme, 
-  VictoryTooltip, 
-  VictoryVoronoiContainer,
-  VictoryLegend
-} from 'victory';
+  ResponsiveContainer, 
+  ComposedChart, 
+  Line, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip as RechartsTooltip, 
+  Legend,
+  TooltipProps
+} from 'recharts';
 
 // Add explicit CSS styles for Leaflet to ensure it displays correctly
 const mapStyles = `
@@ -209,16 +210,16 @@ const PropertyMap = ({ address }: { address: string }) => {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <Marker position={coordinates} icon={customIcon}>
-          <Popup>
+          <LeafletPopup>
             {address}
-          </Popup>
+          </LeafletPopup>
         </Marker>
       </MapContainer>
     </Box>
   );
 };
 
-// Replace the entire PropertyChart component with this simplified version
+// Replace the entire PropertyChart component with this Recharts implementation
 const PropertyChart = ({ 
   data
 }: { 
@@ -229,106 +230,145 @@ const PropertyChart = ({
     cashflow: number[]
   }
 }) => {
-  // Transform the data into the format Victory expects
-  const propertyValueData = data.years.map((year, index) => ({
-    x: year,
-    y: data.propertyValues[index]
-  }));
-  
-  const equityData = data.years.map((year, index) => ({
-    x: year,
-    y: data.equity[index]
-  }));
-  
-  const cashflowData = data.years.map((year, index) => ({
-    x: year,
-    y: data.cashflow[index],
-    positive: data.cashflow[index] >= 0
+  // Transform the data into the format Recharts expects
+  const chartData = data.years.map((year, index) => ({
+    year,
+    propertyValue: data.propertyValues[index],
+    equity: data.equity[index],
+    cashflow: data.cashflow[index]
   }));
 
-  // Format currency for tick labels and tooltips
+  // Format currency for tooltips
   const formatCurrency = (value: number) => {
     if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
     if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
     return `$${value}`;
   };
 
-  return (
-    <div style={{ height: 300, width: '100%' }}>
-      <VictoryChart
-        theme={VictoryTheme.material}
-        height={300}
-        width={600}
-        padding={{ top: 40, right: 60, bottom: 60, left: 80 }}
-        domainPadding={{ x: [20, 20], y: [0, 20] }}
-      >
-        {/* Property value line */}
-        <VictoryLine
-          data={propertyValueData}
-          style={{
-            data: { stroke: '#4f46e5', strokeWidth: 2 }
-          }}
-        />
-        
-        {/* Equity line */}
-        <VictoryLine
-          data={equityData}
-          style={{
-            data: { stroke: '#10b981', strokeWidth: 2 }
-          }}
-        />
-        
-        {/* Cashflow bars */}
-        <VictoryBar
-          data={cashflowData}
-          style={{
-            data: {
-              fill: ({ datum }) => datum.positive ? '#f97316' : '#ef4444',
-              width: 12
+  // Custom tooltip component
+  const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
+    if (active && payload && payload.length > 0) {
+      return (
+        <div style={{
+          background: 'white',
+          padding: '10px',
+          border: '1px solid #ccc',
+          borderRadius: '4px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}>
+          <p style={{ margin: '0 0 5px', fontWeight: 'bold' }}>{`Year ${label}`}</p>
+          {payload.map((entry) => {
+            if (!entry || typeof entry.value === 'undefined') return null;
+            
+            let color = '#666';
+            let name = entry.name || '';
+            
+            // Set color based on data type
+            if (name === 'propertyValue') color = '#4f46e5';
+            else if (name === 'equity') color = '#10b981';
+            else if (name === 'cashflow') {
+              color = entry.value >= 0 ? '#f97316' : '#ef4444';
             }
-          }}
+            
+            // Format the name for display
+            let displayName = name;
+            if (name === 'propertyValue') displayName = 'Property Value';
+            else if (name === 'equity') displayName = 'Equity';
+            else if (name === 'cashflow') displayName = 'Annual Cashflow';
+            
+            return (
+              <p key={name} style={{ margin: '0 0 3px', color }}>
+                <span style={{ 
+                  display: 'inline-block', 
+                  width: '10px', 
+                  height: '10px', 
+                  backgroundColor: color, 
+                  marginRight: '5px' 
+                }}></span>
+                {`${displayName}: ${formatCurrency(entry.value as number)}`}
+              </p>
+            );
+          })}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Since we have positive and negative cashflow values, define a custom bar shape
+  const CustomBar = (props: any) => {
+    const { x, y, width, height, fill, dataKey, value } = props;
+    
+    // Use different colors for positive and negative values
+    const barFill = value >= 0 ? '#f97316' : '#ef4444';
+    
+    // For negative values, the bar should go down from the zero line
+    const barY = value >= 0 ? y : y - height;
+    const barHeight = Math.abs(height);
+    
+    return <rect x={x} y={barY} width={width} height={barHeight} fill={barFill} />;
+  };
+
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <ComposedChart
+        data={chartData}
+        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+        <XAxis 
+          dataKey="year" 
+          label={{ value: 'Year', position: 'insideBottomRight', offset: -5 }}
+          tick={{ fontSize: 12 }}
         />
-        
-        {/* Y-axis for property value and equity */}
-        <VictoryAxis dependentAxis
-          tickFormat={formatCurrency}
-          style={{
-            tickLabels: { fontSize: 9 }
-          }}
+        <YAxis 
+          yAxisId="left"
+          orientation="left"
+          label={{ value: 'Property Value & Equity ($)', angle: -90, position: 'insideLeft' }}
+          tickFormatter={formatCurrency}
+          tick={{ fontSize: 12 }}
         />
-        
-        {/* Y-axis for cashflow on the right */}
-        <VictoryAxis dependentAxis
+        <YAxis 
+          yAxisId="right"
           orientation="right"
-          tickFormat={formatCurrency}
-          style={{
-            tickLabels: { fontSize: 9 }
+          label={{ value: 'Annual Cashflow ($)', angle: 90, position: 'insideRight' }}
+          tickFormatter={formatCurrency}
+          tick={{ fontSize: 12 }}
+        />
+        <RechartsTooltip content={<CustomTooltip />} />
+        <Legend 
+          wrapperStyle={{ paddingTop: 10 }}
+          formatter={(value) => {
+            if (value === 'propertyValue') return 'Property Value';
+            if (value === 'equity') return 'Equity';
+            if (value === 'cashflow') return 'Annual Cashflow';
+            return value;
           }}
         />
-        
-        {/* X-axis (years) */}
-        <VictoryAxis
-          tickFormat={(t) => `${t}`}
-          style={{
-            tickLabels: { fontSize: 9 }
-          }}
+        <Line 
+          yAxisId="left"
+          type="monotone" 
+          dataKey="propertyValue" 
+          stroke="#4f46e5" 
+          strokeWidth={2}
+          dot={false}
         />
-        
-        {/* Legend */}
-        <VictoryLegend x={125} y={10}
-          orientation="horizontal"
-          gutter={20}
-          style={{ 
-            labels: { fontSize: 10 }
-          }}
-          data={[
-            { name: "Property Value", symbol: { fill: "#4f46e5" } },
-            { name: "Equity", symbol: { fill: "#10b981" } },
-            { name: "Annual Cashflow", symbol: { fill: "#f97316" } }
-          ]}
+        <Line 
+          yAxisId="left"
+          type="monotone" 
+          dataKey="equity" 
+          stroke="#10b981" 
+          strokeWidth={2}
+          dot={false}
         />
-      </VictoryChart>
-    </div>
+        <Bar 
+          yAxisId="right"
+          dataKey="cashflow" 
+          barSize={20}
+          shape={<CustomBar />}
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
   );
 };
 
@@ -1364,57 +1404,57 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 {/* Sliders use settings state and handleSettingChange */}
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    <Tooltip title="The annual interest rate for your mortgage loan. Higher rates increase your monthly payment." arrow>
+                    <MuiTooltip title="The annual interest rate for your mortgage loan. Higher rates increase your monthly payment." arrow>
                       <span>Interest Rate: {settings.interestRate}%</span>
-                    </Tooltip>
+                    </MuiTooltip>
                   </Typography>
                   <Slider value={settings.interestRate} onChange={handleSettingChange('interestRate')} aria-labelledby="interest-rate-slider" valueLabelDisplay="auto" step={0.1} min={0.1} max={15} sx={{ color: '#6366f1' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    <Tooltip title="The number of years you'll be paying your mortgage. Longer terms reduce monthly payments but increase total interest paid." arrow>
+                    <MuiTooltip title="The number of years you'll be paying your mortgage. Longer terms reduce monthly payments but increase total interest paid." arrow>
                       <span>Loan Term: {settings.loanTerm} years</span>
-                    </Tooltip>
+                    </MuiTooltip>
                   </Typography>
                   <Slider value={settings.loanTerm} onChange={handleSettingChange('loanTerm')} aria-labelledby="loan-term-slider" valueLabelDisplay="auto" step={1} min={5} max={40} sx={{ color: '#6366f1' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    <Tooltip title="Percentage of the property price you pay upfront. Higher down payments reduce your loan amount and monthly payments." arrow>
+                    <MuiTooltip title="Percentage of the property price you pay upfront. Higher down payments reduce your loan amount and monthly payments." arrow>
                       <span>Down Payment: {settings.downPaymentPercent}%</span>
-                    </Tooltip>
+                    </MuiTooltip>
                   </Typography>
                   <Slider value={settings.downPaymentPercent} onChange={handleSettingChange('downPaymentPercent')} aria-labelledby="down-payment-slider" valueLabelDisplay="auto" step={1} min={0} max={100} sx={{ color: '#6366f1' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    <Tooltip title="Annual property taxes and insurance calculated as a percentage of property value. Varies by location." arrow>
+                    <MuiTooltip title="Annual property taxes and insurance calculated as a percentage of property value. Varies by location." arrow>
                       <span>Property Tax & Insurance: {settings.taxInsurancePercent}%</span>
-                    </Tooltip>
+                    </MuiTooltip>
                   </Typography>
                   <Slider value={settings.taxInsurancePercent} onChange={handleSettingChange('taxInsurancePercent')} min={0} max={5} step={0.1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#6366f1' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    <Tooltip title="Expected percentage of time the property will be vacant. Higher vacancy rates reduce annual income." arrow>
+                    <MuiTooltip title="Expected percentage of time the property will be vacant. Higher vacancy rates reduce annual income." arrow>
                       <span>Vacancy: {settings.vacancyPercent}%</span>
-                    </Tooltip>
+                    </MuiTooltip>
                   </Typography>
                   <Slider value={settings.vacancyPercent} onChange={handleSettingChange('vacancyPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#6366f1' }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    <Tooltip title="Capital Expenditures - funds set aside for major repairs and replacements (roof, HVAC, etc.)." arrow>
+                    <MuiTooltip title="Capital Expenditures - funds set aside for major repairs and replacements (roof, HVAC, etc.)." arrow>
                       <span>CapEx: {settings.capexPercent}%</span>
-                    </Tooltip>
+                    </MuiTooltip>
                   </Typography>
                   <Slider value={settings.capexPercent} onChange={handleSettingChange('capexPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#6366f1' }} />
                 </Box>
                 <Box sx={{ mb: 0 }}>
                   <Typography variant="body2" gutterBottom>
-                    <Tooltip title="Fee for property management services, typically a percentage of monthly rent. Set to 0% if self-managing." arrow>
+                    <MuiTooltip title="Fee for property management services, typically a percentage of monthly rent. Set to 0% if self-managing." arrow>
                       <span>Property Management: {settings.propertyManagementPercent}%</span>
-                    </Tooltip>
+                    </MuiTooltip>
                   </Typography>
                   <Slider value={settings.propertyManagementPercent} onChange={handleSettingChange('propertyManagementPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#6366f1' }} />
                 </Box>
@@ -1432,17 +1472,17 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 3 }}>
               <Box sx={{ flex: 1 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Expected annual increase in rental rates due to inflation and market demand. Historically averages 2-4% in most markets." arrow>
+                  <MuiTooltip title="Expected annual increase in rental rates due to inflation and market demand. Historically averages 2-4% in most markets." arrow>
                     <span>Annual Rent Appreciation: {rentAppreciationRate}%</span>
-                  </Tooltip>
+                  </MuiTooltip>
                 </Typography>
                 <Slider value={rentAppreciationRate} onChange={handleRentAppreciationChange} aria-labelledby="rent-appreciation-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#6366f1' }} />
               </Box>
               <Box sx={{ flex: 1 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Expected annual increase in property value over time. Historically real estate appreciates at 3-5% annually over the long term." arrow>
+                  <MuiTooltip title="Expected annual increase in property value over time. Historically real estate appreciates at 3-5% annually over the long term." arrow>
                     <span>Property Value Increase: {propertyValueIncreaseRate}%</span>
-                  </Tooltip>
+                  </MuiTooltip>
                 </Typography>
                 <Slider value={propertyValueIncreaseRate} onChange={handlePropertyValueIncreaseChange} aria-labelledby="property-value-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#6366f1' }} />
               </Box>
@@ -1467,63 +1507,63 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 <TableHead>
                   <TableRow>
                     <TableCell>
-                      <Tooltip title="Projection year" arrow placement="top">
+                      <MuiTooltip title="Projection year" arrow placement="top">
                         <span>Year</span>
-                      </Tooltip>
+                      </MuiTooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip 
+                      <MuiTooltip 
                         title="Estimated property value after appreciation. Calculated using the initial property price compounded annually by the property value increase rate." 
                         arrow 
                         placement="top"
                       >
                         <span>Property Value</span>
-                      </Tooltip>
+                      </MuiTooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip 
+                      <MuiTooltip 
                         title="Projected annual rental income. Calculated using the initial rent amount compounded annually by the rent appreciation rate." 
                         arrow 
                         placement="top"
                       >
                         <span>Annual Rent</span>
-                      </Tooltip>
+                      </MuiTooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip 
+                      <MuiTooltip 
                         title="Total annual expenses including mortgage, taxes, insurance, vacancy, capital expenditures, and property management." 
                         arrow 
                         placement="top"
                       >
                         <span>Expenses</span>
-                      </Tooltip>
+                      </MuiTooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip 
+                      <MuiTooltip 
                         title="Annual rental income minus all expenses. Represents your profit or loss each year." 
                         arrow 
                         placement="top"
                       >
                         <span>Cashflow</span>
-                      </Tooltip>
+                      </MuiTooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip 
+                      <MuiTooltip 
                         title="Your ownership stake in the property. Calculated as property value minus remaining mortgage balance. Grows through principal payments and property appreciation." 
                         arrow 
                         placement="top"
                       >
                         <span>Equity</span>
-                      </Tooltip>
+                      </MuiTooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip 
+                      <MuiTooltip 
                         title="Return on Investment percentage. Calculated as annual cashflow divided by initial investment (down payment + closing costs)." 
                         arrow 
                         placement="top"
                       >
                         <span>ROI</span>
-                      </Tooltip>
+                      </MuiTooltip>
                     </TableCell>
                   </TableRow>
                 </TableHead>
