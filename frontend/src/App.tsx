@@ -1248,7 +1248,7 @@ function App() {
                     <Typography className="app-title" variant="h4" component="h1">
                       <HomeWorkIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1.85rem' }} />
                       RentalSearch
-                    </Typography>
+      </Typography>
                     <Typography className="app-subtitle" variant="subtitle1" component="p">
                       Find properties with investment potential
                     </Typography>

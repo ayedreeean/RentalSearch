@@ -916,15 +916,15 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       setSettings(newSettings);
     }
     
-    // Check for custom rent estimate
-    if (re && property) {
+    // Check for custom rent estimate - Only set this on initial load
+    if (re && property && !isRentEditing) {
       const val = parseFloat(re);
       if (!isNaN(val) && val > 0) {
         setCustomRentEstimate(val);
         setDisplayRent(formatCurrency(val));
       }
     }
-  }, [location.search, defaultSettings, property, formatCurrency, customRentEstimate]);
+  }, [location.search, defaultSettings, property, formatCurrency, isRentEditing]);
   
   // Add useEffect for long-term projection settings from URL
   useEffect(() => {
@@ -952,43 +952,52 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
 
   // Handlers for rent input
   const handleRentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDisplayRent(e.target.value);
+    const value = e.target.value;
+    // Remove currency formatting for editing
+    const numericValue = parseFloat(value.replace(/[^0-9.]/g, ''));
+    
+    if (!isNaN(numericValue)) {
+      setCustomRentEstimate(numericValue);
+      // During editing, show the raw value for easier editing
+      setDisplayRent(value);
+    } else {
+      setDisplayRent(value === '$' ? '' : value);
+    }
   };
 
   const handleRentBlur = () => {
     setIsRentEditing(false);
-    // Parse the rent value
-    const newRent = parseFloat(displayRent.replace(/[^\d.]/g, ''));
     
-    if (!isNaN(newRent) && newRent >= 0) {
-      setCustomRentEstimate(newRent);
+    // When focus is lost, format the value properly
+    if (customRentEstimate) {
+      setDisplayRent(formatCurrency(customRentEstimate));
       
-      // Update URL to include the custom rent
-      updateUrlWithSettings({ re: newRent });
+      // Update URL with new rent estimate
+      const currentUrl = new URL(window.location.href);
+      const searchParams = new URLSearchParams(currentUrl.search);
+      searchParams.set('re', customRentEstimate.toString());
       
-      // Save to localStorage to persist between page loads
-      if (property) {
-        const updatedProperty = {
-          ...property,
-          rent_estimate: newRent
-        };
-        savePropertyToLocalStorage(updatedProperty);
-        
-        // Update the local property state with new rent value
-        setProperty(updatedProperty);
-      }
+      const newUrl = `${currentUrl.pathname}?${searchParams.toString()}${currentUrl.hash}`;
+      window.history.replaceState({}, '', newUrl);
     } else {
-      // If invalid, revert to the current value
-      const currentRent = customRentEstimate !== null ? customRentEstimate : property?.rent_estimate || 0;
-      setDisplayRent(formatCurrency(currentRent));
+      // If input is cleared, revert to the original rent
+      if (property) {
+        const originalRent = property.rent_estimate || 0;
+        setCustomRentEstimate(originalRent);
+        setDisplayRent(formatCurrency(originalRent));
+      }
     }
   };
 
   const handleRentFocus = () => {
     setIsRentEditing(true);
-    // Show raw number for editing
-    const currentRent = customRentEstimate !== null ? customRentEstimate : property?.rent_estimate || 0;
-    setDisplayRent(String(currentRent)); 
+    
+    // When focused, show numeric value without currency formatting
+    if (customRentEstimate) {
+      setDisplayRent(customRentEstimate.toString());
+    } else {
+      setDisplayRent('');
+    }
   };
   
   // Navigate back to search results
