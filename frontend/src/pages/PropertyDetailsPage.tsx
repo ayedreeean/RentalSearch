@@ -1241,7 +1241,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
   return (
     <>
       <CssBaseline />
-      <AppBar position="sticky" color="default" elevation={0} sx={{ borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+      <AppBar position="sticky" elevation={0} sx={{ bgcolor: '#6366f1', color: 'white' }}>
         <Toolbar>
           <IconButton 
             edge="start" 
@@ -1252,7 +1252,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           >
             <ArrowBackIcon />
           </IconButton>
-          <HomeWorkIcon sx={{ mr: 1, color: 'primary.main' }} />
+          <HomeWorkIcon sx={{ mr: 1, color: 'white' }} />
           <Typography variant="h6" color="inherit" noWrap sx={{ flexGrow: 1 }}>
             RentalSearch
           </Typography>
@@ -1260,7 +1260,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             variant="outlined" 
             startIcon={<ShareIcon />}
             onClick={handleCopyToClipboard}
-            sx={{ mr: 1 }}
+            sx={{ mr: 1, color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
           >
             Copy Analysis
           </Button>
@@ -1268,6 +1268,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             variant="outlined"
             startIcon={<EmailIcon />}
             onClick={handleEmailShare}
+            sx={{ color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
           >
             Email
           </Button>
