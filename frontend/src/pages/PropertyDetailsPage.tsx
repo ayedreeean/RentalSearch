@@ -979,6 +979,26 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       
       const newUrl = `${currentUrl.pathname}?${searchParams.toString()}${currentUrl.hash}`;
       window.history.replaceState({}, '', newUrl);
+      
+      // If this is a bookmarked or shared property, update the localStorage version too
+      if (property) {
+        // Get existing saved properties
+        try {
+          const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
+          const savedProperties = savedPropertiesStr ? JSON.parse(savedPropertiesStr) : {};
+          
+          // If this property is in localStorage, update its rent value
+          if (savedProperties[property.property_id]) {
+            savedProperties[property.property_id] = {
+              ...savedProperties[property.property_id],
+              rent_estimate: customRentEstimate
+            };
+            localStorage.setItem('rentToolFinder_properties', JSON.stringify(savedProperties));
+          }
+        } catch (error) {
+          console.error('Error updating property in localStorage:', error);
+        }
+      }
     } else {
       // If input is cleared, revert to the original rent
       if (property) {
