@@ -736,6 +736,29 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       return;
     }
     
+    // First, check if there's encoded property data in the URL
+    const searchParams = new URLSearchParams(location.search);
+    const encodedData = searchParams.get('data');
+    
+    if (encodedData) {
+      try {
+        const decodedProperty = decodePropertyFromURL(encodedData);
+        if (decodedProperty) {
+          setProperty(decodedProperty);
+          setLoading(false);
+          
+          // Initialize custom rent to property's rent estimate
+          if (decodedProperty.rent_estimate) {
+            setCustomRentEstimate(decodedProperty.rent_estimate);
+            setDisplayRent(formatCurrency(decodedProperty.rent_estimate));
+          }
+          return;
+        }
+      } catch (error) {
+        console.error('Error loading property from URL data:', error);
+      }
+    }
+    
     const foundProperty = properties.find(p => p.property_id === propertyId);
     
     if (!foundProperty) {
@@ -775,7 +798,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       setCustomRentEstimate(foundProperty.rent_estimate);
       setDisplayRent(formatCurrency(foundProperty.rent_estimate));
     }
-  }, [propertyId, properties, formatCurrency]);
+  }, [propertyId, properties, formatCurrency, location.search]);
   
   // Update page title when property loads
   useEffect(() => {
@@ -877,6 +900,30 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       }
     }
   }, [location.search, defaultSettings, property, formatCurrency]);
+  
+  // Add useEffect for long-term projection settings from URL
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    
+    // Check if there are long-term projection settings in the URL
+    const ra = searchParams.get('ra'); // rent appreciation
+    const pvi = searchParams.get('pvi'); // property value increase
+    
+    // Update settings if values exist in URL
+    if (ra) {
+      const val = parseFloat(ra);
+      if (!isNaN(val) && val >= 0 && val <= 10) {
+        setRentAppreciationRate(val);
+      }
+    }
+    
+    if (pvi) {
+      const val = parseFloat(pvi);
+      if (!isNaN(val) && val >= 0 && val <= 10) {
+        setPropertyValueIncreaseRate(val);
+      }
+    }
+  }, [location.search]);
 
   // Handlers for rent input
   const handleRentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1175,6 +1222,93 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
 `;
   };
   
+  // Function to encode property data into a URL-safe string
+  const encodePropertyToURL = (property: Property): string => {
+    // Create a minimal version of the property with only essential fields
+    const minimalProperty = {
+      property_id: property.property_id,
+      address: property.address,
+      price: property.price,
+      bedrooms: property.bedrooms,
+      bathrooms: property.bathrooms,
+      sqft: property.sqft,
+      rent_estimate: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
+      thumbnail: property.thumbnail,
+      url: property.url,
+      days_on_market: property.days_on_market,
+      ratio: property.ratio,
+      rent_source: property.rent_source,
+      latitude: property.latitude,
+      longitude: property.longitude
+    };
+    
+    // Encode as JSON and then to base64
+    const jsonStr = JSON.stringify(minimalProperty);
+    // Use encodeURIComponent to handle special chars, then btoa for base64
+    return btoa(encodeURIComponent(jsonStr));
+  };
+  
+  // Function to decode property data from URL string
+  const decodePropertyFromURL = (encodedStr: string): Property | null => {
+    try {
+      // Decode from base64, then from URI encoding, then parse JSON
+      const jsonStr = decodeURIComponent(atob(encodedStr));
+      return JSON.parse(jsonStr) as Property;
+    } catch (error) {
+      console.error('Error decoding property from URL:', error);
+      return null;
+    }
+  };
+  
+  // Function to generate a shareable URL
+  const generateShareableURL = (): string => {
+    if (!property) return window.location.href;
+    
+    // Start with the base URL
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    
+    // Create a URLSearchParams object for the query parameters
+    const params = new URLSearchParams();
+    
+    // Add the encoded property data
+    const encodedProperty = encodePropertyToURL(property);
+    params.set('data', encodedProperty);
+    
+    // Add the settings
+    params.set('ir', settings.interestRate.toString());
+    params.set('lt', settings.loanTerm.toString());
+    params.set('dp', settings.downPaymentPercent.toString());
+    params.set('ti', settings.taxInsurancePercent.toString());
+    params.set('vc', settings.vacancyPercent.toString());
+    params.set('cx', settings.capexPercent.toString());
+    params.set('pm', settings.propertyManagementPercent.toString());
+    
+    // Add the long-term projection settings
+    params.set('ra', rentAppreciationRate.toString());
+    params.set('pvi', propertyValueIncreaseRate.toString());
+    
+    // Add custom rent estimate if set
+    if (customRentEstimate !== null) {
+      params.set('re', customRentEstimate.toString());
+    }
+    
+    return `${baseUrl}?${params.toString()}`;
+  };
+  
+  // Function to handle share via URL
+  const handleShareViaURL = async () => {
+    const shareableURL = generateShareableURL();
+    
+    try {
+      // Use the clipboard API to copy the URL
+      await navigator.clipboard.writeText(shareableURL);
+      setCopySuccess('Shareable URL copied to clipboard!');
+      setTimeout(() => setCopySuccess(''), 3000);
+    } catch (err) {
+      setCopySuccess('Failed to copy URL. Try copying it from the address bar.');
+    }
+  };
+  
   // Display loading state
   if (loading) {
     return (
@@ -1259,10 +1393,18 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           <Button 
             variant="outlined" 
             startIcon={<ShareIcon />}
+            onClick={handleShareViaURL}
+            sx={{ mr: 1, color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+          >
+            Copy URL
+          </Button>
+          <Button 
+            variant="outlined" 
+            startIcon={<ShareIcon />}
             onClick={handleCopyToClipboard}
             sx={{ mr: 1, color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
           >
-            Copy Analysis
+            Copy Text
           </Button>
           <Button 
             variant="outlined"
