@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/RentalSearch/static/css/main.f52208af.css",
-    "main.js": "/RentalSearch/static/js/main.53514de1.js",
+    "main.js": "/RentalSearch/static/js/main.db71f5d6.js",
     "index.html": "/RentalSearch/index.html",
     "main.f52208af.css.map": "/RentalSearch/static/css/main.f52208af.css.map",
-    "main.53514de1.js.map": "/RentalSearch/static/js/main.53514de1.js.map"
+    "main.db71f5d6.js.map": "/RentalSearch/static/js/main.db71f5d6.js.map"
   },
   "entrypoints": [
     "static/css/main.f52208af.css",
-    "static/js/main.53514de1.js"
+    "static/js/main.db71f5d6.js"
   ]
 }
