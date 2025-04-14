@@ -1,21 +1,24 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Container, TextField, Button, Typography, Card, CardContent, Box, Alert, CircularProgress, Slider, Accordion, AccordionSummary, AccordionDetails, Skeleton, Select, MenuItem, FormControl, InputLabel, IconButton, Link as MuiLink, InputAdornment, Modal, Grid, Paper, Divider, SvgIcon, Fab } from '@mui/material';
-import { Routes, Route, Link as RouterLink, useNavigate } from 'react-router-dom';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import LinkIcon from '@mui/icons-material/Link';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import CloseIcon from '@mui/icons-material/Close';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Route, Routes, useNavigate } from 'react-router-dom';
+import {
+  Typography, Container, TextField, Button, Box, CircularProgress, 
+  Paper, InputAdornment, IconButton, Alert,
+  Slider, Card, CardContent, Accordion, AccordionSummary, AccordionDetails, Skeleton, Divider, Fab, Modal, Select, MenuItem, FormControl, InputLabel
+} from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import HomeIcon from '@mui/icons-material/Home';
 import BarChartIcon from '@mui/icons-material/BarChart';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import EditIcon from '@mui/icons-material/Edit';
-import ShareIcon from '@mui/icons-material/Share';
+import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import EmailIcon from '@mui/icons-material/Email';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import TuneIcon from '@mui/icons-material/Tune';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import CloseIcon from '@mui/icons-material/Close';
+import ShareIcon from '@mui/icons-material/Share';
 import './App.css';
 import { searchProperties, getTotalPropertiesCount, Property, registerForPropertyUpdates } from './api/propertyApi';
 import PropertyDetailsPage from './pages/PropertyDetailsPage';
@@ -187,7 +190,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({
   
   // Update the deep dive handler to navigate to the details page
   const handleOpenDeepDive = (e: React.MouseEvent) => {
-    e.preventDefault(); // Prevent default link behavior
+    // No need for e.preventDefault() with button
     navigate(`/property/${property.property_id}`);
   };
   
@@ -253,7 +256,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
   
   return (
     <Card className="property-card">
-      <a href="#" onClick={handleOpenDeepDive} className="property-image-container">
+      <button onClick={handleOpenDeepDive} className="property-image-container link-button">
         <LazyImage
           src={property.thumbnail}
           alt={property.address}
@@ -261,7 +264,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
         <div className="property-price">
           {formatCurrency(property.price)}
         </div>
-      </a>
+      </button>
       
       <CardContent className="property-details">
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
@@ -278,11 +281,11 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
         </Typography>
         </Box>
         
-        <a href="#" onClick={handleOpenDeepDive} className="property-address">
+        <button onClick={handleOpenDeepDive} className="property-address link-button">
           <Typography variant="body2" color="text.secondary">
             {property.address}
           </Typography>
-        </a>
+        </button>
         
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <div>
@@ -435,16 +438,15 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             <a href={rentCastUrl} target="_blank" rel="noopener noreferrer" className="quick-link">
               <BarChartIcon sx={{ fontSize: 16, mr: 0.5, color: '#6366F1' }} /> RentCast
             </a>
-            <a 
-              href="#" 
+            <button 
               onClick={(e) => { 
-                e.preventDefault();
+                // No preventDefault needed
                 navigate(`/property/${property.property_id}`);
               }} 
-              className="quick-link"
+              className="quick-link link-button"
             >
               <HomeWorkIcon sx={{ fontSize: 16, mr: 0.5, color: '#4F46E5' }} /> Deep Dive
-            </a>
+            </button>
       </div>
         </div>
       </div>
@@ -850,7 +852,6 @@ function App() {
 
   // State for assumptions accordion
   const [isAssumptionsPanelOpen, setIsAssumptionsPanelOpen] = useState(false); // Add state for panel visibility
-  const [searchResultsCount, setSearchResultsCount] = useState(0);
 
   // Ref for tracking search requests
   const currentSearchId = useRef<number>(0);
@@ -1124,7 +1125,14 @@ function App() {
     });
   }, [totalProperties]); // Add totalProperties as a dependency
 
+  // --- Effect to Register for Updates ---
+  useEffect(() => {
+    console.log('[Effect Register] Registering global update callback.');
+    registerForPropertyUpdates(handlePropertyUpdate);
+  }, [handlePropertyUpdate]);
+
   // --- Add useMemo for sorting ---
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const sortedProperties = React.useMemo(() => {
     let sortableItems = [...displayedProperties];
     if (sortConfig.key !== null) {
@@ -1136,7 +1144,6 @@ function App() {
           valA = a.price > 0 ? a.rent_estimate / a.price : 0;
           valB = b.price > 0 ? b.rent_estimate / b.price : 0;
         } else if (sortConfig.key === 'cashflow') {
-          // Calculate cashflow for both properties for comparison
           const cashflowA = calculateCashflow(a).monthlyCashflow;
           const cashflowB = calculateCashflow(b).monthlyCashflow;
           valA = cashflowA;
@@ -1146,8 +1153,6 @@ function App() {
           valB = b[sortConfig.key as keyof Property];
         }
         
-        // Basic comparison, assumes numbers or comparable strings
-        // Handle nulls by treating them as lowest value
         valA = valA === null ? (sortConfig.direction === 'asc' ? -Infinity : Infinity) : valA;
         valB = valB === null ? (sortConfig.direction === 'asc' ? -Infinity : Infinity) : valB;
 
@@ -1162,22 +1167,6 @@ function App() {
     }
     return sortableItems;
   }, [displayedProperties, sortConfig, calculateCashflow, interestRate, loanTerm, downPaymentPercent, taxInsurancePercent, vacancyPercent, capexPercent, propertyManagementPercent]);
-
-  // --- Effect to Register for Updates ---
-  useEffect(() => {
-    console.log('[Effect Register] Registering global update callback.');
-    registerForPropertyUpdates(handlePropertyUpdate);
-
-    // Cleanup function to unregister when component unmounts or callback changes
-    // return () => {
-    //   console.log('[Effect Register] Unregistering global update callback.');
-    //   // Implement unregister logic in propertyApi if needed, currently not exposed
-    //   // unregister(); 
-    // };
-    // }, [handlePropertyUpdate]); // Add the memoized callback as a dependency
-  // }, [handlePropertyUpdate, totalProperties]); // Depend on totalProperties
-  // }, [handlePropertyUpdate, totalProperties]); // Use the memoized callback
-  }, [handlePropertyUpdate]); // Only depend on the stable callback
 
   // Add handler for rent estimate changes
   const handleRentEstimateChange = useCallback((propertyId: string, newRentString: string) => {

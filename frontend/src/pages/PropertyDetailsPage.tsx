@@ -30,7 +30,6 @@ import HomeIcon from '@mui/icons-material/Home';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import EditIcon from '@mui/icons-material/Edit';
 import ShareIcon from '@mui/icons-material/Share';
-import EmailIcon from '@mui/icons-material/Email';
 import TuneIcon from '@mui/icons-material/Tune';
 import { Property, Cashflow, CashflowSettings } from '../types';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -729,7 +728,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   // Add state for long-term analysis
   const [rentAppreciationRate, setRentAppreciationRate] = useState<number>(3); // Default 3%
   const [propertyValueIncreaseRate, setPropertyValueIncreaseRate] = useState<number>(3); // Default 3%
-  const [yearsToProject, setYearsToProject] = useState<number>(30); // Default 30 years
+  const [yearsToProject, /* setYearsToProject removed */ ] = useState<number>(30); // Default 30 years
   
   // Load property data
   useEffect(() => {
@@ -822,6 +821,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     };
   }, [property]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   // Handle URL query parameters for settings
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -874,7 +874,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     
     if (vc) {
       const val = parseInt(vc, 10);
-      if (!isNaN(val) && val >= 0 && val <= 10) {
+      if (!isNaN(val) && val >= 0 && val <= 20) { // Allow up to 20% vacancy
         newSettings.vacancyPercent = val;
         updated = true;
       }
@@ -908,7 +908,8 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
         setDisplayRent(formatCurrency(val));
       }
     }
-  }, [location.search, defaultSettings, property, formatCurrency]);
+    // Ensure customRentEstimate is in the dependency array (line ~809)
+  }, [location.search, defaultSettings, property, formatCurrency, customRentEstimate]); // Added customRentEstimate
   
   // Add useEffect for long-term projection settings from URL
   useEffect(() => {
@@ -1052,16 +1053,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   };
 
   // Email share handler
-  const handleEmailShare = () => {
-    // Save the current property to localStorage to enable shared links to work
-    if (property) {
-      savePropertyToLocalStorage(property);
-    }
-    
-    const summary = encodeURIComponent(generatePropertySummary());
-    const subject = encodeURIComponent(`Property Investment Analysis: ${property?.address}`);
-    window.open(`mailto:?subject=${subject}&body=${summary}`);
-  };
+  // const handleEmailShare = () => { ... }; // Comment out or delete
   
   // Add new function to save property to localStorage
   const savePropertyToLocalStorage = (prop: Property) => {
@@ -1091,9 +1083,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   };
   
   // Add handler for years to project change
-  const handleYearsToProjectChange = (_event: Event, newValue: number | number[]) => {
-    setYearsToProject(newValue as number);
-  };
+  // const handleYearsToProjectChange = (_event: Event, newValue: number | number[]) => { ... }; // Comment out or delete
   
   // Function to generate long-term cashflow projections
   const generateLongTermCashflow = (): YearlyProjection[] => {
@@ -1145,7 +1135,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       const yearlyCashflow = yearRent - yearlyExpenses;
       
       // Calculate principal paid this year using amortization
-      let principalPaidThisYear = 0;
+      // let principalPaidThisYear = 0;
       
       // Calculate month by month for the current year
       const startMonth = (i - 1) * 12 + 1;
@@ -1162,7 +1152,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
           const principalPayment = cashflow.monthlyMortgage - interestPayment;
           
           // Add to yearly principal total
-          principalPaidThisYear += principalPayment;
+          // principalPaidThisYear += principalPayment;
           
           // Reduce remaining principal
           remainingPrincipal = Math.max(0, remainingPrincipal - principalPayment);
@@ -1178,11 +1168,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       
       // Calculate ROI
       const initialInvestment = property.price * (settings.downPaymentPercent / 100) + property.price * 0.03;
-      const cashOnCashReturn = (yearlyCashflow / initialInvestment) * 100;
-      
-      // Calculate ROI with equity growth included
+      const cashOnCashReturn = initialInvestment > 0 ? (yearlyCashflow / initialInvestment) * 100 : 0; // Avoid division by zero
       const totalReturn = yearlyCashflow + equityGrowth;
-      const roiWithEquity = (totalReturn / initialInvestment) * 100;
+      const roiWithEquity = initialInvestment > 0 ? (totalReturn / initialInvestment) * 100 : 0; // Avoid division by zero
       
       years.push({
         year: i,
@@ -1376,23 +1364,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
   const chartCashflow = longTermCashflowData.map(data => data.yearlyCashflow);
   
   // Custom bar component for handling positive and negative cashflow values
-  const CustomBar = (props: any) => {
-    const { x, y, width, height, value } = props;
-    
-    // Use different colors for positive and negative values
-    const barFill = value >= 0 ? '#f97316' : '#ef4444';
-    
-    // Let Recharts handle the positioning
-    return (
-      <rect 
-        x={x} 
-        y={y} 
-        width={width} 
-        height={Math.abs(height)} 
-        fill={barFill} 
-      />
-    );
-  };
+  // const CustomBar = (props: any) => { ... }; // Comment out or delete
   
   return (
     <>
@@ -1568,26 +1540,12 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               
               <Typography variant="h6" gutterBottom>External Links</Typography>
               <Box sx={{ display: 'flex', gap: 2 }}>
-                <Button 
-                  variant="outlined" 
-                  startIcon={<HomeIcon />} 
-                  fullWidth
-                  href={property.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  View on Zillow
-                </Button>
-                <Button 
-                  variant="outlined" 
-                  startIcon={<BarChartIcon />} 
-                  fullWidth
-                  href={rentCastUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Rentcast Analysis
-                </Button>
+                <a href={property.url} target="_blank" rel="noopener noreferrer" className="quick-link">
+                  <HomeIcon sx={{ fontSize: 16, mr: 0.5, color: '#0D6EFD' }} /> Zillow
+                </a>
+                <a href={rentCastUrl} target="_blank" rel="noopener noreferrer" className="quick-link">
+                  <BarChartIcon sx={{ fontSize: 16, mr: 0.5, color: '#6366F1' }} /> RentCast
+                </a>
               </Box>
             </Paper>
           </Box>
