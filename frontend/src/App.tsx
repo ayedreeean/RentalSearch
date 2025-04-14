@@ -1265,8 +1265,8 @@ function App() {
                     </Button>
                     <Button 
                       variant="outlined" 
-                      component={Link}
-                      to="/bookmarks"
+                      component="a"
+                      href="#/bookmarks"
                       className="bookmarks-button"
                       startIcon={<BookmarkIcon />}
                     >
