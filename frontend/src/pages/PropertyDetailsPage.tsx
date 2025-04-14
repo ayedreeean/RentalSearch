@@ -327,18 +327,19 @@ const PropertyChart = ({
 
   // Custom bar component for handling positive and negative cashflow values
   const CustomBar = (props: any) => {
-    const { x, y, width, height, value } = props;
+    const { x, y, width, height, value, fill, background } = props;
     
     // Use different colors for positive and negative values
     const barFill = value >= 0 ? '#f97316' : '#ef4444';
     
-    // In Recharts:
-    // - For positive values: y is the top of the bar (smaller y value in SVG coordinates)
-    // - For negative values: y is the zero line position, and the bar should extend downward
-    const barY = value >= 0 ? y : y;
-    const barHeight = Math.abs(height);
-    
-    return <rect x={x} y={barY} width={width} height={barHeight} fill={barFill} />;
+    if (value >= 0) {
+      // For positive values, bar grows upward from y position
+      return <rect x={x} y={y} width={width} height={height} fill={barFill} />;
+    } else {
+      // For negative values, the y position is actually the position we need to start from
+      // The bar should extend downward from this position by the height amount
+      return <rect x={x} y={y} width={width} height={height} fill={barFill} />;
+    }
   };
 
   return (
