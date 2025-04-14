@@ -22,11 +22,7 @@ import {
   TableHead,
   TableRow,
   Tooltip,
-  CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions
+  CircularProgress
 } from '@mui/material';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -36,7 +32,6 @@ import EditIcon from '@mui/icons-material/Edit';
 import ShareIcon from '@mui/icons-material/Share';
 import EmailIcon from '@mui/icons-material/Email';
 import TuneIcon from '@mui/icons-material/Tune';
-import CloseIcon from '@mui/icons-material/Close';
 import { Property, Cashflow, CashflowSettings } from '../types';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -733,17 +728,6 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   const [propertyValueIncreaseRate, setPropertyValueIncreaseRate] = useState<number>(3); // Default 3%
   const [yearsToProject, setYearsToProject] = useState<number>(30); // Default 30 years
   
-  // Add right after this:
-  
-  // Add state for copy text preview
-  const [previewText, setPreviewText] = useState<string>('');
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  
-  // Add handler to close preview
-  const handleClosePreview = () => {
-    setIsPreviewOpen(false);
-  };
-  
   // Load property data
   useEffect(() => {
     if (!propertyId) {
@@ -755,7 +739,8 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     // First, check if there's encoded property data in the URL
     const searchParams = new URLSearchParams(location.search);
     const encodedData = searchParams.get('data');
-    const customRentFromURL = searchParams.get('re');
+    const customRentParam = searchParams.get('re');
+    const hasCustomRent = customRentParam !== null;
     
     if (encodedData) {
       try {
@@ -764,19 +749,13 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
           setProperty(decodedProperty);
           setLoading(false);
           
-          // Initialize custom rent to property's rent estimate or from URL
-          if (customRentFromURL) {
-            const parsedRent = parseFloat(customRentFromURL);
-            if (!isNaN(parsedRent)) {
-              setCustomRentEstimate(parsedRent);
-              setDisplayRent(formatCurrency(parsedRent));
-            } else if (decodedProperty.rent_estimate) {
+          // Initialize custom rent to property's rent estimate
+          if (decodedProperty.rent_estimate) {
+            // Only set if we haven't already set a custom rent
+            if (!customRentEstimate) {
               setCustomRentEstimate(decodedProperty.rent_estimate);
               setDisplayRent(formatCurrency(decodedProperty.rent_estimate));
             }
-          } else if (decodedProperty.rent_estimate) {
-            setCustomRentEstimate(decodedProperty.rent_estimate);
-            setDisplayRent(formatCurrency(decodedProperty.rent_estimate));
           }
           return;
         }
@@ -799,17 +778,8 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
             setProperty(savedProperty);
             setLoading(false);
             
-            // Initialize custom rent
-            if (customRentFromURL) {
-              const parsedRent = parseFloat(customRentFromURL);
-              if (!isNaN(parsedRent)) {
-                setCustomRentEstimate(parsedRent);
-                setDisplayRent(formatCurrency(parsedRent));
-              } else if (savedProperty.rent_estimate) {
-                setCustomRentEstimate(savedProperty.rent_estimate);
-                setDisplayRent(formatCurrency(savedProperty.rent_estimate));
-              }
-            } else if (savedProperty.rent_estimate) {
+            // Initialize custom rent to property's rent estimate
+            if (savedProperty.rent_estimate && !hasCustomRent && !customRentEstimate) {
               setCustomRentEstimate(savedProperty.rent_estimate);
               setDisplayRent(formatCurrency(savedProperty.rent_estimate));
             }
@@ -828,17 +798,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     setProperty(foundProperty);
     setLoading(false);
     
-    // Initialize custom rent - prioritize URL parameter
-    if (customRentFromURL) {
-      const parsedRent = parseFloat(customRentFromURL);
-      if (!isNaN(parsedRent)) {
-        setCustomRentEstimate(parsedRent);
-        setDisplayRent(formatCurrency(parsedRent));
-      } else if (foundProperty.rent_estimate) {
-        setCustomRentEstimate(foundProperty.rent_estimate);
-        setDisplayRent(formatCurrency(foundProperty.rent_estimate));
-      }
-    } else if (foundProperty.rent_estimate) {
+    // Initialize custom rent to property's rent estimate only if no custom rent
+    // or URL parameter exists and we haven't already set one
+    if (foundProperty.rent_estimate && !hasCustomRent && !customRentEstimate) {
       setCustomRentEstimate(foundProperty.rent_estimate);
       setDisplayRent(formatCurrency(foundProperty.rent_estimate));
     }
@@ -980,17 +942,22 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     const newRent = parseFloat(displayRent.replace(/[^\d.]/g, ''));
     
     if (!isNaN(newRent) && newRent >= 0) {
-      // Store custom rent value in state
       setCustomRentEstimate(newRent);
       
-      // Update display with correctly formatted value
-      setDisplayRent(formatCurrency(newRent));
+      // Update URL to include the custom rent
+      updateUrlWithSettings({ re: newRent });
       
-      // Update URL with the new rent estimate without causing a reload
-      const searchParams = new URLSearchParams(location.search);
-      searchParams.set('re', newRent.toString());
-      const newUrl = `${location.pathname}?${searchParams.toString()}`;
-      window.history.replaceState({}, '', newUrl);
+      // Save to localStorage to persist between page loads
+      if (property) {
+        const updatedProperty = {
+          ...property,
+          rent_estimate: newRent
+        };
+        savePropertyToLocalStorage(updatedProperty);
+        
+        // Update the local property state with new rent value
+        setProperty(updatedProperty);
+      }
     } else {
       // If invalid, revert to the current value
       const currentRent = customRentEstimate !== null ? customRentEstimate : property?.rent_estimate || 0;
@@ -1072,16 +1039,41 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       savePropertyToLocalStorage(property);
     }
     
-    // Show preview first
-    setPreviewText(summary);
-    setIsPreviewOpen(true);
-    
     try {
       await navigator.clipboard.writeText(summary);
       setCopySuccess('Copied to clipboard!');
       setTimeout(() => setCopySuccess(''), 3000);
     } catch (err) {
       setCopySuccess('Failed to copy! Try selecting and copying the text manually.');
+    }
+  };
+
+  // Email share handler
+  const handleEmailShare = () => {
+    // Save the current property to localStorage to enable shared links to work
+    if (property) {
+      savePropertyToLocalStorage(property);
+    }
+    
+    const summary = encodeURIComponent(generatePropertySummary());
+    const subject = encodeURIComponent(`Property Investment Analysis: ${property?.address}`);
+    window.open(`mailto:?subject=${subject}&body=${summary}`);
+  };
+  
+  // Add new function to save property to localStorage
+  const savePropertyToLocalStorage = (prop: Property) => {
+    try {
+      // Get existing saved properties
+      const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
+      const savedProperties = savedPropertiesStr ? JSON.parse(savedPropertiesStr) : {};
+      
+      // Add or update this property
+      savedProperties[prop.property_id] = prop;
+      
+      // Save back to localStorage
+      localStorage.setItem('rentToolFinder_properties', JSON.stringify(savedProperties));
+    } catch (error) {
+      console.error('Error saving property to localStorage:', error);
     }
   };
   
@@ -1399,23 +1391,6 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
     );
   };
   
-  // Add function to save property to localStorage
-  const savePropertyToLocalStorage = (prop: Property) => {
-    try {
-      // Get existing saved properties
-      const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
-      const savedProperties = savedPropertiesStr ? JSON.parse(savedPropertiesStr) : {};
-      
-      // Add or update this property
-      savedProperties[prop.property_id] = prop;
-      
-      // Save back to localStorage
-      localStorage.setItem('rentToolFinder_properties', JSON.stringify(savedProperties));
-    } catch (error) {
-      console.error('Error saving property to localStorage:', error);
-    }
-  };
-  
   return (
     <>
       <CssBaseline />
@@ -1446,9 +1421,17 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             variant="outlined" 
             startIcon={<ShareIcon />}
             onClick={handleCopyToClipboard}
-            sx={{ color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+            sx={{ mr: 1, color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
           >
             Copy Text
+          </Button>
+          <Button 
+            variant="outlined"
+            startIcon={<EmailIcon />}
+            onClick={handleEmailShare}
+            sx={{ color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+          >
+            Email
           </Button>
         </Toolbar>
       </AppBar>
@@ -1927,57 +1910,6 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           </Box>
         </Paper>
       </Container>
-      
-      {/* Text Copy Preview Dialog */}
-      <Dialog
-        open={isPreviewOpen}
-        onClose={handleClosePreview}
-        maxWidth="md"
-        PaperProps={{
-          sx: { borderRadius: 2 }
-        }}
-      >
-        <DialogTitle>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="h6">Property Analysis</Typography>
-            <IconButton onClick={handleClosePreview} size="small">
-              <CloseIcon />
-            </IconButton>
-          </Box>
-        </DialogTitle>
-        <DialogContent dividers>
-          <Box
-            sx={{
-              whiteSpace: 'pre-wrap',
-              fontFamily: 'monospace',
-              fontSize: '0.9rem',
-              backgroundColor: '#f5f5f5',
-              p: 2,
-              borderRadius: 1,
-              maxHeight: '60vh',
-              overflow: 'auto'
-            }}
-          >
-            {previewText}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClosePreview} color="primary">
-            Close
-          </Button>
-          <Button 
-            onClick={() => {
-              navigator.clipboard.writeText(previewText);
-              setCopySuccess('Copied to clipboard!');
-              setTimeout(() => setCopySuccess(''), 3000);
-            }} 
-            color="primary" 
-            variant="contained"
-          >
-            Copy to Clipboard
-          </Button>
-        </DialogActions>
-      </Dialog>
     </>
   );
 };
