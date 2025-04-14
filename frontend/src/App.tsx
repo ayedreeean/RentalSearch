@@ -1351,11 +1351,546 @@ function App() {
               
               {/* Search Form - Modified to include price filters */}
               <div className="search-container">
-                {/* ... existing search form ... */}
+                <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSearch(); }} className="search-form">
+                  <div style={{ flex: '1', minWidth: '250px' }}>
+                    <TextField
+                      label="Enter Location (City, State, Zip, or Full Address)"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      fullWidth
+                      variant="outlined"
+                      required
+                      className="search-input"
+                      placeholder="e.g. Austin, TX or 123 Main St, Austin, TX"
+                      helperText="Search by city, zip code, or specific property address"
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <SearchIcon color="action" />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Price filters */}
+                  <div className="price-filter-container">
+                    <TextField
+                      label="Min Price"
+                      value={displayMinPrice}
+                      onChange={handleMinPriceChange}
+                      onBlur={handleMinPriceBlur}
+                      onFocus={handleMinPriceFocus}
+                      variant="outlined"
+                      size="medium"
+                      fullWidth
+                    />
+                    <TextField
+                      label="Max Price"
+                      value={displayMaxPrice}
+                      onChange={handleMaxPriceChange}
+                      onBlur={handleMaxPriceBlur}
+                      onFocus={handleMaxPriceFocus}
+                      variant="outlined"
+                      size="medium"
+                      fullWidth
+                    />
+                  </div>
+                  
+                  <Button 
+                    type="submit"
+                    variant="contained" 
+                    className="search-button"
+                  >
+                    Search Properties
+                  </Button>
+                </Box>
               </div>
+              
+              {/* Floating Assumptions Button - Render only after search */}
+              {searchPerformed && (
+                <Fab
+                  variant="extended"
+                  aria-label="toggle assumptions panel"
+                  onClick={() => setIsAssumptionsPanelOpen(!isAssumptionsPanelOpen)}
+                  sx={{
+                    position: 'fixed',
+                    bottom: 16,
+                    right: 16,
+                    zIndex: 1250,
+                    bgcolor: '#4f46e5', // Apply custom background color
+                    color: 'white', // Ensure text/icon contrast
+                    '&:hover': {
+                      bgcolor: '#4338ca' // Slightly darker shade for hover
+                    }
+                  }}
+                >
+                  <TuneIcon sx={{ mr: 1 }} />
+                  Assumptions
+                </Fab>
+              )}
+
+              {/* Floating Assumptions Panel - Render only after search and when open */}
+              {searchPerformed && isAssumptionsPanelOpen && (
+                <Paper 
+                  elevation={4} 
+                  sx={{
+                    position: 'fixed',
+                    bottom: 72, // Position above FAB (Fab height ~56px + 16px spacing)
+                    right: 16,
+                    zIndex: 1200, 
+                    maxWidth: '400px', 
+                    maxHeight: 'calc(100vh - 90px)', 
+                    overflowY: 'auto', 
+                    borderRadius: 2, 
+                    p: 3 // Padding directly on Paper
+                  }}
+                >
+                  <Typography variant="h6" fontWeight="medium" gutterBottom> 
+                    Mortgage & Cashflow Assumptions
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                    {/* Interest Rate Slider */}
+                    <Box sx={{ flexBasis: { xs: '100%' } }}>
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="body2" gutterBottom>Interest Rate: {interestRate}%</Typography>
+                        <Slider
+                          value={interestRate}
+                          onChange={(e, newValue) => setInterestRate(newValue as number)}
+                          aria-labelledby="interest-rate-slider"
+                          valueLabelDisplay="auto"
+                          step={0.1}
+                          min={0.1}
+                          max={15}
+                          sx={{ color: '#4f46e5' }} // Apply custom color
+                        />
+                      </Box>
+                    </Box>
+                    {/* Loan Term Slider */}
+                    <Box sx={{ flexBasis: { xs: '100%' } }}>
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="body2" gutterBottom>Loan Term: {loanTerm} years</Typography>
+                        <Slider
+                          value={loanTerm}
+                          onChange={(e, newValue) => setLoanTerm(newValue as number)}
+                          aria-labelledby="loan-term-slider"
+                          valueLabelDisplay="auto"
+                          step={1}
+                          min={5}
+                          max={40}
+                          sx={{ color: '#4f46e5' }} // Apply custom color
+                        />
+                      </Box>
+                    </Box>
+                    {/* Down Payment Slider */}
+                    <Box sx={{ flexBasis: { xs: '100%' } }}>
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="body2" gutterBottom>Down Payment: {downPaymentPercent}%</Typography>
+                        <Slider
+                          value={downPaymentPercent}
+                          onChange={(e, newValue) => setDownPaymentPercent(newValue as number)}
+                          aria-labelledby="down-payment-slider"
+                          valueLabelDisplay="auto"
+                          step={1}
+                          min={0}
+                          max={100}
+                          sx={{ color: '#4f46e5' }} // Apply custom color
+                        />
+                      </Box>
+                    </Box>
+                    {/* Tax & Insurance Slider */}
+                    <Box sx={{ flexBasis: { xs: '100%' } }}>
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="body2" gutterBottom>Property Tax & Insurance: {taxInsurancePercent}%</Typography>
+                        <Slider
+                          value={taxInsurancePercent}
+                          onChange={(e, value) => setTaxInsurancePercent(value as number)}
+                          min={0}
+                          max={5}
+                          step={0.1}
+                          valueLabelDisplay="auto"
+                          valueLabelFormat={(value) => `${value}%`}
+                          sx={{ color: '#4f46e5' }} // Apply custom color
+                        />
+                      </Box>
+                    </Box>
+                    {/* Vacancy Slider */}
+                    <Box sx={{ flexBasis: { xs: '100%' } }}>
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="body2" gutterBottom>Vacancy: {vacancyPercent}%</Typography>
+                        <Slider
+                          value={vacancyPercent}
+                          onChange={(e, value) => setVacancyPercent(value as number)}
+                          min={0}
+                          max={10}
+                          step={1}
+                          valueLabelDisplay="auto"
+                          valueLabelFormat={(value) => `${value}%`}
+                          sx={{ color: '#4f46e5' }} // Apply custom color
+                        />
+                      </Box>
+                    </Box>
+                    {/* CapEx Slider */}
+                    <Box sx={{ flexBasis: { xs: '100%' } }}>
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="body2" gutterBottom>CapEx: {capexPercent}%</Typography>
+                        <Slider
+                          value={capexPercent}
+                          onChange={(e, value) => setCapexPercent(value as number)}
+                          min={0}
+                          max={10}
+                          step={1}
+                          valueLabelDisplay="auto"
+                          valueLabelFormat={(value) => `${value}%`}
+                          sx={{ color: '#4f46e5' }} // Apply custom color
+                        />
+                      </Box>
+                    </Box>
+                    {/* Property Management Slider */}
+                    <Box sx={{ flexBasis: { xs: '100%' } }}>
+                      <Box sx={{ mb: 0 }}>
+                        <Typography variant="body2" gutterBottom>Property Management: {propertyManagementPercent}%</Typography>
+                        <Slider
+                          value={propertyManagementPercent}
+                          onChange={(e, value) => setPropertyManagementPercent(value as number)}
+                          min={0}
+                          max={20}
+                          step={1}
+                          valueLabelDisplay="auto"
+                          valueLabelFormat={(value) => `${value}%`}
+                          sx={{ color: '#4f46e5' }} // Apply custom color
+                        />
+                      </Box>
+                    </Box>
+                  </Box>
+                </Paper>
+              )}
+              
+              {/* Property Results Section */}
+              {error && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {error}
+                </Alert>
+              )}
+              
+              {initialLoading ? (
+                <Box className="loading-container">
+                  <CircularProgress className="loading-spinner" />
+                  <Typography className="loading-message">
+                    Loading properties...
+                  </Typography>
+                </Box>
+              ) : searchPerformed && !loading && totalProperties === 0 ? (
+                <Typography variant="body1" sx={{ p: 2, textAlign: 'center', mt: 4 }}>
+                  No properties found matching your location or criteria.
+                </Typography>
+              ) : displayedProperties.length > 0 ? (
+                <>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, mt: 4 }}>
+                    <Typography variant="h6">
+                      Showing {sortedProperties.length} of {totalProperties} Properties
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <FormControl sx={{ m: 1, minWidth: 120 }} size="small">
+                        <InputLabel id="sort-by-label">Sort By</InputLabel>
+                        <Select
+                          labelId="sort-by-label"
+                          value={sortConfig.key || ''}
+                          label="Sort By"
+                          onChange={(e) => {
+                            const newKey = e.target.value as SortableKey | '';
+                            setSortConfig(prev => ({ ...prev, key: newKey === '' ? null : newKey }));
+                          }}
+                        >
+                          <MenuItem value="price">Price</MenuItem>
+                          <MenuItem value="rent_estimate">Rent Estimate</MenuItem>
+                          <MenuItem value="ratio">Ratio</MenuItem>
+                          <MenuItem value="cashflow">Monthly Cashflow</MenuItem>
+                          <MenuItem value="bedrooms">Bedrooms</MenuItem>
+                          <MenuItem value="bathrooms">Bathrooms</MenuItem>
+                          <MenuItem value="sqft">Sq Ft</MenuItem>
+                          <MenuItem value="days_on_market">Days on Market</MenuItem>
+                        </Select>
+                      </FormControl>
+                      <IconButton 
+                        onClick={() => setSortConfig(prev => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))}
+                        color="primary"
+                        disabled={!sortConfig.key}
+                      >
+                        {sortConfig.direction === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />}
+                      </IconButton>
+                    </Box>
+                  </Box>
+                
+                  <div className="property-grid">
+                    {sortedProperties.map((property) => (
+                      <PropertyCard
+                        key={property.property_id}
+                        property={property}
+                        calculateCashflow={calculateCashflow}
+                        formatCurrency={formatCurrency}
+                        formatPercent={formatPercent}
+                        vacancyPercent={vacancyPercent}
+                        capexPercent={capexPercent}
+                        downPaymentPercent={downPaymentPercent}
+                        propertyManagementPercent={propertyManagementPercent}
+                        handleRentEstimateChange={handleRentEstimateChange}
+                      />
+                    ))}
+                  </div>
+                  
+                  {isProcessingBackground && (
+                    <Box className="loading-container" sx={{ py: 2 }}>
+                      <CircularProgress size={30} className="loading-spinner" />
+                      <Typography className="loading-message">
+                        Loading & Processing More Properties...
+                      </Typography>
+                    </Box>
+                  )}
+                </>
+              ) : searchPerformed && (loading || isProcessingBackground) ? (
+                <Box className="loading-container">
+                  <CircularProgress size={30} className="loading-spinner" />
+                  <Typography className="loading-message">
+                    Loading & Processing Properties...
+                  </Typography>
+                </Box>
+              ) : null}
+              
+              {/* FAQ Modal */}
+              <Modal
+                open={isFaqOpen}
+                onClose={handleCloseFaq}
+                aria-labelledby="faq-modal-title"
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Paper className="faq-modal">
+                  <div className="faq-header">
+                    <Typography id="faq-modal-title" className="faq-title">
+                      Help & Frequently Asked Questions
+                    </Typography>
+                    <IconButton 
+                      edge="end" 
+                      color="inherit" 
+                      onClick={handleCloseFaq} 
+                      aria-label="close"
+                    >
+                      <CloseIcon />
+                    </IconButton>
+                  </div>
+                  
+                  <div className="faq-content">
+                    {/* FAQ Navigation */}
+                    <div className="faq-nav">
+                      <div 
+                        className={`faq-nav-item ${activeFaqSection === 'general' ? 'active' : ''}`}
+                        onClick={() => handleFaqSectionChange('general')}
+                      >
+                        General
+                      </div>
+                      <div 
+                        className={`faq-nav-item ${activeFaqSection === 'search' ? 'active' : ''}`}
+                        onClick={() => handleFaqSectionChange('search')}
+                      >
+                        Searching
+                      </div>
+                      <div 
+                        className={`faq-nav-item ${activeFaqSection === 'filters' ? 'active' : ''}`}
+                        onClick={() => handleFaqSectionChange('filters')}
+                      >
+                        Filters
+                      </div>
+                      <div 
+                        className={`faq-nav-item ${activeFaqSection === 'cashflow' ? 'active' : ''}`}
+                        onClick={() => handleFaqSectionChange('cashflow')}
+                      >
+                        Cashflow Analysis
+                      </div>
+                    </div>
+                    
+                    {/* General FAQ Section */}
+                    {activeFaqSection === 'general' && (
+                      <div>
+                        <div className="faq-section">
+                          <div className="faq-question">What is RentalSearch?</div>
+                          <div className="faq-answer">
+                            RentalSearch is a tool designed to help you find potential rental investment properties. It searches for properties on the market and analyzes their potential cash flow based on estimated rent and customizable assumptions.
+                          </div>
+                        </div>
+                        
+                        <div className="faq-section">
+                          <div className="faq-question">How does RentalSearch work?</div>
+                          <div className="faq-answer">
+                            RentalSearch fetches property listings from real estate APIs and then calculates potential cash flow for each property based on rent estimates and your personalized investment criteria. Results are displayed as cards with expandable cashflow analysis.
+                          </div>
+                        </div>
+                        
+                        <div className="faq-section">
+                          <div className="faq-question">Are the rent estimates accurate?</div>
+                          <div className="faq-answer">
+                            Rent estimates are sourced from market data and algorithms, but they should be considered as general guidelines. For more accurate estimates, we recommend checking the RentCast link available on each property card or consulting with a local real estate professional.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Search FAQ Section */}
+                    {activeFaqSection === 'search' && (
+                      <div>
+                        <div className="faq-section">
+                          <div className="faq-question">How do I search for properties?</div>
+                          <div className="faq-answer">
+                            Enter a location in the search bar at the top of the page. You can use a city name, state, zip code, or a specific property address (e.g., "Austin, TX", "78701", or "123 Main St, Austin, TX"). For specific properties, entering the full address will give you the most accurate results. Then click the "Search Properties" button to see results.
+                          </div>
+                        </div>
+                        
+                        <div className="faq-section">
+                          <div className="faq-question">Why does searching take time?</div>
+                          <div className="faq-answer">
+                            RentalSearch processes a large amount of property data and performs calculations for each property. The search first fetches basic property data, then progressively enhances it with additional information like rent estimates, which occurs in the background.
+                          </div>
+                        </div>
+                        
+                        <div className="faq-section">
+                          <div className="faq-question">How can I see more details about a property?</div>
+                          <div className="faq-answer">
+                            Click on the property address or image to visit the original listing. You can also expand the "Cashflow Analysis" section on each property card to see financial details. Additionally, use the "Quick Links" at the bottom of each card to access Zillow and RentCast for more information.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Filters FAQ Section */}
+                    {activeFaqSection === 'filters' && (
+                      <div>
+                        <div className="faq-section">
+                          <div className="faq-question">How do I use the price filters?</div>
+                          <div className="faq-answer">
+                            After performing a search, you can use the "Min Price" and "Max Price" fields to narrow down the results. Enter the desired price range and the list will automatically update to show only properties within that range.
+                          </div>
+                        </div>
+                        
+                        <div className="faq-section">
+                          <div className="faq-question">Can I sort the search results?</div>
+                          <div className="faq-answer">
+                            Yes, you can sort the results by various criteria including price, rent estimate, bedrooms, bathrooms, square footage, and the rent-to-price ratio. Use the sort controls to organize the properties in ascending or descending order.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Cashflow FAQ Section */}
+                    {activeFaqSection === 'cashflow' && (
+                      <div>
+                        <div className="faq-section">
+                          <div className="faq-question">What is the cashflow analysis?</div>
+                          <div className="faq-answer">
+                            The cashflow analysis provides a detailed breakdown of the potential income and expenses for each property as a rental investment. It includes mortgage payments, tax and insurance costs, vacancy allowances, capital expenditure reserves, and calculates the monthly and annual cash flow as well as cash-on-cash return.
+                          </div>
+                        </div>
+                        
+                        <div className="faq-section">
+                          <div className="faq-question">Can I adjust the investment assumptions?</div>
+                          <div className="faq-answer">
+                            Yes, you can customize the investment assumptions to match your specific situation. Adjustable parameters include interest rate, loan term, down payment percentage, tax and insurance percentage, vacancy allowance, and capital expenditure (CapEx) reserve.
+                          </div>
+                        </div>
+                        
+                        <div className="faq-section">
+                          <div className="faq-question">How do I interpret the rent-to-price ratio?</div>
+                          <div className="faq-answer">
+                            The rent-to-price ratio is a quick way to assess a property's potential as a rental investment. It shows the monthly rent as a percentage of the purchase price. Generally, a higher ratio is better:
+                            <ul>
+                              <li>0.7% and above (green): Potentially strong cash flow</li>
+                              <li>0.4% to 0.7% (yellow): Moderate potential</li>
+                              <li>Below 0.4% (red): May be challenging to achieve positive cash flow</li>
+                            </ul>
+                            Remember that this is just one metric and should be considered alongside other factors like location, property condition, and growth potential.
+                          </div>
+                        </div>
+                        
+                        <div className="faq-section">
+                          <div className="faq-question">Can I edit the rent estimate?</div>
+                          <div className="faq-answer">
+                            Yes, you can edit the rent estimate for any property by clicking on the rent estimate value in the cashflow analysis section. This allows you to input a custom rent amount if you have more accurate information about potential rental income.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </Paper>
+              </Modal>
             </Container>
           </>
         } />
+        
+        {/* Property Details Route */}
+        <Route 
+          path="/property/:propertyId" 
+          element={
+            <PropertyDetailsPage 
+              properties={displayedProperties}
+              calculateCashflow={(property, settings) => {
+                // Create a function that uses the settings passed in instead of the global state
+                const calculateCashflowWithSettings = (property: Property, settings: CashflowSettings) => {
+                  const monthlyMortgage = calculateMortgageWithSettings(property.price, settings);
+                  const monthlyTaxInsurance = property.price * (settings.taxInsurancePercent / 100) / 12;
+                  const monthlyVacancy = property.rent_estimate * (settings.vacancyPercent / 100);
+                  const monthlyCapex = property.rent_estimate * (settings.capexPercent / 100);
+                  const monthlyPropertyManagement = property.rent_estimate * (settings.propertyManagementPercent / 100);
+                  
+                  const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
+                  const monthlyCashflow = property.rent_estimate - totalMonthlyExpenses;
+                  const annualCashflow = monthlyCashflow * 12;
+                  
+                  const downPayment = property.price * (settings.downPaymentPercent / 100);
+                  const closingCosts = property.price * 0.03; // Estimate 3% for closing costs
+                  const initialInvestment = downPayment + closingCosts;
+                  
+                  const cashOnCashReturn = (annualCashflow / initialInvestment) * 100;
+                  
+                  return {
+                    monthlyMortgage,
+                    monthlyTaxInsurance,
+                    monthlyVacancy,
+                    monthlyCapex,
+                    monthlyPropertyManagement,
+                    totalMonthlyExpenses,
+                    monthlyCashflow,
+                    annualCashflow,
+                    cashOnCashReturn
+                  };
+                };
+                
+                // Helper function to calculate mortgage with specific settings
+                function calculateMortgageWithSettings(price: number, settings: CashflowSettings): number {
+                  const downPayment = price * (settings.downPaymentPercent / 100);
+                  const loanAmount = price - downPayment;
+                  const monthlyRate = settings.interestRate / 100 / 12;
+                  const payments = settings.loanTerm * 12;
+                  
+                  if (monthlyRate === 0) return loanAmount / payments;
+                  
+                  const x = Math.pow(1 + monthlyRate, payments);
+                  return loanAmount * (monthlyRate * x) / (x - 1);
+                }
+                
+                const propertyForCashflow = {
+                  ...property,
+                  rent_source: property.rent_source ?? "calculated", // Default to 'calculated' if undefined
+                };
+                return calculateCashflowWithSettings(propertyForCashflow, settings);
+              }}
+              formatCurrency={formatCurrency}
+              formatPercent={formatPercent}
+              defaultSettings={defaultSettings}
+            />
+          } 
+        />
       </Routes>
     </div>
   );
