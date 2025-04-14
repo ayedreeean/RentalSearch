@@ -438,7 +438,7 @@ a:hover {
 }
 
 /* ------------ Help/FAQ Styles ------------ */
-.help-button {
+.help-button, .bookmarks-button {
   background-color: white !important;
   color: #4f46e5 !important;
   border: 1px solid rgba(79, 70, 229, 0.5) !important;
@@ -449,7 +449,7 @@ a:hover {
   gap: 0.35rem !important;
 }
 
-.help-button:hover {
+.help-button:hover, .bookmarks-button:hover {
   background-color: rgba(79, 70, 229, 0.04) !important;
   border-color: #4f46e5 !important;
 }

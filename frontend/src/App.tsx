@@ -1269,14 +1269,6 @@ function App() {
                       href="#/bookmarks"
                       className="bookmarks-button"
                       startIcon={<BookmarkIcon />}
-                      sx={{ 
-                        color: '#6366f1', 
-                        borderColor: '#6366f1',
-                        '&:hover': {
-                          borderColor: '#4f46e5',
-                          bgcolor: 'rgba(99, 102, 241, 0.04)'
-                        }
-                      }}
                     >
                       Bookmarks
                     </Button>
