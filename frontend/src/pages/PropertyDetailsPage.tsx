@@ -739,6 +739,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     // First, check if there's encoded property data in the URL
     const searchParams = new URLSearchParams(location.search);
     const encodedData = searchParams.get('data');
+    const customRentFromURL = searchParams.get('re');
     
     if (encodedData) {
       try {
@@ -747,8 +748,17 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
           setProperty(decodedProperty);
           setLoading(false);
           
-          // Initialize custom rent to property's rent estimate
-          if (decodedProperty.rent_estimate) {
+          // Initialize custom rent to property's rent estimate or from URL
+          if (customRentFromURL) {
+            const parsedRent = parseFloat(customRentFromURL);
+            if (!isNaN(parsedRent)) {
+              setCustomRentEstimate(parsedRent);
+              setDisplayRent(formatCurrency(parsedRent));
+            } else if (decodedProperty.rent_estimate) {
+              setCustomRentEstimate(decodedProperty.rent_estimate);
+              setDisplayRent(formatCurrency(decodedProperty.rent_estimate));
+            }
+          } else if (decodedProperty.rent_estimate) {
             setCustomRentEstimate(decodedProperty.rent_estimate);
             setDisplayRent(formatCurrency(decodedProperty.rent_estimate));
           }
@@ -773,8 +783,17 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
             setProperty(savedProperty);
             setLoading(false);
             
-            // Initialize custom rent to property's rent estimate
-            if (savedProperty.rent_estimate) {
+            // Initialize custom rent
+            if (customRentFromURL) {
+              const parsedRent = parseFloat(customRentFromURL);
+              if (!isNaN(parsedRent)) {
+                setCustomRentEstimate(parsedRent);
+                setDisplayRent(formatCurrency(parsedRent));
+              } else if (savedProperty.rent_estimate) {
+                setCustomRentEstimate(savedProperty.rent_estimate);
+                setDisplayRent(formatCurrency(savedProperty.rent_estimate));
+              }
+            } else if (savedProperty.rent_estimate) {
               setCustomRentEstimate(savedProperty.rent_estimate);
               setDisplayRent(formatCurrency(savedProperty.rent_estimate));
             }
@@ -793,8 +812,17 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     setProperty(foundProperty);
     setLoading(false);
     
-    // Initialize custom rent to property's rent estimate
-    if (foundProperty.rent_estimate) {
+    // Initialize custom rent - prioritize URL parameter
+    if (customRentFromURL) {
+      const parsedRent = parseFloat(customRentFromURL);
+      if (!isNaN(parsedRent)) {
+        setCustomRentEstimate(parsedRent);
+        setDisplayRent(formatCurrency(parsedRent));
+      } else if (foundProperty.rent_estimate) {
+        setCustomRentEstimate(foundProperty.rent_estimate);
+        setDisplayRent(formatCurrency(foundProperty.rent_estimate));
+      }
+    } else if (foundProperty.rent_estimate) {
       setCustomRentEstimate(foundProperty.rent_estimate);
       setDisplayRent(formatCurrency(foundProperty.rent_estimate));
     }
