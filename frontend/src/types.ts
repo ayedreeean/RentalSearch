@@ -13,6 +13,7 @@ export interface Property {
   rent_source?: "zillow" | "calculated";
   latitude?: number;
   longitude?: number;
+  notes?: string;
 }
 
 export interface Cashflow {

@@ -749,6 +749,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   // Add state for bookmarking
   const [isBookmarked, setIsBookmarked] = useState(false);
   
+  // Add state for notes
+  const [notes, setNotes] = useState<string>('');
+  
   // Load property data
   useEffect(() => {
     if (!propertyId) {
@@ -761,73 +764,101 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     const searchParams = new URLSearchParams(location.search);
     const encodedData = searchParams.get('data');
     const customRentParam = searchParams.get('re');
+    const notesParam = searchParams.get('nt'); // Get notes from URL parameter
     const hasCustomRent = customRentParam !== null;
+    
+    let loadedFromSearch = false; // Flag to track if loaded from search results
     
     if (encodedData) {
       try {
         const decodedProperty = decodePropertyFromURL(encodedData);
         if (decodedProperty) {
           setProperty(decodedProperty);
+          // Set notes if present in decoded data
+          if (decodedProperty.notes) {
+            setNotes(decodedProperty.notes);
+          }
           setLoading(false);
           
-          // Initialize custom rent to property's rent estimate
+          // Initialize custom rent if available
           if (decodedProperty.rent_estimate) {
-            // Only set if we haven't already set a custom rent
             if (!customRentEstimate) {
               setCustomRentEstimate(decodedProperty.rent_estimate);
               setDisplayRent(formatCurrency(decodedProperty.rent_estimate));
             }
           }
-          return;
+          return; // Exit early if loaded from URL data
         }
       } catch (error) {
         console.error('Error loading property from URL data:', error);
       }
     }
     
+    // If not loaded from URL data, try finding in properties array (search results)
     const foundProperty = properties.find(p => p.property_id === propertyId);
     
-    if (!foundProperty) {
-      // Try to load from localStorage
-      try {
-        const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
-        if (savedPropertiesStr) {
-          const savedProperties = JSON.parse(savedPropertiesStr);
-          const savedProperty = savedProperties[propertyId];
-          
-          if (savedProperty) {
-            setProperty(savedProperty);
-            setLoading(false);
-            
-            // Initialize custom rent to property's rent estimate
-            if (savedProperty.rent_estimate && !hasCustomRent && !customRentEstimate) {
-              setCustomRentEstimate(savedProperty.rent_estimate);
-              setDisplayRent(formatCurrency(savedProperty.rent_estimate));
-            }
-            return;
-          }
-        }
-      } catch (error) {
-        console.error('Error loading property from localStorage:', error);
+    if (foundProperty) {
+      setProperty(foundProperty);
+      setLoading(false);
+      loadedFromSearch = true; // Mark as loaded from search
+      
+      // Initialize custom rent if available and not set by URL param
+      if (foundProperty.rent_estimate && !hasCustomRent && !customRentEstimate) {
+        setCustomRentEstimate(foundProperty.rent_estimate);
+        setDisplayRent(formatCurrency(foundProperty.rent_estimate));
       }
       
-      setError('Property not found');
-      setLoading(false);
-      return;
+      // Set notes from property object if they exist (e.g., previously bookmarked/saved)
+      // Prefer URL notes param if present, otherwise use property notes
+      if (notesParam) {
+          setNotes(decodeURIComponent(notesParam));
+      } else if (foundProperty.notes) {
+          setNotes(foundProperty.notes);
+      }
+      // AUTO-EXPAND assumptions drawer if loaded from search
+      setIsAssumptionsDrawerOpen(true);
+      
+      return; // Exit early if loaded from search results
     }
     
-    setProperty(foundProperty);
+    // If not found in properties, try localStorage (likely a bookmark)
+    try {
+      const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
+      if (savedPropertiesStr) {
+        const savedProperties = JSON.parse(savedPropertiesStr);
+        const savedProperty = savedProperties[propertyId];
+        
+        if (savedProperty) {
+          setProperty(savedProperty);
+          setLoading(false);
+          
+          // Initialize custom rent if available and not set by URL param
+          if (savedProperty.rent_estimate && !hasCustomRent && !customRentEstimate) {
+            setCustomRentEstimate(savedProperty.rent_estimate);
+            setDisplayRent(formatCurrency(savedProperty.rent_estimate));
+          }
+          
+          // Set notes from saved property, preferring URL parameter if present
+          if (notesParam) {
+            setNotes(decodeURIComponent(notesParam));
+          } else if (savedProperty.notes) {
+            setNotes(savedProperty.notes);
+          }
+          
+          return; // Exit early if loaded from localStorage
+        }
+      }
+    } catch (error) {
+      console.error('Error loading property from localStorage:', error);
+    }
+    
+    // If property not found anywhere, set error
+    setError('Property not found');
     setLoading(false);
     
-    // Initialize custom rent to property's rent estimate only if no custom rent
-    // or URL parameter exists and we haven't already set one
-    if (foundProperty.rent_estimate && !hasCustomRent && !customRentEstimate) {
-      setCustomRentEstimate(foundProperty.rent_estimate);
-      setDisplayRent(formatCurrency(foundProperty.rent_estimate));
-    }
-  }, [propertyId, properties, formatCurrency, location.search]);
+  }, [propertyId, properties, formatCurrency, location.search]); // Dependencies remain the same
   
-  // Update page title when property loads
+  // Update page title and load settings from localStorage
   useEffect(() => {
     if (property) {
       document.title = `${property.address} | RentalSearch`;
@@ -893,7 +924,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     };
   }, [property, location.search]);
 
-  // Handle URL query parameters for settings
+  // Handle URL query parameters for settings (including notes if passed directly)
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     
@@ -980,7 +1011,18 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
         setDisplayRent(formatCurrency(val));
       }
     }
-  }, [location.search, defaultSettings, property, formatCurrency, userEditedRent]);
+
+    // Check for notes param (nt) - this might override notes loaded from 'data' if both exist
+    const notesParam = searchParams.get('nt');
+    if (notesParam) {
+        // Check if notes were already set by the main loading effect
+        // Only update if the param value is different or notes are currently empty
+        const decodedNotes = decodeURIComponent(notesParam);
+        if (decodedNotes !== notes) {
+            setNotes(decodedNotes);
+        }
+    }
+  }, [location.search, defaultSettings, property, formatCurrency, userEditedRent, notes]); // Added notes to dependency array
   
   // Add useEffect for long-term projection settings from URL
   useEffect(() => {
@@ -1081,6 +1123,13 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   // Navigate back to search results
   const handleBackToSearch = () => {
     navigate('/');
+  };
+  
+  // Add handler for notes change
+  const handleNotesChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setNotes(event.target.value);
+    // Consider adding logic here to save notes to localStorage if the property is bookmarked
+    // For now, saving happens primarily during bookmarking/sharing actions.
   };
   
   // Create a modified property object for cashflow calculations
@@ -1185,7 +1234,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     
     // Save the current property to localStorage to enable shared links to work
     if (property) {
-      savePropertyToLocalStorage(property);
+      savePropertyToLocalStorage(property, notes);
       // Also save current settings
       saveSettingsToLocalStorage(property.property_id);
     }
@@ -1203,14 +1252,17 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   // const handleEmailShare = () => { ... }; // Comment out or delete
   
   // Add new function to save property to localStorage
-  const savePropertyToLocalStorage = (prop: Property) => {
+  const savePropertyToLocalStorage = (prop: Property, currentNotes: string) => {
     try {
       // Get existing saved properties
       const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
       const savedProperties = savedPropertiesStr ? JSON.parse(savedPropertiesStr) : {};
       
-      // Add or update this property
-      savedProperties[prop.property_id] = prop;
+      // Add or update this property, including notes
+      savedProperties[prop.property_id] = {
+        ...prop,
+        notes: currentNotes // Add notes here
+      };
       
       // Save back to localStorage
       localStorage.setItem('rentToolFinder_properties', JSON.stringify(savedProperties));
@@ -1419,6 +1471,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     const rentValue = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
     const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
     
+    // Add notes to summary if they exist
+    const notesSection = notes ? `\n📝 NOTES:\n${notes}\n` : '\n';
+    
     return `🏠 Property Investment Analysis 🏠
 
 ADDRESS: ${property.address}
@@ -1443,7 +1498,7 @@ ${property.days_on_market !== null ? `• Days on market: ${property.days_on_mar
 • Annual Cashflow: ${formatCurrency(cashflow.annualCashflow)}
 • Cash-on-Cash Return: ${formatPercent(cashflow.cashOnCashReturn)}
 
-🔗 ZILLOW LISTING: ${property.url}
+${notesSection}🔗 ZILLOW LISTING: ${property.url}
 🔗 RENTCAST ANALYSIS: ${rentCastUrl}
 
 See full analysis: ${window.location.href}
@@ -1453,7 +1508,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
   };
   
   // Function to encode property data into a URL-safe string
-  const encodePropertyToURL = (property: Property): string => {
+  const encodePropertyToURL = (property: Property, currentNotes: string): string => {
     // Create a minimal version of the property with only essential fields
     const minimalProperty = {
       property_id: property.property_id,
@@ -1469,7 +1524,8 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
       ratio: property.ratio,
       rent_source: property.rent_source,
       latitude: property.latitude,
-      longitude: property.longitude
+      longitude: property.longitude,
+      notes: currentNotes // Include notes
     };
     
     // Encode as JSON and then to base64
@@ -1479,11 +1535,11 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
   };
   
   // Function to decode property data from URL string
-  const decodePropertyFromURL = (encodedStr: string): Property | null => {
+  const decodePropertyFromURL = (encodedStr: string): (Property & { notes?: string }) | null => { // Update return type
     try {
       // Decode from base64, then from URI encoding, then parse JSON
       const jsonStr = decodeURIComponent(atob(encodedStr));
-      return JSON.parse(jsonStr) as Property;
+      return JSON.parse(jsonStr) as (Property & { notes?: string }); // Cast includes notes
     } catch (error) {
       console.error('Error decoding property from URL:', error);
       return null;
@@ -1501,8 +1557,8 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
     // Create a URLSearchParams object for the query parameters
     const params = new URLSearchParams();
     
-    // Add the encoded property data
-    const encodedProperty = encodePropertyToURL(property);
+    // Add the encoded property data (now including notes)
+    const encodedProperty = encodePropertyToURL(property, notes); // Pass notes here
     params.set('data', encodedProperty);
     
     // Add the settings
@@ -1521,6 +1577,11 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
     // Add custom rent estimate if set
     if (customRentEstimate !== null) {
       params.set('re', customRentEstimate.toString());
+    }
+    
+    // Add the notes directly as a separate, encoded parameter as well (optional redundancy, or primary way if not in 'data')
+    if (notes) {
+        params.set('nt', encodeURIComponent(notes));
     }
     
     return `${baseUrl}?${params.toString()}`;
@@ -1544,8 +1605,8 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
   const handleBookmarkToggle = () => {
     if (!property) return;
 
-    // Generate the shareable URL that contains all settings/customizations
-    const shareableURL = generateShareableURL();
+    // Generate the shareable URL that contains all settings/customizations including notes
+    const shareableURL = generateShareableURL(); // Already includes notes logic
     
     // Get current bookmarks from localStorage
     const bookmarksStr = localStorage.getItem('rentToolFinder_bookmarks');
@@ -1565,10 +1626,13 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
         setCopySuccess('Property removed from bookmarks');
       }
     } else {
-      // Add bookmark
+      // Add bookmark - ensure notes are included in the saved property object
       bookmarks[property.property_id] = {
         url: shareableURL,
-        property: property,
+        property: {
+            ...property,
+            notes: notes // Explicitly add notes here
+        },
         date: new Date().toISOString()
       };
       setIsBookmarked(true);
@@ -2143,6 +2207,25 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             </Drawer>
           </Box>
         </Box>
+        
+        {/* Notes Section - Add this before the Map */}
+        <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
+            <Typography variant="h5" mb={2}>Notes</Typography>
+            <TextField
+                fullWidth
+                multiline
+                rows={4}
+                variant="outlined"
+                placeholder="Add any notes about this property..."
+                value={notes}
+                onChange={handleNotesChange}
+                sx={{
+                    '& .MuiOutlinedInput-root': {
+                        borderRadius: 1,
+                    },
+                }}
+            />
+        </Paper>
         
         {/* Property Location Map */}
         <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
