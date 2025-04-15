@@ -1978,7 +1978,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               onClick={() => setIsAssumptionsDrawerOpen(!isAssumptionsDrawerOpen)}
               style={{
                 position: 'fixed',
-                right: 0,
+                right: isAssumptionsDrawerOpen ? '350px' : '0',
                 top: '50%',
                 transform: 'translateY(-50%)',
                 backgroundColor: '#4f46e5',
@@ -1991,7 +1991,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 flexDirection: 'column',
                 alignItems: 'center',
                 boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-                transition: 'all 0.3s ease'
+                transition: 'right 0.3s ease'
               }}
             >
               <TuneIcon />
