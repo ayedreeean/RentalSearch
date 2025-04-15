@@ -729,8 +729,6 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   const [customRentEstimate, setCustomRentEstimate] = useState<number | null>(null);
   const [displayRent, setDisplayRent] = useState<string>('');
   const [isRentEditing, setIsRentEditing] = useState(false);
-  // Add a flag to track if user has manually edited the rent
-  const [userEditedRent, setUserEditedRent] = useState(false);
   
   // Share state
   const [copySuccess, setCopySuccess] = useState('');
@@ -831,59 +829,6 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   useEffect(() => {
     if (property) {
       document.title = `${property.address} | RentalSearch`;
-      
-      // Check if there are saved settings for this property in localStorage
-      try {
-        const savedSettingsStr = localStorage.getItem('rentToolFinder_settings');
-        if (savedSettingsStr) {
-          const savedSettings = JSON.parse(savedSettingsStr);
-          
-          // If we have saved settings for this property, use them
-          if (savedSettings[property.property_id]) {
-            // Check if we have cashflow settings saved
-            const propertySettings = savedSettings[property.property_id];
-            
-            // Only apply settings if not already applied from URL
-            const urlParams = new URLSearchParams(location.search);
-            const hasSettingsInUrl = urlParams.has('ir') || urlParams.has('lt') || 
-                                    urlParams.has('dp') || urlParams.has('ti') || 
-                                    urlParams.has('vc') || urlParams.has('cx') || urlParams.has('pm');
-            
-            // Apply saved cashflow settings if valid and no URL settings
-            if (!hasSettingsInUrl) {
-              // Update cashflow settings
-              const hasValidSettings = propertySettings.interestRate !== undefined && 
-                                      propertySettings.loanTerm !== undefined &&
-                                      propertySettings.downPaymentPercent !== undefined;
-              
-              if (hasValidSettings) {
-                setSettings(prev => ({
-                  ...prev,
-                  ...propertySettings
-                }));
-              }
-            }
-            
-            // Check for projection settings
-            const hasProjectionSettingsInUrl = urlParams.has('ra') || urlParams.has('pvi');
-            
-            if (!hasProjectionSettingsInUrl && propertySettings.projectionSettings) {
-              // Apply saved projection settings
-              const projSettings = propertySettings.projectionSettings;
-              
-              if (projSettings.rentAppreciationRate !== undefined) {
-                setRentAppreciationRate(projSettings.rentAppreciationRate);
-              }
-              
-              if (projSettings.propertyValueIncreaseRate !== undefined) {
-                setPropertyValueIncreaseRate(projSettings.propertyValueIncreaseRate);
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error loading settings from localStorage:', error);
-      }
     } else {
       document.title = 'Property Details | RentalSearch';
     }
@@ -891,7 +836,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     return () => {
       document.title = 'RentalSearch';
     };
-  }, [property, location.search]);
+  }, [property]);
 
   // Handle URL query parameters for settings
   useEffect(() => {
@@ -971,16 +916,15 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       setSettings(newSettings);
     }
     
-    // Check for custom rent estimate - Only set this on initial load and if user hasn't edited
-    // Only update from URL if the user hasn't manually edited the rent
-    if (re && property && !userEditedRent) {
+    // Check for custom rent estimate
+    if (re && property) {
       const val = parseFloat(re);
       if (!isNaN(val) && val > 0) {
         setCustomRentEstimate(val);
         setDisplayRent(formatCurrency(val));
       }
     }
-  }, [location.search, defaultSettings, property, formatCurrency, userEditedRent]);
+  }, [location.search, defaultSettings, property, formatCurrency, customRentEstimate]);
   
   // Add useEffect for long-term projection settings from URL
   useEffect(() => {
@@ -1008,74 +952,43 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
 
   // Handlers for rent input
   const handleRentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    // Remove currency formatting for editing
-    const numericValue = parseFloat(value.replace(/[^0-9.]/g, ''));
-    
-    if (!isNaN(numericValue)) {
-      setCustomRentEstimate(numericValue);
-      // During editing, show the raw value for easier editing
-      setDisplayRent(value);
-      // Flag that user has edited the rent
-      setUserEditedRent(true);
-    } else {
-      setDisplayRent(value === '$' ? '' : value);
-    }
+    setDisplayRent(e.target.value);
   };
 
   const handleRentBlur = () => {
     setIsRentEditing(false);
+    // Parse the rent value
+    const newRent = parseFloat(displayRent.replace(/[^\d.]/g, ''));
     
-    // When focus is lost, format the value properly
-    if (customRentEstimate) {
-      setDisplayRent(formatCurrency(customRentEstimate));
+    if (!isNaN(newRent) && newRent >= 0) {
+      setCustomRentEstimate(newRent);
       
-      // Update URL with new rent estimate
-      const currentUrl = new URL(window.location.href);
-      const searchParams = new URLSearchParams(currentUrl.search);
-      searchParams.set('re', customRentEstimate.toString());
+      // Update URL to include the custom rent
+      updateUrlWithSettings({ re: newRent });
       
-      const newUrl = `${currentUrl.pathname}?${searchParams.toString()}${currentUrl.hash}`;
-      window.history.replaceState({}, '', newUrl);
-      
-      // If this is a bookmarked or shared property, update the localStorage version too
+      // Save to localStorage to persist between page loads
       if (property) {
-        // Get existing saved properties
-        try {
-          const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
-          const savedProperties = savedPropertiesStr ? JSON.parse(savedPropertiesStr) : {};
-          
-          // If this property is in localStorage, update its rent value
-          if (savedProperties[property.property_id]) {
-            savedProperties[property.property_id] = {
-              ...savedProperties[property.property_id],
-              rent_estimate: customRentEstimate
-            };
-            localStorage.setItem('rentToolFinder_properties', JSON.stringify(savedProperties));
-          }
-        } catch (error) {
-          console.error('Error updating property in localStorage:', error);
-        }
+        const updatedProperty = {
+          ...property,
+          rent_estimate: newRent
+        };
+        savePropertyToLocalStorage(updatedProperty);
+        
+        // Update the local property state with new rent value
+        setProperty(updatedProperty);
       }
     } else {
-      // If input is cleared, revert to the original rent
-      if (property) {
-        const originalRent = property.rent_estimate || 0;
-        setCustomRentEstimate(originalRent);
-        setDisplayRent(formatCurrency(originalRent));
-      }
+      // If invalid, revert to the current value
+      const currentRent = customRentEstimate !== null ? customRentEstimate : property?.rent_estimate || 0;
+      setDisplayRent(formatCurrency(currentRent));
     }
   };
 
   const handleRentFocus = () => {
     setIsRentEditing(true);
-    
-    // When focused, show numeric value without currency formatting
-    if (customRentEstimate) {
-      setDisplayRent(customRentEstimate.toString());
-    } else {
-      setDisplayRent('');
-    }
+    // Show raw number for editing
+    const currentRent = customRentEstimate !== null ? customRentEstimate : property?.rent_estimate || 0;
+    setDisplayRent(String(currentRent)); 
   };
   
   // Navigate back to search results
@@ -1134,49 +1047,6 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     
     // Update URL with new setting
     updateUrlWithSettings({ [paramMap[setting]]: value });
-    
-    // If this is a bookmarked property, update settings in localStorage
-    if (property) {
-      saveSettingsToLocalStorage(property.property_id, setting, value);
-    }
-  };
-
-  // Add function to save cashflow settings to localStorage
-  const saveSettingsToLocalStorage = (propertyId: string, setting?: keyof CashflowSettings, value?: number) => {
-    try {
-      // Get existing saved settings
-      const savedSettingsStr = localStorage.getItem('rentToolFinder_settings');
-      const savedSettings = savedSettingsStr ? JSON.parse(savedSettingsStr) : {};
-      
-      // Initialize settings for this property if they don't exist
-      if (!savedSettings[propertyId]) {
-        savedSettings[propertyId] = { ...settings };
-      }
-      
-      // Update specific setting if provided
-      if (setting && value !== undefined) {
-        savedSettings[propertyId][setting] = value;
-      } else {
-        // Otherwise update all settings
-        savedSettings[propertyId] = { ...settings };
-      }
-      
-      // Save projection settings too
-      if (!savedSettings[propertyId].projectionSettings) {
-        savedSettings[propertyId].projectionSettings = {};
-      }
-      
-      savedSettings[propertyId].projectionSettings = {
-        rentAppreciationRate,
-        propertyValueIncreaseRate,
-        yearsToProject
-      };
-      
-      // Save back to localStorage
-      localStorage.setItem('rentToolFinder_settings', JSON.stringify(savedSettings));
-    } catch (error) {
-      console.error('Error saving settings to localStorage:', error);
-    }
   };
   
   // Copy to clipboard handler
@@ -1186,8 +1056,6 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     // Save the current property to localStorage to enable shared links to work
     if (property) {
       savePropertyToLocalStorage(property);
-      // Also save current settings
-      saveSettingsToLocalStorage(property.property_id);
     }
     
     try {
@@ -1221,84 +1089,12 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   
   // Add handler for rent appreciation rate change
   const handleRentAppreciationChange = (_event: Event, newValue: number | number[]) => {
-    const value = newValue as number;
-    setRentAppreciationRate(value);
-    
-    // Update URL
-    updateUrlWithSettings({ 'ra': value });
-    
-    // Save to localStorage if this is a bookmarked property
-    if (property) {
-      try {
-        const savedSettingsStr = localStorage.getItem('rentToolFinder_settings');
-        const savedSettings = savedSettingsStr ? JSON.parse(savedSettingsStr) : {};
-        
-        // Initialize settings for this property if they don't exist
-        if (!savedSettings[property.property_id]) {
-          savedSettings[property.property_id] = { 
-            ...settings,
-            projectionSettings: {
-              rentAppreciationRate: value,
-              propertyValueIncreaseRate,
-              yearsToProject
-            }
-          };
-        } else if (!savedSettings[property.property_id].projectionSettings) {
-          savedSettings[property.property_id].projectionSettings = {
-            rentAppreciationRate: value,
-            propertyValueIncreaseRate,
-            yearsToProject
-          };
-        } else {
-          savedSettings[property.property_id].projectionSettings.rentAppreciationRate = value;
-        }
-        
-        localStorage.setItem('rentToolFinder_settings', JSON.stringify(savedSettings));
-      } catch (error) {
-        console.error('Error saving rent appreciation setting to localStorage:', error);
-      }
-    }
+    setRentAppreciationRate(newValue as number);
   };
   
   // Add handler for property value increase rate change
   const handlePropertyValueIncreaseChange = (_event: Event, newValue: number | number[]) => {
-    const value = newValue as number;
-    setPropertyValueIncreaseRate(value);
-    
-    // Update URL
-    updateUrlWithSettings({ 'pvi': value });
-    
-    // Save to localStorage if this is a bookmarked property
-    if (property) {
-      try {
-        const savedSettingsStr = localStorage.getItem('rentToolFinder_settings');
-        const savedSettings = savedSettingsStr ? JSON.parse(savedSettingsStr) : {};
-        
-        // Initialize settings for this property if they don't exist
-        if (!savedSettings[property.property_id]) {
-          savedSettings[property.property_id] = { 
-            ...settings,
-            projectionSettings: {
-              rentAppreciationRate,
-              propertyValueIncreaseRate: value,
-              yearsToProject
-            }
-          };
-        } else if (!savedSettings[property.property_id].projectionSettings) {
-          savedSettings[property.property_id].projectionSettings = {
-            rentAppreciationRate,
-            propertyValueIncreaseRate: value,
-            yearsToProject
-          };
-        } else {
-          savedSettings[property.property_id].projectionSettings.propertyValueIncreaseRate = value;
-        }
-        
-        localStorage.setItem('rentToolFinder_settings', JSON.stringify(savedSettings));
-      } catch (error) {
-        console.error('Error saving property value increase setting to localStorage:', error);
-      }
-    }
+    setPropertyValueIncreaseRate(newValue as number);
   };
   
   // Add handler for years to project change
@@ -1675,8 +1471,10 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               startIcon={isBookmarked ? <BookmarkIcon /> : <BookmarkBorderIcon />}
               onClick={handleBookmarkToggle}
               size="small"
-              className="property-action-button"
               sx={{ 
+                color: 'white', 
+                borderColor: 'white', 
+                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
                 minWidth: { xs: '40px', sm: 'auto' },
                 px: { xs: 1, sm: 2 }
@@ -1695,8 +1493,10 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               startIcon={<ShareIcon />}
               onClick={handleShareViaURL}
               size="small"
-              className="property-action-button"
               sx={{ 
+                color: 'white', 
+                borderColor: 'white', 
+                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
                 minWidth: { xs: '40px', sm: 'auto' },
                 px: { xs: 1, sm: 2 }
@@ -1712,8 +1512,10 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 setShowTextPreview(!showTextPreview);
               }}
               size="small"
-              className="property-action-button"
               sx={{ 
+                color: 'white', 
+                borderColor: 'white', 
+                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
                 minWidth: { xs: '40px', sm: 'auto' },
                 px: { xs: 1, sm: 2 }

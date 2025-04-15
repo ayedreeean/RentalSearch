@@ -92,70 +92,17 @@ const BookmarksPage: React.FC = () => {
     window.location.href = url;
   };
   
-  // Function to extract parameters from URL
-  const extractParamsFromUrl = (url: string): {
-    customRent?: number;
-    interestRate?: number;
-    loanTerm?: number;
-    downPaymentPercent?: number;
-    taxInsurancePercent?: number;
-    vacancyPercent?: number;
-    capexPercent?: number;
-    propertyManagementPercent?: number;
-  } => {
-    try {
-      const urlObj = new URL(url);
-      
-      // Handle both formats:
-      // 1. Regular URL parameters in the search part
-      // 2. Parameters after hash fragment (common with HashRouter in React)
-      let params: URLSearchParams;
-      
-      if (urlObj.hash && urlObj.hash.includes('?')) {
-        // Format: /RentalSearch/#/property/123?re=2000&ir=7.5
-        const hashParts = urlObj.hash.split('?');
-        if (hashParts.length > 1) {
-          params = new URLSearchParams(hashParts[1]);
-        } else {
-          params = new URLSearchParams(urlObj.search);
-        }
-      } else {
-        // Regular format: /property/123?re=2000&ir=7.5
-        params = new URLSearchParams(urlObj.search);
-      }
-      
-      return {
-        customRent: params.has('re') ? parseFloat(params.get('re')!) : undefined,
-        interestRate: params.has('ir') ? parseFloat(params.get('ir')!) : undefined,
-        loanTerm: params.has('lt') ? parseInt(params.get('lt')!, 10) : undefined,
-        downPaymentPercent: params.has('dp') ? parseFloat(params.get('dp')!) : undefined,
-        taxInsurancePercent: params.has('ti') ? parseFloat(params.get('ti')!) : undefined,
-        vacancyPercent: params.has('vc') ? parseInt(params.get('vc')!, 10) : undefined,
-        capexPercent: params.has('cx') ? parseInt(params.get('cx')!, 10) : undefined,
-        propertyManagementPercent: params.has('pm') ? parseInt(params.get('pm')!, 10) : undefined
-      };
-    } catch (error) {
-      console.error('Error parsing URL parameters:', error);
-      return {};
-    }
-  };
-  
   // Calculate simplified cashflow for card display
-  const calculateSimpleCashflow = (property: Property, url: string): { monthlyCashflow: number, cashOnCashReturn: number, effectiveRent: number } => {
-    // Extract parameters from URL
-    const params = extractParamsFromUrl(url);
-    
-    // Use URL parameters if available, otherwise use default values
-    const interestRate = params.interestRate ?? 7.5; // 7.5%
-    const loanTerm = params.loanTerm ?? 30; // 30 years
-    const downPaymentPercent = params.downPaymentPercent ?? 20; // 20%
-    const taxInsurancePercent = params.taxInsurancePercent ?? 3; // 3%
-    const vacancyPercent = params.vacancyPercent ?? 8; // 8%
-    const capexPercent = params.capexPercent ?? 5; // 5%
-    const propertyManagementPercent = params.propertyManagementPercent ?? 0; // 0%
-    
-    // Use custom rent from URL if available
-    const effectiveRent = params.customRent ?? property.rent_estimate;
+  const calculateSimpleCashflow = (property: Property): { monthlyCashflow: number, cashOnCashReturn: number } => {
+    // Simplified version of calculateCashflow
+    // Use conservative default values
+    const interestRate = 7.5; // 7.5%
+    const loanTerm = 30; // 30 years
+    const downPaymentPercent = 20; // 20%
+    const taxInsurancePercent = 3; // 3%
+    const vacancyPercent = 8; // 8%
+    const capexPercent = 5; // 5%
+    const propertyManagementPercent = 0; // 0%
     
     // Calculate monthly mortgage payment
     const downPayment = property.price * (downPaymentPercent / 100);
@@ -173,18 +120,18 @@ const BookmarksPage: React.FC = () => {
     
     // Calculate expenses
     const monthlyTaxInsurance = property.price * (taxInsurancePercent / 100) / 12;
-    const monthlyVacancy = effectiveRent * (vacancyPercent / 100);
-    const monthlyCapex = effectiveRent * (capexPercent / 100);
-    const monthlyPropertyManagement = effectiveRent * (propertyManagementPercent / 100);
+    const monthlyVacancy = property.rent_estimate * (vacancyPercent / 100);
+    const monthlyCapex = property.rent_estimate * (capexPercent / 100);
+    const monthlyPropertyManagement = property.rent_estimate * (propertyManagementPercent / 100);
     
     const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
-    const monthlyCashflow = effectiveRent - totalMonthlyExpenses;
+    const monthlyCashflow = property.rent_estimate - totalMonthlyExpenses;
     const annualCashflow = monthlyCashflow * 12;
     
     const initialInvestment = downPayment + (property.price * 0.03); // Down payment + 3% closing costs
     const cashOnCashReturn = (annualCashflow / initialInvestment) * 100;
     
-    return { monthlyCashflow, cashOnCashReturn, effectiveRent };
+    return { monthlyCashflow, cashOnCashReturn };
   };
 
   return (
@@ -242,7 +189,7 @@ const BookmarksPage: React.FC = () => {
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
               {Object.entries(bookmarks).map(([id, entry]) => {
                 const { property, url, date } = entry;
-                const { monthlyCashflow, cashOnCashReturn, effectiveRent } = calculateSimpleCashflow(property, url);
+                const { monthlyCashflow, cashOnCashReturn } = calculateSimpleCashflow(property);
                 
                 // Format bookmark date
                 const bookmarkDate = new Date(date);
@@ -315,7 +262,7 @@ const BookmarksPage: React.FC = () => {
                         <Box sx={{ display: 'flex', flexWrap: 'wrap' }}>
                           <Box sx={{ width: '50%', mb: 1 }}>
                             <Typography variant="body2" color="text.secondary">Rent Est.</Typography>
-                            <Typography variant="subtitle1">{formatCurrency(effectiveRent)}</Typography>
+                            <Typography variant="subtitle1">{formatCurrency(property.rent_estimate)}</Typography>
                           </Box>
                           <Box sx={{ width: '50%', mb: 1 }}>
                             <Typography variant="body2" color="text.secondary">Monthly CF</Typography>
@@ -328,7 +275,7 @@ const BookmarksPage: React.FC = () => {
                           </Box>
                           <Box sx={{ width: '50%', mb: 1 }}>
                             <Typography variant="body2" color="text.secondary">Rent-to-Price</Typography>
-                            <Typography variant="subtitle1">{formatPercent((effectiveRent * 12 / property.price) * 100)}</Typography>
+                            <Typography variant="subtitle1">{formatPercent(property.ratio)}</Typography>
                           </Box>
                           <Box sx={{ width: '50%', mb: 1 }}>
                             <Typography variant="body2" color="text.secondary">CoC Return</Typography>
