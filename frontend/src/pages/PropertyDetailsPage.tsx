@@ -22,7 +22,6 @@ import {
   Card, 
   CardContent,
   TextField,
-  Fab,
   Table,
   TableBody,
   TableCell,
@@ -49,6 +48,7 @@ import { Property, Cashflow, CashflowSettings } from '../types';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import Drawer from '@mui/material/Drawer';
 
 interface PropertyDetailsPageProps {
   properties: Property[];
@@ -729,12 +729,14 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   const [customRentEstimate, setCustomRentEstimate] = useState<number | null>(null);
   const [displayRent, setDisplayRent] = useState<string>('');
   const [isRentEditing, setIsRentEditing] = useState(false);
+  // Add a flag to track if user has manually edited the rent
+  const [userEditedRent, setUserEditedRent] = useState(false);
   
   // Share state
   const [copySuccess, setCopySuccess] = useState('');
   
-  // Add state for floating panel
-  const [isAssumptionsPanelOpen, setIsAssumptionsPanelOpen] = useState(false);
+  // Change isAssumptionsPanelOpen to use a drawer instead of a floating panel
+  const [isAssumptionsDrawerOpen, setIsAssumptionsDrawerOpen] = useState(false);
   
   // Add state for showing text preview
   const [showTextPreview, setShowTextPreview] = useState(false);
@@ -829,6 +831,59 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   useEffect(() => {
     if (property) {
       document.title = `${property.address} | RentalSearch`;
+      
+      // Check if there are saved settings for this property in localStorage
+      try {
+        const savedSettingsStr = localStorage.getItem('rentToolFinder_settings');
+        if (savedSettingsStr) {
+          const savedSettings = JSON.parse(savedSettingsStr);
+          
+          // If we have saved settings for this property, use them
+          if (savedSettings[property.property_id]) {
+            // Check if we have cashflow settings saved
+            const propertySettings = savedSettings[property.property_id];
+            
+            // Only apply settings if not already applied from URL
+            const urlParams = new URLSearchParams(location.search);
+            const hasSettingsInUrl = urlParams.has('ir') || urlParams.has('lt') || 
+                                    urlParams.has('dp') || urlParams.has('ti') || 
+                                    urlParams.has('vc') || urlParams.has('cx') || urlParams.has('pm');
+            
+            // Apply saved cashflow settings if valid and no URL settings
+            if (!hasSettingsInUrl) {
+              // Update cashflow settings
+              const hasValidSettings = propertySettings.interestRate !== undefined && 
+                                      propertySettings.loanTerm !== undefined &&
+                                      propertySettings.downPaymentPercent !== undefined;
+              
+              if (hasValidSettings) {
+                setSettings(prev => ({
+                  ...prev,
+                  ...propertySettings
+                }));
+              }
+            }
+            
+            // Check for projection settings
+            const hasProjectionSettingsInUrl = urlParams.has('ra') || urlParams.has('pvi');
+            
+            if (!hasProjectionSettingsInUrl && propertySettings.projectionSettings) {
+              // Apply saved projection settings
+              const projSettings = propertySettings.projectionSettings;
+              
+              if (projSettings.rentAppreciationRate !== undefined) {
+                setRentAppreciationRate(projSettings.rentAppreciationRate);
+              }
+              
+              if (projSettings.propertyValueIncreaseRate !== undefined) {
+                setPropertyValueIncreaseRate(projSettings.propertyValueIncreaseRate);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading settings from localStorage:', error);
+      }
     } else {
       document.title = 'Property Details | RentalSearch';
     }
@@ -836,7 +891,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     return () => {
       document.title = 'RentalSearch';
     };
-  }, [property]);
+  }, [property, location.search]);
 
   // Handle URL query parameters for settings
   useEffect(() => {
@@ -916,15 +971,16 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       setSettings(newSettings);
     }
     
-    // Check for custom rent estimate
-    if (re && property) {
+    // Check for custom rent estimate - Only set this on initial load and if user hasn't edited
+    // Only update from URL if the user hasn't manually edited the rent
+    if (re && property && !userEditedRent) {
       const val = parseFloat(re);
       if (!isNaN(val) && val > 0) {
         setCustomRentEstimate(val);
         setDisplayRent(formatCurrency(val));
       }
     }
-  }, [location.search, defaultSettings, property, formatCurrency, customRentEstimate]);
+  }, [location.search, defaultSettings, property, formatCurrency, userEditedRent]);
   
   // Add useEffect for long-term projection settings from URL
   useEffect(() => {
@@ -952,43 +1008,74 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
 
   // Handlers for rent input
   const handleRentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDisplayRent(e.target.value);
+    const value = e.target.value;
+    // Remove currency formatting for editing
+    const numericValue = parseFloat(value.replace(/[^0-9.]/g, ''));
+    
+    if (!isNaN(numericValue)) {
+      setCustomRentEstimate(numericValue);
+      // During editing, show the raw value for easier editing
+      setDisplayRent(value);
+      // Flag that user has edited the rent
+      setUserEditedRent(true);
+    } else {
+      setDisplayRent(value === '$' ? '' : value);
+    }
   };
 
   const handleRentBlur = () => {
     setIsRentEditing(false);
-    // Parse the rent value
-    const newRent = parseFloat(displayRent.replace(/[^\d.]/g, ''));
     
-    if (!isNaN(newRent) && newRent >= 0) {
-      setCustomRentEstimate(newRent);
+    // When focus is lost, format the value properly
+    if (customRentEstimate) {
+      setDisplayRent(formatCurrency(customRentEstimate));
       
-      // Update URL to include the custom rent
-      updateUrlWithSettings({ re: newRent });
+      // Update URL with new rent estimate
+      const currentUrl = new URL(window.location.href);
+      const searchParams = new URLSearchParams(currentUrl.search);
+      searchParams.set('re', customRentEstimate.toString());
       
-      // Save to localStorage to persist between page loads
+      const newUrl = `${currentUrl.pathname}?${searchParams.toString()}${currentUrl.hash}`;
+      window.history.replaceState({}, '', newUrl);
+      
+      // If this is a bookmarked or shared property, update the localStorage version too
       if (property) {
-        const updatedProperty = {
-          ...property,
-          rent_estimate: newRent
-        };
-        savePropertyToLocalStorage(updatedProperty);
-        
-        // Update the local property state with new rent value
-        setProperty(updatedProperty);
+        // Get existing saved properties
+        try {
+          const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
+          const savedProperties = savedPropertiesStr ? JSON.parse(savedPropertiesStr) : {};
+          
+          // If this property is in localStorage, update its rent value
+          if (savedProperties[property.property_id]) {
+            savedProperties[property.property_id] = {
+              ...savedProperties[property.property_id],
+              rent_estimate: customRentEstimate
+            };
+            localStorage.setItem('rentToolFinder_properties', JSON.stringify(savedProperties));
+          }
+        } catch (error) {
+          console.error('Error updating property in localStorage:', error);
+        }
       }
     } else {
-      // If invalid, revert to the current value
-      const currentRent = customRentEstimate !== null ? customRentEstimate : property?.rent_estimate || 0;
-      setDisplayRent(formatCurrency(currentRent));
+      // If input is cleared, revert to the original rent
+      if (property) {
+        const originalRent = property.rent_estimate || 0;
+        setCustomRentEstimate(originalRent);
+        setDisplayRent(formatCurrency(originalRent));
+      }
     }
   };
 
   const handleRentFocus = () => {
     setIsRentEditing(true);
-    // Show raw number for editing
-    const currentRent = customRentEstimate !== null ? customRentEstimate : property?.rent_estimate || 0;
-    setDisplayRent(String(currentRent)); 
+    
+    // When focused, show numeric value without currency formatting
+    if (customRentEstimate) {
+      setDisplayRent(customRentEstimate.toString());
+    } else {
+      setDisplayRent('');
+    }
   };
   
   // Navigate back to search results
@@ -1047,6 +1134,49 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     
     // Update URL with new setting
     updateUrlWithSettings({ [paramMap[setting]]: value });
+    
+    // If this is a bookmarked property, update settings in localStorage
+    if (property) {
+      saveSettingsToLocalStorage(property.property_id, setting, value);
+    }
+  };
+
+  // Add function to save cashflow settings to localStorage
+  const saveSettingsToLocalStorage = (propertyId: string, setting?: keyof CashflowSettings, value?: number) => {
+    try {
+      // Get existing saved settings
+      const savedSettingsStr = localStorage.getItem('rentToolFinder_settings');
+      const savedSettings = savedSettingsStr ? JSON.parse(savedSettingsStr) : {};
+      
+      // Initialize settings for this property if they don't exist
+      if (!savedSettings[propertyId]) {
+        savedSettings[propertyId] = { ...settings };
+      }
+      
+      // Update specific setting if provided
+      if (setting && value !== undefined) {
+        savedSettings[propertyId][setting] = value;
+      } else {
+        // Otherwise update all settings
+        savedSettings[propertyId] = { ...settings };
+      }
+      
+      // Save projection settings too
+      if (!savedSettings[propertyId].projectionSettings) {
+        savedSettings[propertyId].projectionSettings = {};
+      }
+      
+      savedSettings[propertyId].projectionSettings = {
+        rentAppreciationRate,
+        propertyValueIncreaseRate,
+        yearsToProject
+      };
+      
+      // Save back to localStorage
+      localStorage.setItem('rentToolFinder_settings', JSON.stringify(savedSettings));
+    } catch (error) {
+      console.error('Error saving settings to localStorage:', error);
+    }
   };
   
   // Copy to clipboard handler
@@ -1056,6 +1186,8 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     // Save the current property to localStorage to enable shared links to work
     if (property) {
       savePropertyToLocalStorage(property);
+      // Also save current settings
+      saveSettingsToLocalStorage(property.property_id);
     }
     
     try {
@@ -1089,12 +1221,84 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   
   // Add handler for rent appreciation rate change
   const handleRentAppreciationChange = (_event: Event, newValue: number | number[]) => {
-    setRentAppreciationRate(newValue as number);
+    const value = newValue as number;
+    setRentAppreciationRate(value);
+    
+    // Update URL
+    updateUrlWithSettings({ 'ra': value });
+    
+    // Save to localStorage if this is a bookmarked property
+    if (property) {
+      try {
+        const savedSettingsStr = localStorage.getItem('rentToolFinder_settings');
+        const savedSettings = savedSettingsStr ? JSON.parse(savedSettingsStr) : {};
+        
+        // Initialize settings for this property if they don't exist
+        if (!savedSettings[property.property_id]) {
+          savedSettings[property.property_id] = { 
+            ...settings,
+            projectionSettings: {
+              rentAppreciationRate: value,
+              propertyValueIncreaseRate,
+              yearsToProject
+            }
+          };
+        } else if (!savedSettings[property.property_id].projectionSettings) {
+          savedSettings[property.property_id].projectionSettings = {
+            rentAppreciationRate: value,
+            propertyValueIncreaseRate,
+            yearsToProject
+          };
+        } else {
+          savedSettings[property.property_id].projectionSettings.rentAppreciationRate = value;
+        }
+        
+        localStorage.setItem('rentToolFinder_settings', JSON.stringify(savedSettings));
+      } catch (error) {
+        console.error('Error saving rent appreciation setting to localStorage:', error);
+      }
+    }
   };
   
   // Add handler for property value increase rate change
   const handlePropertyValueIncreaseChange = (_event: Event, newValue: number | number[]) => {
-    setPropertyValueIncreaseRate(newValue as number);
+    const value = newValue as number;
+    setPropertyValueIncreaseRate(value);
+    
+    // Update URL
+    updateUrlWithSettings({ 'pvi': value });
+    
+    // Save to localStorage if this is a bookmarked property
+    if (property) {
+      try {
+        const savedSettingsStr = localStorage.getItem('rentToolFinder_settings');
+        const savedSettings = savedSettingsStr ? JSON.parse(savedSettingsStr) : {};
+        
+        // Initialize settings for this property if they don't exist
+        if (!savedSettings[property.property_id]) {
+          savedSettings[property.property_id] = { 
+            ...settings,
+            projectionSettings: {
+              rentAppreciationRate,
+              propertyValueIncreaseRate: value,
+              yearsToProject
+            }
+          };
+        } else if (!savedSettings[property.property_id].projectionSettings) {
+          savedSettings[property.property_id].projectionSettings = {
+            rentAppreciationRate,
+            propertyValueIncreaseRate: value,
+            yearsToProject
+          };
+        } else {
+          savedSettings[property.property_id].projectionSettings.propertyValueIncreaseRate = value;
+        }
+        
+        localStorage.setItem('rentToolFinder_settings', JSON.stringify(savedSettings));
+      } catch (error) {
+        console.error('Error saving property value increase setting to localStorage:', error);
+      }
+    }
   };
   
   // Add handler for years to project change
@@ -1768,105 +1972,163 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               </Box>
             </Paper>
             
-            {/* Floating Assumptions Button */}
-            <Fab
-              variant="extended"
-              aria-label="toggle assumptions panel"
-              onClick={() => setIsAssumptionsPanelOpen(!isAssumptionsPanelOpen)}
-              sx={{
+            {/* Assumptions Tab */}
+            <div 
+              className="assumptions-tab"
+              onClick={() => setIsAssumptionsDrawerOpen(!isAssumptionsDrawerOpen)}
+              style={{
                 position: 'fixed',
-                bottom: 16,
-                right: 16,
-                zIndex: 1250,
-                bgcolor: '#4f46e5',
+                right: 0,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                backgroundColor: '#4f46e5',
                 color: 'white',
-                '&:hover': {
-                  bgcolor: '#4338ca'
-                } 
+                padding: '12px 8px',
+                borderRadius: '8px 0 0 8px',
+                cursor: 'pointer',
+                zIndex: 1250,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+                transition: 'all 0.3s ease'
               }}
             >
-              <TuneIcon sx={{ mr: 1 }} />
-              Assumptions
-            </Fab>
+              <TuneIcon />
+              <span style={{ 
+                writingMode: 'vertical-rl', 
+                textOrientation: 'mixed', 
+                transform: 'rotate(180deg)',
+                marginTop: '8px',
+                fontWeight: 'bold',
+                letterSpacing: '1px',
+                fontSize: '14px'
+              }}>Assumptions</span>
+            </div>
 
             {/* Floating Assumptions Panel */}
-            {isAssumptionsPanelOpen && (
-              <Paper 
-                elevation={4} 
-                sx={{
-                  position: 'fixed',
-                  bottom: 72,
-                  right: 16,
-                  zIndex: 1200, 
-                  maxWidth: '400px', 
-                  maxHeight: 'calc(100vh - 90px)', 
-                  overflowY: 'auto', 
-                  borderRadius: 2, 
-                  p: 3
-                }}
-              >
-                <Typography variant="h6" fontWeight="medium" gutterBottom> 
-                  Customize Assumptions
+            <Drawer
+              anchor="right"
+              open={isAssumptionsDrawerOpen}
+              onClose={() => setIsAssumptionsDrawerOpen(false)}
+              sx={{
+                '& .MuiDrawer-paper': {
+                  width: '350px',
+                  maxWidth: '90vw',
+                  boxSizing: 'border-box',
+                  padding: 3,
+                },
+              }}
+            >
+              <Typography variant="h6" fontWeight="medium" gutterBottom> 
+                Customize Assumptions
+              </Typography>
+
+              {/* Sliders use settings state and handleSettingChange */}
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <Tooltip title="The annual interest rate for your mortgage loan. Higher rates increase your monthly payment." arrow>
+                    <span>Interest Rate: {settings.interestRate}%</span>
+                  </Tooltip>
                 </Typography>
-                {/* Sliders use settings state and handleSettingChange */}
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>
-                    <Tooltip title="The annual interest rate for your mortgage loan. Higher rates increase your monthly payment." arrow>
-                      <span>Interest Rate: {settings.interestRate}%</span>
-                    </Tooltip>
-                  </Typography>
-                  <Slider value={settings.interestRate} onChange={handleSettingChange('interestRate')} aria-labelledby="interest-rate-slider" valueLabelDisplay="auto" step={0.1} min={0.1} max={15} sx={{ color: '#4f46e5' }} />
-                </Box>
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>
-                    <Tooltip title="The number of years you'll be paying your mortgage. Longer terms reduce monthly payments but increase total interest paid." arrow>
-                      <span>Loan Term: {settings.loanTerm} years</span>
-                    </Tooltip>
-                  </Typography>
-                  <Slider value={settings.loanTerm} onChange={handleSettingChange('loanTerm')} aria-labelledby="loan-term-slider" valueLabelDisplay="auto" step={1} min={5} max={40} sx={{ color: '#4f46e5' }} />
-                </Box>
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>
-                    <Tooltip title="Percentage of the property price you pay upfront. Higher down payments reduce your loan amount and monthly payments." arrow>
-                      <span>Down Payment: {settings.downPaymentPercent}%</span>
-                    </Tooltip>
-                  </Typography>
-                  <Slider value={settings.downPaymentPercent} onChange={handleSettingChange('downPaymentPercent')} aria-labelledby="down-payment-slider" valueLabelDisplay="auto" step={1} min={0} max={100} sx={{ color: '#4f46e5' }} />
-                </Box>
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>
-                    <Tooltip title="Annual property taxes and insurance calculated as a percentage of property value. Varies by location." arrow>
-                      <span>Property Tax & Insurance: {settings.taxInsurancePercent}%</span>
-                    </Tooltip>
-                  </Typography>
-                  <Slider value={settings.taxInsurancePercent} onChange={handleSettingChange('taxInsurancePercent')} min={0} max={5} step={0.1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
-                </Box>
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>
-                    <Tooltip title="Expected percentage of time the property will be vacant. Higher vacancy rates reduce annual income." arrow>
-                      <span>Vacancy: {settings.vacancyPercent}%</span>
-                    </Tooltip>
-                  </Typography>
-                  <Slider value={settings.vacancyPercent} onChange={handleSettingChange('vacancyPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
-                </Box>
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>
-                    <Tooltip title="Capital Expenditures - funds set aside for major repairs and replacements (roof, HVAC, etc.)." arrow>
-                      <span>CapEx: {settings.capexPercent}%</span>
-                    </Tooltip>
-                  </Typography>
-                  <Slider value={settings.capexPercent} onChange={handleSettingChange('capexPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
-                </Box>
-                <Box sx={{ mb: 0 }}>
-                  <Typography variant="body2" gutterBottom>
-                    <Tooltip title="Fee for property management services, typically a percentage of monthly rent. Set to 0% if self-managing." arrow>
-                      <span>Property Management: {settings.propertyManagementPercent}%</span>
-                    </Tooltip>
-                  </Typography>
-                  <Slider value={settings.propertyManagementPercent} onChange={handleSettingChange('propertyManagementPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
-                </Box>
-              </Paper>
-            )}
+                <Slider value={settings.interestRate} onChange={handleSettingChange('interestRate')} aria-labelledby="interest-rate-slider" valueLabelDisplay="auto" step={0.1} min={0.1} max={15} sx={{ color: '#4f46e5' }} />
+              </Box>
+              
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <Tooltip title="The number of years you'll be paying your mortgage. Longer terms reduce monthly payments but increase total interest paid." arrow>
+                    <span>Loan Term: {settings.loanTerm} years</span>
+                  </Tooltip>
+                </Typography>
+                <Slider value={settings.loanTerm} onChange={handleSettingChange('loanTerm')} aria-labelledby="loan-term-slider" valueLabelDisplay="auto" step={1} min={5} max={40} sx={{ color: '#4f46e5' }} />
+              </Box>
+              
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <Tooltip title="Percentage of the property price you pay upfront. Higher down payments reduce your loan amount and monthly payments." arrow>
+                    <span>Down Payment: {settings.downPaymentPercent}%</span>
+                  </Tooltip>
+                </Typography>
+                <Slider value={settings.downPaymentPercent} onChange={handleSettingChange('downPaymentPercent')} aria-labelledby="down-payment-slider" valueLabelDisplay="auto" step={1} min={0} max={100} sx={{ color: '#4f46e5' }} />
+              </Box>
+              
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <Tooltip title="Annual property taxes and insurance calculated as a percentage of property value. Varies by location." arrow>
+                    <span>Property Tax & Insurance: {settings.taxInsurancePercent}%</span>
+                  </Tooltip>
+                </Typography>
+                <Slider value={settings.taxInsurancePercent} onChange={handleSettingChange('taxInsurancePercent')} min={0} max={5} step={0.1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+              </Box>
+              
+              {/* Original slider content continues... */}
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <Tooltip title="Accounts for periods when the property is vacant between tenants. Typical range is 5-8%." arrow>
+                    <span>Vacancy: {settings.vacancyPercent}%</span>
+                  </Tooltip>
+                </Typography>
+                <Slider value={settings.vacancyPercent} onChange={handleSettingChange('vacancyPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+              </Box>
+              
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <Tooltip title="Capital Expenditures: Savings for major replacements like roof, HVAC, etc. Typically 5-10% of rental income." arrow>
+                    <span>CapEx: {settings.capexPercent}%</span>
+                  </Tooltip>
+                </Typography>
+                <Slider value={settings.capexPercent} onChange={handleSettingChange('capexPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+              </Box>
+              
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <Tooltip title="Fee for professional property management. Typical range is 8-12% of rental income." arrow>
+                    <span>Property Management: {settings.propertyManagementPercent}%</span>
+                  </Tooltip>
+                </Typography>
+                <Slider value={settings.propertyManagementPercent} onChange={handleSettingChange('propertyManagementPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+              </Box>
+              
+              <Typography variant="h6" fontWeight="medium" sx={{ mt: 4, mb: 2 }}>
+                Long-Term Projection
+              </Typography>
+              
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <Tooltip title="Annual percentage increase in rental income. Typically ranges from 1-3% in stable markets." arrow>
+                    <span>Rent Appreciation: {rentAppreciationRate}%</span>
+                  </Tooltip>
+                </Typography>
+                <Slider 
+                  value={rentAppreciationRate} 
+                  onChange={handleRentAppreciationChange} 
+                  min={0} 
+                  max={10} 
+                  step={0.1} 
+                  valueLabelDisplay="auto" 
+                  valueLabelFormat={(value) => `${value}%`}
+                  sx={{ color: '#4f46e5' }}
+                />
+              </Box>
+              
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <Tooltip title="Annual percentage increase in property value. Historically averages 3-5% in most markets." arrow>
+                    <span>Property Value Increase: {propertyValueIncreaseRate}%</span>
+                  </Tooltip>
+                </Typography>
+                <Slider 
+                  value={propertyValueIncreaseRate} 
+                  onChange={handlePropertyValueIncreaseChange} 
+                  min={0} 
+                  max={10} 
+                  step={0.1} 
+                  valueLabelDisplay="auto" 
+                  valueLabelFormat={(value) => `${value}%`}
+                  sx={{ color: '#4f46e5' }}
+                />
+              </Box>
+            </Drawer>
           </Box>
         </Box>
         
