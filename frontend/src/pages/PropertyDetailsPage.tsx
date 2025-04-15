@@ -1972,7 +1972,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
               </Box>
             </Paper>
             
-            {/* Assumptions Tab */}
+            {/* Assumptions Tab - positioned relative to drawer edge */}
             <div 
               className="assumptions-tab"
               onClick={() => setIsAssumptionsDrawerOpen(!isAssumptionsDrawerOpen)}
@@ -1991,7 +1991,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 flexDirection: 'column',
                 alignItems: 'center',
                 boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-                transition: 'right 0.3s ease'
+                transition: 'right 225ms cubic-bezier(0, 0, 0.2, 1) 0ms'
               }}
             >
               <TuneIcon />
@@ -2005,8 +2005,8 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 fontSize: '14px'
               }}>Assumptions</span>
             </div>
-
-            {/* Floating Assumptions Panel */}
+            
+            {/* Assumptions Drawer */}
             <Drawer
               anchor="right"
               open={isAssumptionsDrawerOpen}
@@ -2017,7 +2017,19 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                   maxWidth: '90vw',
                   boxSizing: 'border-box',
                   padding: 3,
+                  borderTopLeftRadius: 0,
+                  borderBottomLeftRadius: 0,
                 },
+                '& .MuiBackdrop-root': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.2)'
+                }
+              }}
+              transitionDuration={225}
+              SlideProps={{
+                easing: {
+                  enter: 'cubic-bezier(0, 0, 0.2, 1)',
+                  exit: 'cubic-bezier(0.4, 0, 0.6, 1)'
+                }
               }}
             >
               <Typography variant="h6" fontWeight="medium" gutterBottom> 
