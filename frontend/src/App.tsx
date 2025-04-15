@@ -865,9 +865,6 @@ function App() {
   // Add state for sorting
   const [sortConfig, setSortConfig] = useState<{ key: SortableKey | null, direction: 'asc' | 'desc' }>({ key: 'price', direction: 'asc' }); // Default sort by price asc
 
-  // State for assumptions accordion
-  const [isAssumptionsPanelOpen, setIsAssumptionsPanelOpen] = useState(false); // Add state for panel visibility
-
   // Ref for tracking search requests
   const currentSearchId = useRef<number>(0);
 
@@ -1565,165 +1562,6 @@ function App() {
       </Box>
               </div>
               
-              {/* Floating Assumptions Button - Render only after search */}
-              {searchPerformed && (
-                <Fab
-                  variant="extended"
-                  aria-label="toggle assumptions panel"
-                  onClick={() => setIsAssumptionsPanelOpen(!isAssumptionsPanelOpen)}
-                  sx={{
-                    position: 'fixed',
-                    bottom: 16,
-                    right: 16,
-                    zIndex: 1250,
-                    bgcolor: '#4f46e5', // Apply custom background color
-                    color: 'white', // Ensure text/icon contrast
-                    '&:hover': {
-                      bgcolor: '#4338ca' // Slightly darker shade for hover
-                    }
-                  }}
-                >
-                  <TuneIcon sx={{ mr: 1 }} />
-                  Assumptions
-                </Fab>
-              )}
-
-              {/* Floating Assumptions Panel - Render only after search and when open */}
-              {searchPerformed && isAssumptionsPanelOpen && (
-                <Paper 
-                  elevation={4} 
-                  sx={{
-                    position: 'fixed',
-                    bottom: 72, // Position above FAB (Fab height ~56px + 16px spacing)
-                    right: 16,
-                    zIndex: 1200, 
-                    maxWidth: '400px', 
-                    maxHeight: 'calc(100vh - 90px)', 
-                    overflowY: 'auto', 
-                    borderRadius: 2, 
-                    p: 3 // Padding directly on Paper
-                  }}
-                >
-                  <Typography variant="h6" fontWeight="medium" gutterBottom> 
-                    Mortgage & Cashflow Assumptions
-            </Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                    {/* Interest Rate Slider */}
-                    <Box sx={{ flexBasis: { xs: '100%' } }}>
-                      <Box sx={{ mb: 2 }}>
-                        <Typography variant="body2" gutterBottom>Interest Rate: {interestRate}%</Typography>
-              <Slider
-                value={interestRate}
-                          onChange={(e, newValue) => setInterestRate(newValue as number)}
-                          aria-labelledby="interest-rate-slider"
-                valueLabelDisplay="auto"
-                          step={0.1}
-                          min={0.1}
-                          max={15}
-                          sx={{ color: '#4f46e5' }} // Apply custom color
-              />
-            </Box>
-                    </Box>
-                    {/* Loan Term Slider */}
-                    <Box sx={{ flexBasis: { xs: '100%' } }}>
-                      <Box sx={{ mb: 2 }}>
-                        <Typography variant="body2" gutterBottom>Loan Term: {loanTerm} years</Typography>
-              <Slider
-                value={loanTerm}
-                          onChange={(e, newValue) => setLoanTerm(newValue as number)}
-                          aria-labelledby="loan-term-slider"
-                valueLabelDisplay="auto"
-                          step={1}
-                          min={5}
-                          max={40}
-                          sx={{ color: '#4f46e5' }} // Apply custom color
-              />
-            </Box>
-                    </Box>
-                    {/* Down Payment Slider */}
-                    <Box sx={{ flexBasis: { xs: '100%' } }}>
-                      <Box sx={{ mb: 2 }}>
-                        <Typography variant="body2" gutterBottom>Down Payment: {downPaymentPercent}%</Typography>
-              <Slider
-                value={downPaymentPercent}
-                          onChange={(e, newValue) => setDownPaymentPercent(newValue as number)}
-                          aria-labelledby="down-payment-slider"
-                valueLabelDisplay="auto"
-                          step={1}
-                          min={0}
-                          max={100}
-                          sx={{ color: '#4f46e5' }} // Apply custom color
-              />
-            </Box>
-                    </Box>
-                    {/* Tax & Insurance Slider */}
-                    <Box sx={{ flexBasis: { xs: '100%' } }}>
-                      <Box sx={{ mb: 2 }}>
-                        <Typography variant="body2" gutterBottom>Property Tax & Insurance: {taxInsurancePercent}%</Typography>
-              <Slider
-                value={taxInsurancePercent}
-                          onChange={(e, value) => setTaxInsurancePercent(value as number)}
-                          min={0}
-                          max={5}
-                step={0.1}
-                valueLabelDisplay="auto"
-                valueLabelFormat={(value) => `${value}%`}
-                          sx={{ color: '#4f46e5' }} // Apply custom color
-              />
-            </Box>
-                    </Box>
-                    {/* Vacancy Slider */}
-                    <Box sx={{ flexBasis: { xs: '100%' } }}>
-                      <Box sx={{ mb: 2 }}>
-                        <Typography variant="body2" gutterBottom>Vacancy: {vacancyPercent}%</Typography>
-              <Slider
-                value={vacancyPercent}
-                          onChange={(e, value) => setVacancyPercent(value as number)}
-                min={0}
-                max={10}
-                step={1}
-                valueLabelDisplay="auto"
-                valueLabelFormat={(value) => `${value}%`}
-                          sx={{ color: '#4f46e5' }} // Apply custom color
-              />
-            </Box>
-                    </Box>
-                    {/* CapEx Slider */}
-                    <Box sx={{ flexBasis: { xs: '100%' } }}>
-                      <Box sx={{ mb: 2 }}>
-                        <Typography variant="body2" gutterBottom>CapEx: {capexPercent}%</Typography>
-              <Slider
-                value={capexPercent}
-                          onChange={(e, value) => setCapexPercent(value as number)}
-                min={0}
-                max={10}
-                step={1}
-                valueLabelDisplay="auto"
-                valueLabelFormat={(value) => `${value}%`}
-                          sx={{ color: '#4f46e5' }} // Apply custom color
-              />
-            </Box>
-          </Box>
-                    {/* Property Management Slider */}
-                    <Box sx={{ flexBasis: { xs: '100%' } }}>
-                      <Box sx={{ mb: 0 }}>
-                        <Typography variant="body2" gutterBottom>Property Management: {propertyManagementPercent}%</Typography>
-                        <Slider
-                          value={propertyManagementPercent}
-                          onChange={(e, value) => setPropertyManagementPercent(value as number)}
-                          min={0}
-                          max={20}
-                          step={1}
-                          valueLabelDisplay="auto"
-                          valueLabelFormat={(value) => `${value}%`}
-                          sx={{ color: '#4f46e5' }} // Apply custom color
-                        />
-                      </Box>
-                    </Box>
-                  </Box>
-                </Paper>
-              )}
-              
               {/* Assumptions Tab */}
               <div 
                 className="assumptions-tab"
@@ -1744,8 +1582,7 @@ function App() {
                   alignItems: 'center',
                   boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
                   transition: 'right 225ms cubic-bezier(0, 0, 0.2, 1) 0ms'
-                }}
-              >
+                }}>
                 <TuneIcon />
                 <span style={{ 
                   writingMode: 'vertical-rl', 
