@@ -543,6 +543,23 @@ a:hover {
   
   .search-form {
     flex-direction: column;
+    width: 100%;
+  }
+  
+  .search-form > div {
+    width: 100%;
+    min-width: 100% !important;
+  }
+  
+  .price-filter-container {
+    display: flex;
+    width: 100%;
+    gap: 1rem;
+  }
+  
+  .price-filter-container > div {
+    width: 50%;
+    flex: 1;
   }
   
   .search-button {
