@@ -767,9 +767,8 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     
     // First, check if there's encoded property data in the URL
     const searchParams = new URLSearchParams(location.search);
-    const encodedData = searchParams.get('data');
+    const encodedData = searchParams.get('d') || searchParams.get('data'); // Support both 'd' (new) and 'data' (old)
     const customRentParam = searchParams.get('re');
-    const notesParam = searchParams.get('nt'); // Get notes from URL parameter
     const hasCustomRent = customRentParam !== null;
     
     let loadedFromSearch = false; // Flag to track if loaded from search results
@@ -814,10 +813,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       }
       
       // Set notes from property object if they exist (e.g., previously bookmarked/saved)
-      // Prefer URL notes param if present, otherwise use property notes
-      if (notesParam) {
-          setNotes(decodeURIComponent(notesParam));
-      } else if (foundProperty.notes) {
+      if (foundProperty.notes) {
           setNotes(foundProperty.notes);
       }
       // AUTO-EXPAND assumptions drawer if loaded from search
@@ -843,10 +839,8 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
             setDisplayRent(formatCurrency(savedProperty.rent_estimate));
           }
           
-          // Set notes from saved property, preferring URL parameter if present
-          if (notesParam) {
-            setNotes(decodeURIComponent(notesParam));
-          } else if (savedProperty.notes) {
+          // Set notes from saved property
+          if (savedProperty.notes) {
             setNotes(savedProperty.notes);
           }
           
@@ -1515,28 +1509,38 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
   // Function to encode property data into a URL-safe string
   const encodePropertyToURL = (property: Property, currentNotes: string): string => {
     // Create a minimal version of the property with only essential fields
+    // Use shorter property names to reduce JSON size
     const minimalProperty = {
-      property_id: property.property_id,
-      address: property.address,
-      price: property.price,
-      bedrooms: property.bedrooms,
-      bathrooms: property.bathrooms,
-      sqft: property.sqft,
-      rent_estimate: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
-      thumbnail: property.thumbnail,
-      url: property.url,
-      days_on_market: property.days_on_market,
-      ratio: property.ratio,
-      rent_source: property.rent_source,
-      latitude: property.latitude,
-      longitude: property.longitude,
-      notes: currentNotes // Include notes
+      id: property.property_id,
+      a: property.address,
+      p: property.price,
+      b: property.bedrooms,
+      bt: property.bathrooms,
+      s: property.sqft,
+      r: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
+      // Only include thumbnail if it exists and isn't too long
+      ...(property.thumbnail && property.thumbnail.length < 100 ? { t: property.thumbnail } : {}),
+      u: property.url,
+      d: property.days_on_market,
+      rt: property.ratio,
+      rs: property.rent_source,
+      // Only include coordinates if they exist
+      ...(property.latitude && property.longitude ? { 
+        lat: property.latitude,
+        lng: property.longitude 
+      } : {}),
+      // Only include notes if they exist and aren't empty
+      ...(currentNotes && currentNotes.trim() !== '' ? { n: currentNotes } : {})
     };
     
     // Encode as JSON and then to base64
     const jsonStr = JSON.stringify(minimalProperty);
-    // Use encodeURIComponent to handle special chars, then btoa for base64
-    return btoa(encodeURIComponent(jsonStr));
+    
+    // Use a more compact encoding: URL-safe base64 without padding
+    return btoa(encodeURIComponent(jsonStr))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
   };
   
   // Add IRR calculation function
@@ -1579,11 +1583,39 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
   };
   
   // Function to decode property data from URL string
-  const decodePropertyFromURL = (encodedStr: string): (Property & { notes?: string }) | null => { // Update return type
+  const decodePropertyFromURL = (encodedStr: string): (Property & { notes?: string }) | null => {
     try {
+      // Add padding if needed
+      let padded = encodedStr;
+      while (padded.length % 4 !== 0) {
+        padded += '=';
+      }
+      
+      // Restore standard base64 characters
+      padded = padded.replace(/-/g, '+').replace(/_/g, '/');
+      
       // Decode from base64, then from URI encoding, then parse JSON
-      const jsonStr = decodeURIComponent(atob(encodedStr));
-      return JSON.parse(jsonStr) as (Property & { notes?: string }); // Cast includes notes
+      const jsonStr = decodeURIComponent(atob(padded));
+      const data = JSON.parse(jsonStr);
+      
+      // Convert back to original property structure
+      return {
+        property_id: data.id,
+        address: data.a,
+        price: data.p,
+        bedrooms: data.b,
+        bathrooms: data.bt,
+        sqft: data.s,
+        rent_estimate: data.r,
+        thumbnail: data.t || null,
+        url: data.u,
+        days_on_market: data.d,
+        ratio: data.rt,
+        rent_source: data.rs,
+        latitude: data.lat || null,
+        longitude: data.lng || null,
+        notes: data.n || ""
+      } as (Property & { notes?: string });
     } catch (error) {
       console.error('Error decoding property from URL:', error);
       return null;
@@ -1602,29 +1634,49 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
     
     // Add the encoded property data (now including notes)
     const encodedProperty = encodePropertyToURL(property, notes); // Pass notes here
-    params.set('data', encodedProperty);
+    params.set('d', encodedProperty); // Changed from 'data' to 'd'
     
-    // Add the settings
-    params.set('ir', settings.interestRate.toString());
-    params.set('lt', settings.loanTerm.toString());
-    params.set('dp', settings.downPaymentPercent.toString());
-    params.set('ti', settings.taxInsurancePercent.toString());
-    params.set('vc', settings.vacancyPercent.toString());
-    params.set('cx', settings.capexPercent.toString());
-    params.set('pm', settings.propertyManagementPercent.toString());
-    
-    // Add the long-term projection settings
-    params.set('ra', rentAppreciationRate.toString());
-    params.set('pvi', propertyValueIncreaseRate.toString());
-    
-    // Add custom rent estimate if set
-    if (customRentEstimate !== null) {
-      params.set('re', customRentEstimate.toString());
+    // Only add settings that differ from defaults to keep URLs shorter
+    if (settings.interestRate !== defaultSettings.interestRate) {
+      params.set('ir', settings.interestRate.toString());
     }
     
-    // Add the notes directly as a separate, encoded parameter as well (optional redundancy, or primary way if not in 'data')
-    if (notes) {
-        params.set('nt', encodeURIComponent(notes));
+    if (settings.loanTerm !== defaultSettings.loanTerm) {
+      params.set('lt', settings.loanTerm.toString());
+    }
+    
+    if (settings.downPaymentPercent !== defaultSettings.downPaymentPercent) {
+      params.set('dp', settings.downPaymentPercent.toString());
+    }
+    
+    if (settings.taxInsurancePercent !== defaultSettings.taxInsurancePercent) {
+      params.set('ti', settings.taxInsurancePercent.toString());
+    }
+    
+    if (settings.vacancyPercent !== defaultSettings.vacancyPercent) {
+      params.set('vc', settings.vacancyPercent.toString());
+    }
+    
+    if (settings.capexPercent !== defaultSettings.capexPercent) {
+      params.set('cx', settings.capexPercent.toString());
+    }
+    
+    if (settings.propertyManagementPercent !== defaultSettings.propertyManagementPercent) {
+      params.set('pm', settings.propertyManagementPercent.toString());
+    }
+    
+    // Only add these if they're not default values (assuming 3% and 3% are defaults)
+    if (rentAppreciationRate !== 3) {
+      params.set('ra', rentAppreciationRate.toString());
+    }
+    
+    if (propertyValueIncreaseRate !== 3) {
+      params.set('pvi', propertyValueIncreaseRate.toString());
+    }
+    
+    // Add custom rent estimate if set and different from property's original rent estimate
+    if (customRentEstimate !== null && customRentEstimate !== property.rent_estimate) {
+      params.set('re', customRentEstimate.toString());
     }
     
     return `${baseUrl}?${params.toString()}`;
