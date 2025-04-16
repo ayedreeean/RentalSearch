@@ -1743,6 +1743,21 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
     const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
     const shareableURL = generateShareableURL();
     
+    // Calculate IRR for the report
+    const longTermData = generateLongTermCashflow();
+    const cashFlows = longTermData.map(year => year.yearlyCashflow);
+    const finalEquity = longTermData[longTermData.length - 1].equity;
+    const initialInvestment = downPaymentAmount + (property.price * 0.03); // Down payment + closing costs
+    const irrValue = calculateIRR(initialInvestment, cashFlows, finalEquity);
+    
+    // Prepare chart data
+    const chartData = {
+      years: longTermData.map(d => d.year),
+      propertyValues: longTermData.map(d => d.propertyValue),
+      equity: longTermData.map(d => d.equity),
+      cashflow: longTermData.map(d => d.yearlyCashflow)
+    };
+    
     return (
       <Box 
         ref={ref} 
@@ -1774,6 +1789,23 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
             </Box>
           </Box>
         </Box>
+        
+        {/* Property Image */}
+        {property.thumbnail && (
+          <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
+            <img 
+              src={property.thumbnail} 
+              alt={property.address}
+              style={{ 
+                maxWidth: '100%', 
+                maxHeight: '200px', 
+                objectFit: 'cover',
+                borderRadius: '8px',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+              }}
+            />
+          </Box>
+        )}
         
         <Box sx={{ display: 'flex', mb: 3 }}>
           <Box sx={{ flex: 1, mr: 2 }}>
@@ -1867,6 +1899,38 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
             </Paper>
           </Box>
         </Box>
+        
+        {/* Chart Visualization */}
+        <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', borderBottom: '1px solid #e5e7eb', pb: 1, color: '#4f46e5' }}>
+            Property Value & Cashflow Projection
+          </Typography>
+          <Box sx={{ height: 250, mb: 2 }}>
+            <SimpleChart data={chartData} height={250} />
+          </Box>
+          
+          {/* IRR Estimates */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, bgcolor: '#f9fafb', p: 2, borderRadius: 1 }}>
+            <Box>
+              <Typography variant="body2" sx={{ color: '#6b7280' }}>Initial Investment</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{formatCurrency(initialInvestment)}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="body2" sx={{ color: '#6b7280' }}>Final Property Value (Year 30)</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{formatCurrency(longTermData[longTermData.length-1].propertyValue)}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="body2" sx={{ color: '#6b7280' }}>Total Equity (Year 30)</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{formatCurrency(finalEquity)}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="body2" sx={{ color: '#6b7280' }}>Internal Rate of Return (IRR)</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 'bold', color: irrValue >= 0 ? '#047857' : '#dc2626' }}>
+                {formatPercent(irrValue)}
+              </Typography>
+            </Box>
+          </Box>
+        </Paper>
         
         <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
           <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', borderBottom: '1px solid #e5e7eb', pb: 1, color: '#4f46e5' }}>
