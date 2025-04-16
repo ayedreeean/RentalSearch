@@ -13,7 +13,7 @@ import {
   Share as ShareIcon, Link as LinkIcon,
   Info as InfoIcon, Edit as EditIcon, 
   Email as EmailIcon, ExpandMore as ExpandMoreIcon, Bookmark as BookmarkIcon, BookmarkBorder as BookmarkBorderIcon,
-  PictureAsPdf as PdfIcon
+  PictureAsPdf as PdfIcon, Tune as TuneIcon // Add TuneIcon import
 } from '@mui/icons-material';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Legend, Line, Bar, ComposedChart, ReferenceLine } from 'recharts';
 import { Property, Cashflow, CashflowSettings } from '../types';
@@ -2534,7 +2534,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 transition: 'right 225ms cubic-bezier(0, 0, 0.2, 1) 0ms'
               }}
             >
-              <ExpandMoreIcon />
+              <TuneIcon /> {/* Replace ExpandMoreIcon with TuneIcon */}
               <span style={{ 
                 writingMode: 'vertical-rl', 
                 textOrientation: 'mixed', 
