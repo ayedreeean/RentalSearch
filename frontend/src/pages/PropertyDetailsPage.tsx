@@ -752,6 +752,11 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   // Add state for notes
   const [notes, setNotes] = useState<string>('');
   
+  // Scroll to top when component mounts
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+  
   // Load property data
   useEffect(() => {
     if (!propertyId) {
@@ -1532,6 +1537,45 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
     const jsonStr = JSON.stringify(minimalProperty);
     // Use encodeURIComponent to handle special chars, then btoa for base64
     return btoa(encodeURIComponent(jsonStr));
+  };
+  
+  // Add IRR calculation function
+  const calculateIRR = (initialInvestment: number, cashFlows: number[], finalEquity: number = 0): number => {
+    // Combine initial investment (negative) with cash flows and final value
+    const allCashFlows = [-initialInvestment, ...cashFlows, finalEquity];
+    
+    // IRR calculation using Newton's method
+    const maxIterations = 1000;
+    const tolerance = 0.0000001;
+    
+    let guess = 0.1; // Start with 10% as initial guess
+    
+    // Newton's method iteration
+    for (let iteration = 0; iteration < maxIterations; iteration++) {
+      let fValue = 0;
+      let fPrime = 0;
+      
+      // Calculate function value and derivative
+      for (let i = 0; i < allCashFlows.length; i++) {
+        fValue += allCashFlows[i] / Math.pow(1 + guess, i);
+        if (i > 0) {
+          fPrime -= i * allCashFlows[i] / Math.pow(1 + guess, i + 1);
+        }
+      }
+      
+      // Adjust guess using Newton's method
+      const newGuess = guess - fValue / fPrime;
+      
+      // Check for convergence
+      if (Math.abs(newGuess - guess) < tolerance) {
+        return newGuess * 100; // Convert to percentage
+      }
+      
+      guess = newGuess;
+    }
+    
+    // Return best guess if not converged
+    return guess * 100;
   };
   
   // Function to decode property data from URL string
@@ -2337,7 +2381,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                     </TableCell>
                     <TableCell align="right">
                       <Tooltip 
-                        title="Return on Investment percentage based on cashflow. Calculated as annual cashflow divided by initial investment." 
+                        title="Return on Investment percentage based on cashflow. Calculated as (Annual Cashflow / Initial Investment) * 100%." 
                         arrow 
                         placement="top"
                       >
@@ -2346,7 +2390,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                     </TableCell>
                     <TableCell align="right">
                       <Tooltip 
-                        title="Total Return on Investment including both cashflow and equity growth. Calculated as (cashflow + equity growth) divided by initial investment." 
+                        title="Total Return on Investment including both cashflow and equity growth. Calculated as ((Annual Cashflow + Annual Equity Growth) / Initial Investment) * 100%." 
                         arrow 
                         placement="top"
                       >
@@ -2390,6 +2434,81 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
             </TableContainer>
           </Box>
         </Paper>
+
+        {/* Add IRR Summary Panel */}
+        <Box sx={{ mt: 3, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+          <Typography variant="h6" gutterBottom sx={{ color: '#333', fontWeight: 'medium' }}>
+            Internal Rate of Return (IRR) by Holding Period
+          </Typography>
+          
+          <Typography variant="body2" gutterBottom sx={{ color: '#666', mb: 2 }}>
+            IRR represents the annualized rate of return considering all cash flows and the final property value, accounting for the time value of money.
+          </Typography>
+          
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'space-between' }}>
+            {[1, 5, 10, 15, 30].map(holdingPeriod => {
+              // Calculate IRR for this holding period
+              const relevantCashflows = longTermCashflowData
+                .filter(data => data.year <= holdingPeriod)
+                .map(data => data.yearlyCashflow);
+                
+              // Get final property value and equity for the exit scenario
+              const finalYearData = longTermCashflowData.find(data => data.year === holdingPeriod);
+              const finalEquity = finalYearData ? finalYearData.equity : 0;
+              
+              // Assume sale at end of period and use equity as final value
+              const irr = calculateIRR(
+                property.price * (settings.downPaymentPercent / 100) + property.price * 0.03,
+                relevantCashflows,
+                finalEquity
+              );
+              
+              // Generate color based on IRR value
+              const color = irr < 0 ? '#ef4444' : 
+                            irr < 8 ? '#f97316' : 
+                            irr < 15 ? '#10b981' : 
+                            '#4f46e5';
+              
+              return (
+                <Box 
+                  key={holdingPeriod} 
+                  sx={{ 
+                    flex: '1', 
+                    minWidth: '150px', 
+                    textAlign: 'center',
+                    p: 2,
+                    bgcolor: 'white',
+                    borderRadius: 1,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  <Typography variant="subtitle1" color="#555">
+                    {holdingPeriod} Year{holdingPeriod > 1 ? 's' : ''}
+                  </Typography>
+                  <Typography 
+                    variant="h5" 
+                    fontWeight="bold" 
+                    sx={{ color }}
+                  >
+                    {irr.toFixed(2)}%
+                  </Typography>
+                  <Typography variant="body2" color="#777" fontSize="0.8rem">
+                    {irr < 0 ? 'Poor' : 
+                     irr < 8 ? 'Moderate' : 
+                     irr < 15 ? 'Good' : 
+                     'Excellent'}
+                  </Typography>
+                </Box>
+              );
+            })}
+          </Box>
+          
+          <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #e0e0e0' }}>
+            <Typography variant="body2" color="#666">
+              <strong>Assumptions:</strong> IRR calculations include annual cash flows and assume property sale at the end of the holding period with proceeds equal to your equity. Sale costs (agent fees, closing costs, etc.) are not factored in.
+            </Typography>
+          </Box>
+        </Box>
       </Container>
     </>
   );
