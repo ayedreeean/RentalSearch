@@ -233,7 +233,7 @@ ${property.days_on_market !== null ? `• Days on market: ${property.days_on_mar
 🔗 ZILLOW LISTING: ${property.url}
 🔗 RENTCAST ANALYSIS: ${rentCastUrl}
 
-Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
+Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
 `;
   };
 
@@ -1326,7 +1326,7 @@ function App() {
                       onClick={() => window.location.href = '#/'}
                     >
                       <HomeWorkIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1.85rem' }} />
-                      RentalSearch
+                      CashflowCrunch
       </Typography>
                     <Typography className="app-subtitle" variant="subtitle1" component="p">
                       Find properties with investment potential
@@ -1425,7 +1425,7 @@ function App() {
                           maxWidth: '500px'
                         }}
                       >
-                        RentalSearch helps you discover and analyze potential real estate investments in seconds. 
+                        CashflowCrunch helps you discover and analyze potential real estate investments in seconds. 
                         Get detailed cash flow analysis, long-term equity projections, and returns on investment 
                         for properties in any location.
                       </Typography>
@@ -1956,16 +1956,16 @@ function App() {
                       {activeFaqSection === 'general' && (
                         <div>
                           <div className="faq-section">
-                            <div className="faq-question">What is RentalSearch?</div>
+                            <div className="faq-question">What is CashflowCrunch?</div>
                             <div className="faq-answer">
-                              RentalSearch is a tool designed to help you find potential rental investment properties. It searches for properties on the market and analyzes their potential cash flow based on estimated rent and customizable assumptions.
+                              CashflowCrunch is a tool designed to help you find potential rental investment properties. It searches for properties on the market and analyzes their potential cash flow based on estimated rent and customizable assumptions.
                             </div>
                           </div>
                           
                           <div className="faq-section">
-                            <div className="faq-question">How does RentalSearch work?</div>
+                            <div className="faq-question">How does CashflowCrunch work?</div>
                             <div className="faq-answer">
-                              RentalSearch fetches property listings from real estate APIs and then calculates potential cash flow for each property based on rent estimates and your personalized investment criteria. Results are displayed as cards with expandable cashflow analysis.
+                              CashflowCrunch fetches property listings from real estate APIs and then calculates potential cash flow for each property based on rent estimates and your personalized investment criteria. Results are displayed as cards with expandable cashflow analysis.
                             </div>
                           </div>
                           
@@ -1991,7 +1991,7 @@ function App() {
                           <div className="faq-section">
                             <div className="faq-question">Why does searching take time?</div>
                             <div className="faq-answer">
-                              RentalSearch processes a large amount of property data and performs calculations for each property. The search first fetches basic property data, then progressively enhances it with additional information like rent estimates, which occurs in the background.
+                              CashflowCrunch processes a large amount of property data and performs calculations for each property. The search first fetches basic property data, then progressively enhances it with additional information like rent estimates, which occurs in the background.
                             </div>
                           </div>
                           

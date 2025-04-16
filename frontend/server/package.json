@@ -1,7 +1,7 @@
 {
-  "name": "rental-search-server",
+  "name": "cashflow-crunch-server",
   "version": "1.0.0",
-  "description": "Backend server for RentalSearch application",
+  "description": "Backend server for CashflowCrunch application",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

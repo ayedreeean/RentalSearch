@@ -866,7 +866,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   // Update page title and load settings from localStorage
   useEffect(() => {
     if (property) {
-      document.title = `${property.address} | RentalSearch`;
+      document.title = `${property.address} | CashflowCrunch`;
       
       // Check if there are saved settings for this property in localStorage
       try {
@@ -921,11 +921,11 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
         console.error('Error loading settings from localStorage:', error);
       }
     } else {
-      document.title = 'Property Details | RentalSearch';
+      document.title = 'Property Details | CashflowCrunch';
     }
     
     return () => {
-      document.title = 'RentalSearch';
+      document.title = 'CashflowCrunch';
     };
   }, [property, location.search]);
 
@@ -1508,7 +1508,7 @@ ${notesSection}🔗 ZILLOW LISTING: ${property.url}
 
 See full analysis: ${window.location.href}
 
-Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
+Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
 `;
   };
   
@@ -1596,7 +1596,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
     
     // Instead of using current pathname, create a proper path to the property details page
     // This ensures the router will handle it correctly when shared
-    const baseUrl = `${window.location.origin}/RentalSearch/#/property/${property.property_id}`;
+    const baseUrl = `${window.location.origin}/CashflowCrunch/#/property/${property.property_id}`;
     
     // Create a URLSearchParams object for the query parameters
     const params = new URLSearchParams();
@@ -1771,7 +1771,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           <Link to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
             <HomeWorkIcon sx={{ mr: 1, color: 'white' }} />
             <Typography variant="h6" color="inherit" noWrap >
-              RentalSearch
+              CashflowCrunch
             </Typography>
           </Link>
           {/* Use flexGrow on a Box after the Link to push buttons to the right */}
