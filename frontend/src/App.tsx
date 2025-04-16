@@ -3,7 +3,7 @@ import { HashRouter as Router, Route, Routes, useNavigate, Link } from 'react-ro
 import {
   Typography, Container, TextField, Button, Box, CircularProgress, 
   Paper, InputAdornment, IconButton, Alert,
-  Slider, Card, CardContent, Accordion, AccordionSummary, AccordionDetails, Skeleton, Divider, Fab, Modal, Select, MenuItem, FormControl, InputLabel
+  Slider, Card, CardContent, Accordion, AccordionSummary, AccordionDetails, Skeleton, Divider, Fab, Modal, Select, MenuItem, FormControl, InputLabel, Tooltip
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import HomeIcon from '@mui/icons-material/Home';
@@ -841,7 +841,7 @@ function App() {
   
   // State for FAQ modal
   const [isFaqOpen, setIsFaqOpen] = useState(false);
-  const [activeFaqSection, setActiveFaqSection] = useState<'general' | 'search' | 'filters' | 'cashflow' | 'bookmarks'>('general');
+  const [activeFaqSection, setActiveFaqSection] = useState<'general' | 'search' | 'filters' | 'cashflow' | 'bookmarks' | 'details'>('general');
   
   // New state for marketing intro panel - always show
   const [showMarketingIntro] = useState(true);
@@ -986,9 +986,14 @@ function App() {
         setTimeout(() => {
           const resultsElement = document.querySelector('.property-grid') || document.querySelector('.loading-container');
           if (resultsElement) {
+            console.log('[App] Scrolling to results area');
             resultsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Add a smaller offset to avoid cutting off the first results
+            window.scrollBy(0, -50);
+          } else {
+            console.warn('[App] Results element not found for scrolling');
           }
-        }, 100);
+        }, 300); // Increase timeout to ensure elements are rendered
         return; // Exit early if no properties match
       }
 
@@ -1040,9 +1045,14 @@ function App() {
       setTimeout(() => {
         const resultsElement = document.querySelector('.property-grid') || document.querySelector('.loading-container');
         if (resultsElement) {
+          console.log('[App] Scrolling to results area');
           resultsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Add a smaller offset to avoid cutting off the first results
+          window.scrollBy(0, -50);
+        } else {
+          console.warn('[App] Results element not found for scrolling');
         }
-      }, 100);
+      }, 300); // Increase timeout to ensure elements are rendered
       
     } catch (err) {
       console.error('Search failed:', err);
@@ -1055,9 +1065,14 @@ function App() {
       setTimeout(() => {
         const errorElement = document.querySelector('.MuiAlert-root');
         if (errorElement) {
+          console.log('[App] Scrolling to error message');
           errorElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Add a smaller offset for the error message
+          window.scrollBy(0, -50);
+        } else {
+          console.warn('[App] Error element not found for scrolling');
         }
-      }, 100);
+      }, 300); // Increase timeout to ensure elements are rendered
     } finally {
       // Note: setLoading(false) is handled by the background processor finishing
       // or if totalCount was 0 initially.
@@ -1150,11 +1165,28 @@ function App() {
         if (totalProperties > 0 && newPropertyList.length >= totalProperties) { // Use >= for safety
           console.log('All properties processed.');
           setIsProcessingBackground(false); // Turn off background indicator
+          setLoading(false); // Also ensure loading is turned off
         }
+        
+        // Add a timeout to force end processing after a reasonable time
+        // This ensures we don't get stuck in a loading state
+        if (isProcessingBackground) {
+          setTimeout(() => {
+            setIsProcessingBackground(prev => {
+              if (prev) {
+                console.log('[handlePropertyUpdate] Force ending background processing after timeout');
+                return false;
+              }
+              return prev;
+            });
+            setLoading(false);
+          }, 30000); // 30 seconds max processing time
+        }
+        
         return newPropertyList;
       }
     });
-  }, [totalProperties]); // Add totalProperties as a dependency
+  }, [totalProperties, isProcessingBackground, setLoading]); // Add dependencies
 
   // --- Add useMemo for sorting ---
   const sortedProperties = React.useMemo(() => {
@@ -1195,22 +1227,33 @@ function App() {
     return sortableItems;
   }, [displayedProperties, sortConfig, calculateCashflow, interestRate, loanTerm, downPaymentPercent, taxInsurancePercent, vacancyPercent, capexPercent, propertyManagementPercent]);
 
-  // --- Effect to Register for Updates ---
+  // --- Register for property updates when component mounts ---
   useEffect(() => {
     console.log('[Effect Register] Registering global update callback.');
     registerForPropertyUpdates(handlePropertyUpdate);
-
-    // Cleanup function to unregister when component unmounts or callback changes
-    // return () => {
-    //   console.log('[Effect Register] Unregistering global update callback.');
-    //   // Implement unregister logic in propertyApi if needed, currently not exposed
-    //   // unregister(); 
-    // };
-    // }, [handlePropertyUpdate]); // Add the memoized callback as a dependency
-  // }, [handlePropertyUpdate, totalProperties]); // Depend on totalProperties
-  // }, [handlePropertyUpdate, totalProperties]); // Use the memoized callback
   }, [handlePropertyUpdate]); // Only depend on the stable callback
-
+  
+  // --- Add effect to ensure loading states are properly reset ---
+  useEffect(() => {
+    // Check if we have loaded all expected properties
+    if (totalProperties > 0 && displayedProperties.length >= totalProperties) {
+      console.log('[Effect] All properties loaded, ensuring loading states are reset.');
+      setIsProcessingBackground(false);
+      setLoading(false);
+    }
+    
+    // Add a timeout to ensure loading state doesn't get stuck
+    if (searchPerformed && (loading || isProcessingBackground)) {
+      const timer = setTimeout(() => {
+        console.log('[Effect] Timeout reached, force resetting loading states');
+        setLoading(false);
+        setIsProcessingBackground(false);
+      }, 60000); // 60 second max loading time
+      
+      return () => clearTimeout(timer);
+    }
+  }, [displayedProperties.length, totalProperties, searchPerformed, loading, isProcessingBackground]);
+  
   // Add handler for rent estimate changes
   const handleRentEstimateChange = useCallback((propertyId: string, newRentString: string) => {
     const newRent = parseFloat(newRentString.replace(/[^\d.]/g, '')); // Clean and parse
@@ -1241,7 +1284,7 @@ function App() {
   };
   
   const handleFaqSectionChange = (section: string) => {
-    setActiveFaqSection(section as 'general' | 'search' | 'filters' | 'cashflow' | 'bookmarks');
+    setActiveFaqSection(section as 'general' | 'search' | 'filters' | 'cashflow' | 'bookmarks' | 'details');
   };
   
   // Define the default settings for calculator
@@ -1270,7 +1313,18 @@ function App() {
               <div className="container">
                 <div className="header-content">
                   <div>
-                    <Typography className="app-title" variant="h4" component="h1">
+                    <Typography 
+                      className="app-title" 
+                      variant="h4" 
+                      component="h1"
+                      sx={{ 
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        '&:hover': { opacity: 0.9 }
+                      }}
+                      onClick={() => window.location.href = '#/'}
+                    >
                       <HomeWorkIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1.85rem' }} />
                       RentalSearch
       </Typography>
@@ -1563,54 +1617,68 @@ function App() {
               </div>
               
               {/* Assumptions Tab */}
-              <div 
-                className="assumptions-tab"
-                onClick={() => setIsAssumptionsDrawerOpen(!isAssumptionsDrawerOpen)}
-                style={{
-                  position: 'fixed',
-                  right: isAssumptionsDrawerOpen ? '350px' : '0',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  backgroundColor: '#4f46e5',
-                  color: 'white',
-                  padding: '12px 8px',
-                  borderRadius: '8px 0 0 8px',
-                  cursor: 'pointer',
-                  zIndex: 1250,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-                  transition: 'right 225ms cubic-bezier(0, 0, 0.2, 1) 0ms'
-                }}>
-                <TuneIcon />
-                <span style={{ 
-                  writingMode: 'vertical-rl', 
-                  textOrientation: 'mixed', 
-                  transform: 'rotate(180deg)',
-                  marginTop: '8px',
-                  fontWeight: 'bold',
-                  letterSpacing: '1px',
-                  fontSize: '14px'
-                }}>Assumptions</span>
-              </div>
+              <Tooltip title="Adjust mortgage and cashflow assumptions" placement="left">
+                <div 
+                  className="assumptions-tab"
+                  onClick={() => setIsAssumptionsDrawerOpen(!isAssumptionsDrawerOpen)}
+                  style={{
+                    position: 'fixed',
+                    right: isAssumptionsDrawerOpen ? 'var(--drawer-width, 300px)' : '0',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    backgroundColor: '#4f46e5',
+                    color: 'white',
+                    padding: '12px 8px',
+                    borderRadius: '8px 0 0 8px',
+                    cursor: 'pointer',
+                    zIndex: 1250,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
+                    transition: 'right 225ms cubic-bezier(0, 0, 0.2, 1) 0ms'
+                  }}>
+                  <TuneIcon />
+                  <span style={{ 
+                    writingMode: 'vertical-rl', 
+                    textOrientation: 'mixed', 
+                    transform: 'rotate(180deg)',
+                    marginTop: '8px',
+                    fontWeight: 'bold',
+                    letterSpacing: '1px',
+                    fontSize: '14px'
+                  }}>Assumptions</span>
+                </div>
+              </Tooltip>
               
               {/* Assumptions Drawer */}
               <Drawer
                 anchor="right"
                 open={isAssumptionsDrawerOpen}
                 onClose={() => setIsAssumptionsDrawerOpen(false)}
+                className="assumptions-drawer"
                 sx={{
                   '& .MuiDrawer-paper': {
-                    width: '350px',
-                    maxWidth: '90vw',
+                    width: '300px',
+                    maxWidth: '80vw',
                     boxSizing: 'border-box',
-                    padding: 3,
+                    padding: 2,
                     borderTopLeftRadius: 0,
                     borderBottomLeftRadius: 0,
+                    overflowY: 'auto',
                   },
                   '& .MuiBackdrop-root': {
                     backgroundColor: 'rgba(0, 0, 0, 0.2)'
+                  }
+                }}
+                // Use ref to update CSS variable with actual drawer width
+                ref={(node) => {
+                  if (node && isAssumptionsDrawerOpen) {
+                    const drawerPaper = node.querySelector('.MuiDrawer-paper');
+                    if (drawerPaper) {
+                      const width = drawerPaper.getBoundingClientRect().width;
+                      document.documentElement.style.setProperty('--drawer-width', `${width}px`);
+                    }
                   }
                 }}
                 transitionDuration={225}
@@ -1623,91 +1691,91 @@ function App() {
               >
                 <Typography variant="h6" fontWeight="medium" gutterBottom> 
                   Mortgage & Cashflow Assumptions
-                </Typography>
-                
+            </Typography>
+            
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>Interest Rate: {interestRate}%</Typography>
-                  <Slider
-                    value={interestRate}
+              <Slider
+                value={interestRate}
                     onChange={(e, newValue) => setInterestRate(newValue as number)}
                     aria-labelledby="interest-rate-slider"
-                    valueLabelDisplay="auto"
+                valueLabelDisplay="auto"
                     step={0.1}
                     min={0.1}
                     max={15}
                     sx={{ color: '#4f46e5' }}
-                  />
-                </Box>
-                
+              />
+            </Box>
+            
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>Loan Term: {loanTerm} years</Typography>
-                  <Slider
-                    value={loanTerm}
+              <Slider
+                value={loanTerm}
                     onChange={(e, newValue) => setLoanTerm(newValue as number)}
                     aria-labelledby="loan-term-slider"
-                    valueLabelDisplay="auto"
+                valueLabelDisplay="auto"
                     step={1}
                     min={5}
                     max={40}
                     sx={{ color: '#4f46e5' }}
-                  />
-                </Box>
-                
+              />
+            </Box>
+            
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>Down Payment: {downPaymentPercent}%</Typography>
-                  <Slider
-                    value={downPaymentPercent}
+              <Slider
+                value={downPaymentPercent}
                     onChange={(e, newValue) => setDownPaymentPercent(newValue as number)}
                     aria-labelledby="down-payment-slider"
-                    valueLabelDisplay="auto"
+                valueLabelDisplay="auto"
                     step={1}
                     min={0}
                     max={100}
                     sx={{ color: '#4f46e5' }}
-                  />
-                </Box>
-                
+              />
+            </Box>
+            
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>Property Tax & Insurance: {taxInsurancePercent}%</Typography>
-                  <Slider
-                    value={taxInsurancePercent}
+              <Slider
+                value={taxInsurancePercent}
                     onChange={(e, value) => setTaxInsurancePercent(value as number)}
                     min={0}
                     max={5}
-                    step={0.1}
-                    valueLabelDisplay="auto"
-                    valueLabelFormat={(value) => `${value}%`}
+                step={0.1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
                     sx={{ color: '#4f46e5' }}
-                  />
-                </Box>
-                
+              />
+            </Box>
+            
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>Vacancy: {vacancyPercent}%</Typography>
-                  <Slider
-                    value={vacancyPercent}
+              <Slider
+                value={vacancyPercent}
                     onChange={(e, value) => setVacancyPercent(value as number)}
-                    min={0}
-                    max={10}
-                    step={1}
-                    valueLabelDisplay="auto"
-                    valueLabelFormat={(value) => `${value}%`}
+                min={0}
+                max={10}
+                step={1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
                     sx={{ color: '#4f46e5' }}
-                  />
-                </Box>
-                
+              />
+            </Box>
+            
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>CapEx: {capexPercent}%</Typography>
-                  <Slider
-                    value={capexPercent}
+              <Slider
+                value={capexPercent}
                     onChange={(e, value) => setCapexPercent(value as number)}
-                    min={0}
-                    max={10}
-                    step={1}
-                    valueLabelDisplay="auto"
-                    valueLabelFormat={(value) => `${value}%`}
+                min={0}
+                max={10}
+                step={1}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
                     sx={{ color: '#4f46e5' }}
-                  />
-                </Box>
+              />
+            </Box>
                 
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>Property Management: {propertyManagementPercent}%</Typography>
@@ -1721,7 +1789,7 @@ function App() {
                     valueLabelFormat={(value) => `${value}%`}
                     sx={{ color: '#4f46e5' }}
                   />
-                </Box>
+          </Box>
               </Drawer>
               
               {/* Property Results Section */}
@@ -1874,6 +1942,12 @@ function App() {
                       >
                         Bookmarks
                       </div>
+                      <div 
+                        className={`faq-nav-item ${activeFaqSection === 'details' ? 'active' : ''}`}
+                        onClick={() => handleFaqSectionChange('details')}
+                      >
+                        Property Details & Sharing
+                      </div>
                     </div>
                     
                     {/* FAQ Content Container - Wrap all FAQ sections in a single container */}
@@ -2014,6 +2088,7 @@ function App() {
                                 <li>Your custom rent estimate (if you modified it)</li>
                                 <li>Your investment assumption settings (interest rate, down payment, etc.)</li>
                                 <li>Custom projection settings for long-term analysis</li>
+                                <li>Any notes you added in the Notes section</li> {/* Added notes */} 
                               </ul>
                               This ensures that when you revisit a bookmarked property, you'll see it exactly as you left it.
                             </div>
@@ -2034,6 +2109,72 @@ function App() {
                             <div className="faq-question">Are my bookmarks saved if I close the browser?</div>
                             <div className="faq-answer">
                               Yes, bookmarks are stored in your browser's local storage, which means they'll persist even when you close the browser or shut down your computer. However, they are specific to the device and browser you're using. If you switch devices or browsers, you won't see the same bookmarks.
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Add New Property Details & Sharing Section */}
+                      {activeFaqSection === 'details' && (
+                        <div>
+                           <div className="faq-section">
+                            <div className="faq-question">What's on the Property Details Page?</div>
+                            <div className="faq-answer">
+                              The Property Details page provides an in-depth look at a single property, including:
+                              <ul>
+                                <li>Basic property information (price, beds, baths, sqft)</li>
+                                <li>An interactive map showing the property location</li>
+                                <li>Detailed monthly and annual cashflow analysis based on current assumptions</li>
+                                <li>A long-term projection chart showing potential growth in property value, equity, and cashflow over 30 years</li>
+                                <li>A table summarizing key metrics for years 1, 5, 10, 15, 20, 25, and 30</li>
+                                <li>An editable Notes section to jot down your thoughts</li>
+                                <li>Controls to adjust investment assumptions (in the slide-out drawer) and long-term projection assumptions</li>
+                                <li>Links to view the property on Zillow and RentCast</li>
+                              </ul>
+                            </div>
+                          </div>
+
+                          <div className="faq-section">
+                            <div className="faq-question">How does the "Copy URL" sharing feature work?</div>
+                            <div className="faq-answer">
+                              Clicking "Copy URL" on the Property Details page generates a unique web address (URL) that contains all the necessary information about the property, your current investment assumptions, projection settings, custom rent estimate (if changed), and any notes you've added. This data is encoded directly into the URL itself. When someone opens this link, the application reads the data from the URL and displays the property details exactly as you configured them, without needing to fetch anything from a server.
+                            </div>
+                          </div>
+
+                          <div className="faq-section">
+                            <div className="faq-question">How do I use the Notes section?</div>
+                            <div className="faq-answer">
+                              The Notes section on the Property Details page allows you to write down any thoughts, observations, or questions about the property. Simply type into the text box. These notes are automatically saved when you bookmark the property or generate a shareable URL.
+                            </div>
+                          </div>
+
+                          <div className="faq-section">
+                            <div className="faq-question">What does the Long-Term Projection chart show?</div>
+                            <div className="faq-answer">
+                              This chart visualizes the potential financial performance of the property over 30 years based on your assumptions. It shows:
+                              <ul>
+                                <li><b>Property Value (Purple Line):</b> Estimated appreciation based on the 'Property Value Increase' rate.</li>
+                                <li><b>Equity (Green Line):</b> Your ownership stake, growing from principal payments and appreciation.</li>
+                                <li><b>Annual Cashflow (Orange/Red Bars):</b> Projected cash flow for each year, based on rent appreciation and expense assumptions. Orange bars indicate positive cashflow, red bars indicate negative.</li>
+                              </ul>
+                              Hover over the chart to see specific values for each year. You can adjust the 'Rent Appreciation' and 'Property Value Increase' rates using the sliders below the chart or in the Assumptions drawer.
+                            </div>
+                          </div>
+                           <div className="faq-section">
+                            <div className="faq-question">How do I adjust the assumptions?</div>
+                            <div className="faq-answer">
+                             Click the purple "Assumptions" tab on the right side of the Property Details page. This opens a drawer where you can adjust sliders for:
+                              <ul>
+                                <li><b>Cashflow Assumptions:</b> Interest Rate, Loan Term, Down Payment, Tax/Insurance %, Vacancy %, CapEx %, Property Management %.</li>
+                                <li><b>Long-Term Projection Assumptions:</b> Rent Appreciation % and Property Value Increase %.</li>
+                              </ul>
+                              Changes you make here instantly update the cashflow analysis and long-term projections. These settings are also saved with bookmarks and shared URLs.
+                            </div>
+                          </div>
+                           <div className="faq-section">
+                            <div className="faq-question">What is the map for?</div>
+                            <div className="faq-answer">
+                              The map on the Property Details page shows the approximate location of the property based on its address or latitude/longitude coordinates. It helps you visualize the property's surroundings and neighborhood context.
                             </div>
                           </div>
                         </div>
