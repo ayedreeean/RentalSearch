@@ -1506,7 +1506,7 @@ ${property.days_on_market !== null ? `• Days on market: ${property.days_on_mar
 ${notesSection}🔗 ZILLOW LISTING: ${property.url}
 🔗 RENTCAST ANALYSIS: ${rentCastUrl}
 
-See full analysis: ${window.location.href}
+See full analysis: ${generateShareableURL()}
 
 Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
 `;
