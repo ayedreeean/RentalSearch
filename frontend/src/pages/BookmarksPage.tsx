@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { 
   Container, 
@@ -17,17 +18,12 @@ import {
   Paper,
   Divider,
   Alert,
-  List,
-  ListItem,
-  ListItemText,
   CircularProgress
 } from '@mui/material';
 import { 
   ArrowBack as ArrowBackIcon, 
   HomeWork as HomeWorkIcon,
-  Delete as DeleteIcon,
-  Home as HomeIcon,
-  BarChart as BarChartIcon
+  Delete as DeleteIcon
 } from '@mui/icons-material';
 import { Property, Cashflow } from '../types';
 
@@ -43,17 +39,13 @@ const BookmarksPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Format currency
+  // Format currency (Keep local function)
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
     }).format(amount);
   };
   
-  // Format percent
+  // Format percent (Keep local function)
   const formatPercent = (percent: number): string => {
     return `${percent.toFixed(1)}%`;
   };

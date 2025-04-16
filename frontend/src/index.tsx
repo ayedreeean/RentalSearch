@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, HashRouter } from 'react-router-dom';
+import { HashRouter } from 'react-router-dom'; // Keep HashRouter, remove BrowserRouter
 import './index.css';
 import App from './App';
 import { ThemeProvider, createTheme } from '@mui/material/styles';

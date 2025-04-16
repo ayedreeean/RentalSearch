@@ -23,6 +23,8 @@ import { usePDF } from 'react-to-pdf';
 import { QRCodeSVG } from 'qrcode.react';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import Drawer from '@mui/material/Drawer';
+import Skeleton from '@mui/material/Skeleton';
+import QRCode from 'qrcode';
 
 interface PropertyDetailsPageProps {
   properties: Property[];
@@ -693,6 +695,237 @@ const PropertyMap = ({
     </Box>
   );
 };
+
+// Component to render the PDF report content
+const PropertyPDFReport = React.forwardRef<HTMLDivElement, { property: Property, settings: CashflowSettings, cashflow: Cashflow, longTermData: YearlyProjection[], initialInvestment: number, formatCurrency: Function, formatPercent: Function, notes: string, shareableUrl: string }>((props, ref) => {
+  const { property, settings, cashflow, longTermData, initialInvestment, formatCurrency, formatPercent, notes, shareableUrl } = props;
+  const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
+  
+  // --- QR Code Generation ---
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
+  useEffect(() => {
+    if (shareableUrl) {
+      QRCode.toDataURL(shareableUrl, { errorCorrectionLevel: 'L', margin: 1, scale: 4 })
+        .then(url => setQrCodeUrl(url))
+        .catch(err => console.error('QR Code generation failed:', err));
+    }
+  }, [shareableUrl]);
+  
+  // --- Styles for PDF --- (Using sx prop mainly)
+  const sectionStyle = { pageBreakInside: 'avoid', mb: '0.2in' }; // Key style!
+  const headingStyle = { fontWeight: 'bold', fontSize: '12pt', color: '#333', mb: 1 };
+  const subHeadingStyle = { fontWeight: 'bold', fontSize: '10pt', color: '#555', mb: 0.5 };
+  const textStyle = { fontSize: '9pt', color: '#444', mb: 0.5 };
+  const listItemStyle = { fontSize: '9pt', color: '#444', mb: 0.2 };
+
+  return (
+    <Box 
+      ref={ref} 
+      sx={{
+        width: '8.5in', // Standard Letter width
+        padding: '0.5in', // Margins
+        fontFamily: 'Arial, sans-serif',
+        color: '#333', 
+        minHeight: '11in' // Ensure at least one page height for context, but content can overflow
+      }}
+    >
+      {/* -- Header Section -- */}
+      <Box sx={{ ...sectionStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #ccc', pb: 1, mb: '0.3in' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <img src="/favicon.png" alt="Logo" style={{ height: '35px', width: '35px', marginRight: '10px' }} />
+          <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
+            CashflowCrunch Analysis
+          </Typography>
+        </Box>
+        <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '9pt' }}>
+          {property.address}
+        </Typography>
+      </Box>
+
+      {/* -- Top Row: Summary & Assumptions/QR -- */}
+      <Box sx={{ display: 'flex', gap: '0.3in', mb: '0.2in' }}>
+        {/* Left Column: Investment Summary */}
+        <Box sx={{ flex: 1, ...sectionStyle, p: '0.15in', border: '1px solid #e0e0e0', borderRadius: 1 }}>
+          <Typography sx={headingStyle}>Investment Summary</Typography>
+          
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+            <Typography sx={textStyle}>Property Price:</Typography>
+            <Typography sx={{...textStyle, fontWeight: 'bold'}}>{formatCurrency(property.price)}</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+            <Typography sx={textStyle}>Monthly Rent Estimate:</Typography>
+            <Typography sx={{...textStyle, fontWeight: 'bold'}}>{formatCurrency(property.rent_estimate)}</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+            <Typography sx={textStyle}>Rent-to-Price Ratio:</Typography>
+            <Typography sx={{...textStyle, fontWeight: 'bold'}}>{formatPercent(property.ratio * 100)}</Typography>
+          </Box>
+          
+          <Divider sx={{ my: '0.1in' }} />
+          
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+            <Typography sx={textStyle}>Monthly Cashflow:</Typography>
+            <Typography sx={{...textStyle, fontWeight: 'bold', color: cashflow.monthlyCashflow >= 0 ? '#10b981' : '#ef4444'}}>
+              {formatCurrency(cashflow.monthlyCashflow)}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+            <Typography sx={textStyle}>Annual Cashflow:</Typography>
+            <Typography sx={{...textStyle, fontWeight: 'bold', color: cashflow.annualCashflow >= 0 ? '#10b981' : '#ef4444'}}>
+              {formatCurrency(cashflow.annualCashflow)}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Typography sx={textStyle}>Cash-on-Cash Return:</Typography>
+            <Typography sx={{...textStyle, fontWeight: 'bold', color: cashflow.cashOnCashReturn >= 0 ? '#10b981' : '#ef4444'}}>
+              {formatPercent(cashflow.cashOnCashReturn)}
+            </Typography>
+          </Box>
+        </Box>
+
+        {/* Right Column: Key Assumptions & QR Code */}
+        <Box sx={{ flex: 1, ...sectionStyle, display: 'flex', flexDirection: 'column', p: '0.15in', border: '1px solid #e0e0e0', borderRadius: 1 }}>
+          <Typography sx={headingStyle}>Key Assumptions</Typography>
+          <Box sx={{ mb: 1 }}>
+            <Typography sx={listItemStyle}>Interest Rate: {formatPercent(settings.interestRate)}</Typography>
+            <Typography sx={listItemStyle}>Loan Term: {settings.loanTerm} years</Typography>
+            <Typography sx={listItemStyle}>Down Payment: {formatPercent(settings.downPaymentPercent)} ({formatCurrency(downPaymentAmount)})</Typography>
+            <Typography sx={listItemStyle}>Tax/Insurance: {formatPercent(settings.taxInsurancePercent)}</Typography>
+            <Typography sx={listItemStyle}>Vacancy: {formatPercent(settings.vacancyPercent)}</Typography>
+            <Typography sx={listItemStyle}>CapEx: {formatPercent(settings.capexPercent)}</Typography>
+            <Typography sx={listItemStyle}>Management: {formatPercent(settings.propertyManagementPercent)}</Typography>
+          </Box>
+          
+          <Divider sx={{ my: '0.1in' }} />
+          
+          <Box sx={{ textAlign: 'center', mt: 'auto' }}> {/* Push QR code down */} 
+            {qrCodeUrl ? (
+              <img src={qrCodeUrl} alt="Live Analysis QR Code" style={{ width: '1in', height: '1in' }} />
+            ) : (
+              <Skeleton variant="rectangular" width="1in" height="1in" />
+            )}
+            <Typography sx={{ fontSize: '8pt', color: '#6b7280', mt: 0.5 }}>
+              Scan QR code for live analysis
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* -- Notes Section -- */}
+      {notes && (
+        <Box sx={{ ...sectionStyle, p: '0.15in', border: '1px solid #e0e0e0', borderRadius: 1 }}>
+          <Typography sx={headingStyle}>Notes</Typography>
+          <Typography sx={{...textStyle, whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+            {notes}
+          </Typography>
+        </Box>
+      )}
+      
+      {/* -- Chart Section -- */}
+      <Box sx={{ ...sectionStyle, height: '3in' }}> {/* Give chart reasonable height */} 
+        <Typography sx={headingStyle}>Projection: Value, Equity & Cashflow (30 Years)</Typography>
+        <Typography sx={textStyle} gutterBottom>
+          Assumes {formatPercent(settings.rentAppreciationRate)} rent appreciation & {formatPercent(settings.propertyValueIncreaseRate)} value increase annually.
+        </Typography>
+        <SimpleChart 
+          data={{
+            years: longTermData.map(d => d.year),
+            propertyValues: longTermData.map(d => d.propertyValue),
+            equity: longTermData.map(d => d.equity),
+            cashflow: longTermData.map(d => d.yearlyCashflow)
+          }}
+          height={250} // Fixed pixel height for chart rendering consistency
+        />
+      </Box>
+
+      {/* -- Long Term Table Section -- */}
+      <Box sx={{ ...sectionStyle }}>
+        <Typography sx={headingStyle}>Long-Term Investment Analysis</Typography>
+        <TableContainer component={Paper} elevation={0} variant="outlined">
+          <Table size="small" sx={{ '& .MuiTableCell-root': { fontSize: '8pt', padding: '4px 8px' } }}>
+            <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+              <TableRow>
+                <TableCell>Year</TableCell>
+                <TableCell align="right">Property Value</TableCell>
+                <TableCell align="right">Annual Rent</TableCell>
+                <TableCell align="right">Cashflow</TableCell>
+                <TableCell align="right">Equity</TableCell>
+                <TableCell align="right">Equity Growth</TableCell>
+                <TableCell align="right">ROI</TableCell>
+                <TableCell align="right">ROI w/ Equity</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {longTermData
+                .filter(data => [1, 5, 10, 15, 20, 25, 30].includes(data.year))
+                .map((data) => (
+                  <TableRow key={data.year}>
+                    <TableCell>{data.year}</TableCell>
+                    <TableCell align="right">{formatCurrency(data.propertyValue)}</TableCell>
+                    <TableCell align="right">{formatCurrency(data.annualRent)}</TableCell>
+                    <TableCell align="right" sx={{ color: data.yearlyCashflow >= 0 ? '#10b981' : '#ef4444' }}>
+                      {formatCurrency(data.yearlyCashflow)}
+                    </TableCell>
+                    <TableCell align="right">{formatCurrency(data.equity)}</TableCell>
+                    <TableCell align="right">{formatCurrency(data.equityGrowth)}</TableCell>
+                    <TableCell align="right" sx={{ color: data.roi >= 0 ? '#10b981' : '#ef4444' }}>{formatPercent(data.roi)}</TableCell>
+                    <TableCell align="right" sx={{ color: data.roiWithEquity >= 0 ? '#10b981' : '#ef4444' }}>{formatPercent(data.roiWithEquity)}</TableCell>
+                  </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+      
+      {/* -- IRR Summary Panel -- */}
+      <Box sx={{ ...sectionStyle, p: '0.15in', border: '1px solid #e0e0e0', borderRadius: 1 }}>
+        <Typography sx={headingStyle}>Internal Rate of Return (IRR) by Holding Period</Typography>
+        <Typography sx={{...textStyle, color: '#6b7280', mb: 1 }}>
+          Annualized return considering cash flows and equity growth upon sale.
+        </Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '0.1in', justifyContent: 'space-between' }}>
+          {[1, 5, 10, 15, 30].map(holdingPeriod => {
+            const relevantCashflows = longTermData
+              .filter(data => data.year <= holdingPeriod)
+              .map(data => data.yearlyCashflow);
+            const finalYearData = longTermData.find(data => data.year === holdingPeriod);
+            const finalEquityValue = finalYearData ? finalYearData.equity : 0;
+            const irr = calculateIRR(initialInvestment, relevantCashflows, finalEquityValue);
+            const color = irr < 0 ? '#ef4444' : irr < 8 ? '#f97316' : irr < 15 ? '#10b981' : '#4f46e5';
+            
+            return (
+              <Box 
+                key={holdingPeriod} 
+                sx={{ flex: '1', minWidth: '70px', textAlign: 'center', p: '0.1in', bgcolor: '#fafafa', borderRadius: 1, border: '1px solid #eee' }}
+              >
+                <Typography sx={{ ...subHeadingStyle, fontSize: '9pt' }}>{holdingPeriod} Yr</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color, fontSize: '10pt' }}>{irr.toFixed(1)}%</Typography>
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
+      
+      {/* -- Footer Section -- */}
+      <Box sx={{ 
+        // pageBreakInside: 'avoid', // Avoid breaking footer itself if it was long
+        mt: '0.3in',
+        pt: '0.1in', 
+        borderTop: '1px solid #ccc',
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center' 
+      }}>
+        <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '8pt' }}>
+          Generated with CashflowCrunch
+        </Typography>
+        <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '8pt' }}>
+          {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
+        </Typography>
+      </Box>
+    </Box>
+  );
+});
 
 const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   properties,
@@ -1750,469 +1983,6 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
     setShowPdfModal(false);
   }, []);
 
-  // PDF Report template component
-  const PropertyPDFReport = React.forwardRef<HTMLDivElement>((_, ref) => {
-    if (!property || !cashflow) return null;
-    
-    const rentValue = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
-    const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
-    const shareableURL = generateShareableURL();
-    
-    // Calculate IRR for the report
-    const longTermData = generateLongTermCashflow();
-    const cashFlows = longTermData.map(year => year.yearlyCashflow);
-    const finalEquity = longTermData[longTermData.length - 1].equity;
-    const initialInvestment = downPaymentAmount + (property.price * 0.03); // Down payment + closing costs
-    const irrValue = calculateIRR(initialInvestment, cashFlows, finalEquity);
-    
-    // Prepare chart data
-    const chartData = {
-      years: longTermData.map(d => d.year),
-      propertyValues: longTermData.map(d => d.propertyValue),
-      equity: longTermData.map(d => d.equity),
-      cashflow: longTermData.map(d => d.yearlyCashflow)
-    };
-    
-    return (
-      <Box 
-        ref={ref} 
-        sx={{ 
-          backgroundColor: 'white',
-          color: 'black',
-          fontFamily: 'Arial, sans-serif',
-          fontSize: '10pt',
-          width: '8.5in'
-        }}
-      >
-        {/* Page 1 */}
-        <Box 
-          className="pdfPageContainer" // Add class for potential styling
-          sx={{ 
-            // Removed height and minHeight
-            padding: '0.5in',
-            paddingBottom: '0.7in', // Ensure footer space
-            position: 'relative',
-            display: 'flex',
-            flexDirection: 'column'
-          }}
-        >
-          {/* Header - Mimic Web Page */}
-          <Box sx={{ mb: 1.5, borderBottom: '1px solid #e0e0e0', pb: 1 }}> {/* Reduced mb from 2 */}
-            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#4f46e5', mb: 0.5 }}>
-              {property.address}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                {formatCurrency(property.price)}
-              </Typography>
-              <Typography variant="body2" sx={{ bgcolor: '#eef2ff', color: '#4f46e5', px: 1, py: 0.5, borderRadius: 1 }}>
-                Ratio: {formatPercent(property.ratio * 100)}
-              </Typography>
-              {property.days_on_market !== null && (
-                <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '9pt' }}> {/* Reduced font size */}
-                  {property.days_on_market} days on market
-                </Typography>
-              )}
-            </Box>
-          </Box>
-          
-          {/* Main content - two column layout like web page */}
-          <Box sx={{ display: 'flex', gap: '0.3in', flex: 1, mb: 2 }}>
-            {/* Left Column: Image & Property Details */}
-            <Box sx={{ flex: '0 0 40%' }}>
-              {/* Property Image */}
-              {property.thumbnail && (
-                <Box sx={{ mb: 1.5 }}> {/* Reduced mb from 2 */}
-                  <img 
-                    src={property.thumbnail} 
-                    alt={property.address}
-                    style={{ 
-                      width: '100%', 
-                      maxHeight: '200px', 
-                      objectFit: 'cover',
-                      borderRadius: '8px',
-                      border: '1px solid #e0e0e0'
-                    }}
-                  />
-                </Box>
-              )}
-              
-              {/* Property Details Card */}
-              <Paper elevation={0} sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, mb: 2 }}>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '12pt', color: '#333' }}>
-                  Property Details
-                </Typography>
-                <Box sx={{ mb: 1 }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Beds/Baths</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{property.bedrooms} beds, {property.bathrooms} baths</Typography>
-                </Box>
-                <Box sx={{ mb: 1 }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Square Feet</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{property.sqft.toLocaleString()} sq. ft.</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Rent Estimate</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{formatCurrency(rentValue)}</Typography>
-                </Box>
-              </Paper>
-
-              {/* Assumptions Card */}
-              <Paper elevation={0} sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '12pt', color: '#333' }}>
-                  Key Assumptions
-                </Typography>
-                <Box sx={{ mb: 0.5 }}><Typography variant="body2">Interest Rate: {settings.interestRate}%</Typography></Box>
-                <Box sx={{ mb: 0.5 }}><Typography variant="body2">Loan Term: {settings.loanTerm} years</Typography></Box>
-                <Box sx={{ mb: 0.5 }}><Typography variant="body2">Down Payment: {settings.downPaymentPercent}% ({formatCurrency(downPaymentAmount)})</Typography></Box>
-                <Box sx={{ mb: 0.5 }}><Typography variant="body2">Tax/Insurance: {settings.taxInsurancePercent}%</Typography></Box>
-                <Box sx={{ mb: 0.5 }}><Typography variant="body2">Vacancy: {settings.vacancyPercent}%</Typography></Box>
-                <Box sx={{ mb: 0.5 }}><Typography variant="body2">CapEx: {settings.capexPercent}%</Typography></Box>
-                <Box><Typography variant="body2">Management: {settings.propertyManagementPercent}%</Typography></Box>
-              </Paper>
-            </Box>
-            
-            {/* Right Column: Cashflow & Investment */}
-            <Box sx={{ flex: 1 }}>
-              {/* Monthly Cashflow Card */}
-              <Paper elevation={0} sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, mb: 2 }}>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '12pt', color: '#333' }}>
-                  Monthly Cashflow
-                </Typography>
-                {/* Income */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Rental Income:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{formatCurrency(rentValue)}</Typography>
-                </Box>
-                <Divider sx={{ my: 0.5 }} />
-                {/* Expenses */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Mortgage:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.monthlyMortgage)}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Tax/Insurance:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.monthlyTaxInsurance)}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Vacancy:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.monthlyVacancy)}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>CapEx:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.monthlyCapex)}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Management:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.monthlyPropertyManagement)}</Typography>
-                </Box>
-                <Divider sx={{ my: 0.5 }} />
-                {/* Total Expenses */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" fontWeight="bold">Total Monthly Expenses:</Typography>
-                  <Typography variant="body2" fontWeight="bold">{formatCurrency(cashflow.totalMonthlyExpenses)}</Typography>
-                </Box>
-                {/* Net Cashflow */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#f3f4f6', p: 1, borderRadius: 1 }}>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Monthly Cashflow:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold', color: cashflow.monthlyCashflow >= 0 ? '#047857' : '#dc2626' }}>
-                    {formatCurrency(cashflow.monthlyCashflow)}
-                  </Typography>
-                </Box>
-              </Paper>
-              
-              {/* Investment Summary Card */}
-              <Paper elevation={0} sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, mb: 2 }}>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '12pt', color: '#333' }}>
-                  Investment Summary (Year 1)
-                </Typography>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Annual Cashflow:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold', color: cashflow.annualCashflow >= 0 ? '#047857' : '#dc2626' }}>
-                    {formatCurrency(cashflow.annualCashflow)}
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Cash-on-Cash Return:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold', color: cashflow.cashOnCashReturn >= 0 ? '#047857' : '#dc2626' }}>
-                    {formatPercent(cashflow.cashOnCashReturn)}
-                  </Typography>
-                </Box>
-                <Divider sx={{ my: 1 }} />
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Down Payment ({settings.downPaymentPercent}%):</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{formatCurrency(downPaymentAmount)}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Closing Costs (est. 3%):</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{formatCurrency(property.price * 0.03)}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#f3f4f6', p: 1, borderRadius: 1 }}>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Total Investment:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                    {formatCurrency(initialInvestment)}
-                  </Typography>
-                </Box>
-              </Paper>
-
-              {/* QR Code & Link - Removed Text URL */}
-              <Box sx={{ textAlign: 'center', mt: 'auto', pt: 2 }}>
-                  <QRCodeSVG value={shareableURL} size={80} />
-                  <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5, fontSize: '8pt' }}>
-                      Scan QR code for live analysis
-                  </Typography>
-                  {/* Removed Text URL Display:
-                  <Typography variant="caption" sx={{ wordBreak: 'break-all', color: '#4f46e5', display: 'block' }}>
-                      {shareableURL}
-                  </Typography> 
-                  */}
-              </Box>
-            </Box>
-          </Box>
-          
-          {/* Notes section - Moved to bottom of first page if short */}
-          {notes && notes.length < 400 && (
-            <Paper elevation={0} sx={{ p: 2, mt: 'auto', border: '1px solid #e0e0e0', borderRadius: 1 }}>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '11pt', color: '#333' }}>
-                Notes
-              </Typography>
-              <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
-                {notes}
-              </Typography>
-            </Paper>
-          )}
-          
-          {/* Page 1 Footer */}
-          <Box sx={{ 
-            marginTop: 'auto', // Pushes footer down
-            position: 'absolute',
-            bottom: '0.3in',
-            left: '0.5in',
-            right: '0.5in',
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            pt: 1, 
-            borderTop: '1px solid #e0e0e0' 
-          }}>
-            <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '8pt' }}>
-              Generated with CashflowCrunch • Page 1 of 2
-            </Typography>
-            <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '8pt' }}>
-              {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
-            </Typography>
-          </Box>
-        </Box>
-        
-        {/* Force Page Break Element - Keep this */}
-        <Box sx={{ pageBreakBefore: 'always' }} />
-
-        {/* Page 2 - Charts and Long-term Analysis */}
-        <Box 
-          className="pdfPageContainer" // Add class for potential styling
-          sx={{ 
-            // Removed height and minHeight
-            padding: '0.5in',
-            paddingBottom: '0.7in', // Footer space
-            position: 'relative',
-            // pageBreakBefore: 'always', // Moved to the element above
-            display: 'flex',
-            flexDirection: 'column'
-          }}
-        >
-          {/* Page 2 Header */}
-          <Box sx={{ mb: 2, borderBottom: '1px solid #e0e0e0', pb: 1 }}>
-            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
-              Long-Term Investment Analysis
-            </Typography>
-            <Typography variant="body1" sx={{ color: '#6b7280' }}>
-              {property.address}
-            </Typography>
-          </Box>
-          
-          {/* Notes section on page 2 if they're long */}
-          {notes && notes.length >= 400 && (
-            <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '11pt', color: '#333' }}>
-                Notes
-              </Typography>
-              <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
-                {notes}
-              </Typography>
-            </Paper>
-          )}
-          
-          {/* Chart Visualization */}
-          <Box 
-            className="pdfChartContainer"
-            sx={{ 
-              width: '100%', 
-              height: '300px',
-              mb: 2,
-              pageBreakInside: 'avoid', // Avoid breaking inside chart
-              pageBreakBefore: 'always' // Force break before this element
-            }}
-          >
-            <SimpleChart data={chartData} height={300}/>
-          </Box>
-          
-          {/* Long-term Analysis Table */}
-          <Paper 
-            elevation={0} 
-            sx={{ 
-              p: 0, 
-              border: '1px solid #e0e0e0', 
-              borderRadius: 1, 
-              mb: 2, 
-              maxHeight: '250px', // Keep max height for layout
-              overflowY: 'auto',
-              pageBreakInside: 'avoid' // Avoid breaking inside table
-            }}
-          >
-            <TableContainer sx={{ maxHeight: '100%' }}>
-              <Table size="small" stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{fontSize: '9pt', py: 0.5}}>Year</TableCell>
-                    <TableCell sx={{fontSize: '9pt', py: 0.5}}>Prop. Value</TableCell>
-                    <TableCell sx={{fontSize: '9pt', py: 0.5}}>Equity</TableCell>
-                    <TableCell sx={{fontSize: '9pt', py: 0.5}}>Ann. Rent</TableCell>
-                    <TableCell sx={{fontSize: '9pt', py: 0.5}}>Ann. Cashflow</TableCell>
-                    <TableCell sx={{fontSize: '9pt', py: 0.5}}>ROI (Cash)</TableCell>
-                    <TableCell sx={{fontSize: '9pt', py: 0.5}}>ROI (Total)</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {generateLongTermCashflow()
-                    .filter(data => [1, 5, 10, 15, 20, 25, 30].includes(data.year))
-                    .map((data) => (
-                    <TableRow key={data.year} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
-                      <TableCell sx={{fontSize: '9pt', py: 0.5}}>{data.year}</TableCell>
-                      <TableCell sx={{fontSize: '9pt', py: 0.5}}>{formatCurrency(data.propertyValue)}</TableCell>
-                      <TableCell sx={{fontSize: '9pt', py: 0.5}}>{formatCurrency(data.equity)}</TableCell>
-                      <TableCell sx={{fontSize: '9pt', py: 0.5}}>{formatCurrency(data.annualRent)}</TableCell>
-                      <TableCell 
-                        sx={{ fontSize: '9pt', py: 0.5, color: data.yearlyCashflow >= 0 ? '#047857' : '#dc2626' }}
-                      >
-                        {formatCurrency(data.yearlyCashflow)}
-                      </TableCell>
-                      <TableCell 
-                        sx={{ fontSize: '9pt', py: 0.5, color: data.roi >= 0 ? '#047857' : '#dc2626' }}
-                      >
-                        {formatPercent(data.roi)}
-                      </TableCell>
-                       <TableCell 
-                        sx={{ fontSize: '9pt', py: 0.5, color: data.roiWithEquity >= 0 ? '#047857' : '#dc2626' }}
-                      >
-                        {formatPercent(data.roiWithEquity)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
-
-          {/* IRR Summary Panel - Added Here */}
-          <Paper elevation={0} sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '12pt', color: '#333' }}>
-              Internal Rate of Return (IRR) by Holding Period
-            </Typography>
-            <Typography variant="body2" sx={{ color: '#6b7280', mb: 1, fontSize: '9pt' }}>
-              Annualized return considering cash flows and equity growth upon sale.
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '0.2in', justifyContent: 'space-between' }}>
-              {[1, 5, 10, 15, 30].map(holdingPeriod => {
-                const relevantCashflows = longTermData
-                  .filter(data => data.year <= holdingPeriod)
-                  .map(data => data.yearlyCashflow);
-                const finalYearData = longTermData.find(data => data.year === holdingPeriod);
-                const finalEquityValue = finalYearData ? finalYearData.equity : 0;
-                const irr = calculateIRR(initialInvestment, relevantCashflows, finalEquityValue);
-                const color = irr < 0 ? '#ef4444' : irr < 8 ? '#f97316' : irr < 15 ? '#10b981' : '#4f46e5';
-                
-                return (
-                  <Box 
-                    key={holdingPeriod} 
-                    sx={{ 
-                      flex: '1', 
-                      minWidth: '80px', // Adjusted minWidth
-                      textAlign: 'center',
-                      p: 1,
-                      bgcolor: '#fafafa',
-                      borderRadius: 1,
-                      border: '1px solid #eee'
-                    }}
-                  >
-                    <Typography variant="body2" sx={{ color: '#555', fontWeight: 'bold', fontSize: '9pt' }}>
-                      {holdingPeriod} Yr
-                    </Typography>
-                    <Typography 
-                      variant="h6" 
-                      sx={{ fontWeight: 'bold', color, fontSize: '11pt' }}
-                    >
-                      {irr.toFixed(1)}%
-                    </Typography>
-                  </Box>
-                );
-              })}
-            </Box>
-          </Paper>
-          
-          {/* Page 2 Footer */}
-          <Box sx={{ 
-            marginTop: 'auto', // Pushes footer down
-            position: 'absolute',
-            bottom: '0.3in',
-            left: '0.5in',
-            right: '0.5in',
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            pt: 1, 
-            borderTop: '1px solid #e0e0e0' 
-          }}>
-            <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '8pt' }}>
-              Generated with CashflowCrunch • Page 2 of 2
-            </Typography>
-            <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '8pt' }}>
-              {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
-            </Typography>
-          </Box>
-        </Box>
-      </Box>
-    );
-  });
-  
-  // Display loading state
-  if (loading) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <Typography variant="h5">Loading property details...</Typography>
-        </Box>
-      </Container>
-    );
-  }
-  
-  // Display error state
-  if (error || !property || !cashflow) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <Typography variant="h5" color="error" gutterBottom>
-            {error || 'Property data not available'}
-          </Typography>
-          <Button 
-            variant="contained" 
-            startIcon={<ArrowBackIcon />}
-            onClick={handleBackToSearch}
-            sx={{ mt: 2 }}
-          >
-            Back to Search
-          </Button>
-        </Box>
-      </Container>
-    );
-  }
-  
   // Calculate values for display
   const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
   
@@ -2981,7 +2751,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
             p: 2, 
             overflow: 'auto'
           }}>
-            <PropertyPDFReport ref={targetRef} />
+            <PropertyPDFReport ref={targetRef} property={property} settings={settings} cashflow={cashflow} longTermData={longTermCashflowData} initialInvestment={downPaymentAmount + (property.price * 0.03)} formatCurrency={formatCurrency} formatPercent={formatPercent} notes={notes} shareableUrl={generateShareableURL()} />
           </Box>
         </DialogContent>
         <DialogActions>

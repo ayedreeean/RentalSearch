@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { HashRouter as Router, Route, Routes, useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { HashRouter, Routes, Route, Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
   Typography, Container, TextField, Button, Box, CircularProgress, 
   Paper, InputAdornment, IconButton, Alert,
-  Slider, Card, CardContent, Accordion, AccordionSummary, AccordionDetails, Skeleton, Divider, Fab, Modal, Select, MenuItem, FormControl, InputLabel, Tooltip
+  Slider, Card, CardContent, Accordion, AccordionSummary, AccordionDetails, Skeleton, Divider, Fab, Modal, Select, MenuItem, FormControl, InputLabel, Tooltip, useTheme, useMediaQuery
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import HomeIcon from '@mui/icons-material/Home';
@@ -1260,7 +1260,7 @@ function App() {
       });
     }
     return sortableItems;
-  }, [displayedProperties, sortConfig, calculateCashflow, interestRate, loanTerm, downPaymentPercent, taxInsurancePercent, vacancyPercent, capexPercent, propertyManagementPercent]);
+  }, [displayedProperties, sortConfig, calculateCashflow]);
 
   // --- Register for property updates when component mounts ---
   useEffect(() => {
@@ -1372,7 +1372,7 @@ function App() {
                       {/* Replace HomeWorkIcon with img tag */}
                       <img src="/favicon.png" alt="CashflowCrunch Logo" style={{ height: '40px', width: '40px', marginRight: '8px', verticalAlign: 'middle' }} /> {/* Increased size */} 
                       CashflowCrunch
-                    </Typography>
+      </Typography>
                     <Typography className="app-subtitle" variant="subtitle1" component="p">
                       Find properties with investment potential
                     </Typography>

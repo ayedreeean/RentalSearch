@@ -27,14 +27,6 @@ const RAPIDAPI_KEY = process.env.REACT_APP_RAPIDAPI_KEY || '8d9a4bdab8mshf7bb6f8
 // }
 
 class ApiCache {
-  constructor() {
-    // Remove loading from storage
-    // this.loadFromStorage();
-    
-    // Remove interval timer
-    // setInterval(() => this.cleanExpired(), 5 * 60 * 1000);
-  }
-
   set(key: string, data: any /* Remove isRentEstimate */): void {
     // --- Disable ALL caching --- 
     return; // Do nothing
