@@ -28,11 +28,12 @@ const SearchBar: React.FC<SearchBarProps> = ({
       <Button 
         variant="contained" 
         color="primary" 
+        type="submit"
         onClick={handleSearch}
         disabled={loading}
-        fullWidth
+        sx={{ height: '56px', borderRadius: '28px', ml: 1 }}
       >
-        {loading ? <CircularProgress size={24} color="inherit" /> : 'Search Properties'}
+        {loading ? <CircularProgress size={24} /> : 'Crunch Properties'}
       </Button>
     </Box>
   );

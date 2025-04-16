@@ -231,13 +231,18 @@ const BookmarksPage: React.FC = () => {
             <Typography variant="body1" paragraph>
               You haven't bookmarked any properties yet. Browse properties and use the bookmark button to save them here.
             </Typography>
-            <Button 
-              variant="contained" 
-              color="primary" 
+            <Button
+              variant="contained"
+              color="primary"
               onClick={handleBackToHome}
-              sx={{ mt: 2 }}
+              sx={{
+                marginTop: 2,
+                width: '100%',
+                height: '56px',
+                borderRadius: '28px',
+              }}
             >
-              Search Properties
+              Crunch Properties
             </Button>
           </Paper>
         ) : (

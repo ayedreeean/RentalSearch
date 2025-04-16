@@ -1611,7 +1611,7 @@ function App() {
           variant="contained" 
           className="search-button"
         >
-                    Search Properties
+                    Crunch Properties
         </Button>
       </Box>
               </div>
@@ -1984,7 +1984,7 @@ function App() {
                           <div className="faq-section">
                             <div className="faq-question">How do I search for properties?</div>
                             <div className="faq-answer">
-                              Enter a location in the search bar at the top of the page. You can use a city name, state, zip code, or a specific property address (e.g., "Austin, TX", "78701", or "123 Main St, Austin, TX"). For specific properties, entering the full address will give you the most accurate results. Then click the "Search Properties" button to see results.
+                              Enter a location in the search bar at the top of the page. You can use a city name, state, zip code, or a specific property address (e.g., "Austin, TX", "78701", or "123 Main St, Austin, TX"). For specific properties, entering the full address will give you the most accurate results. Then click the "Crunch Properties" button to see results.
                             </div>
                           </div>
                           

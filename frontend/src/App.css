@@ -438,10 +438,10 @@ a:hover {
 }
 
 /* ------------ Help/FAQ Styles ------------ */
-.help-button {
-  background-color: white !important;
-  color: #4f46e5 !important;
-  border: 1px solid rgba(79, 70, 229, 0.5) !important;
+.help-button, .bookmarks-button {
+  background-color: transparent !important;
+  color: white !important;
+  border: 1px solid white !important;
   font-weight: 500 !important;
   padding: 0.4rem 1rem !important;
   display: flex !important;
@@ -449,9 +449,9 @@ a:hover {
   gap: 0.35rem !important;
 }
 
-.help-button:hover {
-  background-color: rgba(79, 70, 229, 0.04) !important;
-  border-color: #4f46e5 !important;
+.help-button:hover, .bookmarks-button:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: white !important;
 }
 
 .faq-modal {
@@ -543,6 +543,23 @@ a:hover {
   
   .search-form {
     flex-direction: column;
+    width: 100%;
+  }
+  
+  .search-form > div {
+    width: 100%;
+    min-width: 100% !important;
+  }
+  
+  .price-filter-container {
+    display: flex;
+    width: 100%;
+    gap: 1rem;
+  }
+  
+  .price-filter-container > div {
+    width: 50%;
+    flex: 1;
   }
   
   .search-button {
