@@ -1,53 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
-import { 
-  Container, 
-  Box, 
-  Typography, 
-  Button, 
-  Paper, 
-  AppBar, 
-  Toolbar, 
-  IconButton, 
-  CssBaseline, 
-  Slider, 
-  Grid, 
-  Alert, 
-  Tooltip, 
-  Divider, 
-  Tabs, 
-  Tab, 
-  useMediaQuery, 
-  useTheme, 
-  Card, 
-  CardContent,
-  TextField,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  CircularProgress
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams, useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
+import {
+  Typography, Container, Box, CircularProgress, AppBar, Toolbar, 
+  Button, Paper, Divider, IconButton, TextField, Alert, Tooltip, 
+  CssBaseline, Grid, InputAdornment, Slider, Link as MuiLink,
+  Tabs, Tab, useMediaQuery, useTheme, Card, CardContent, Dialog, DialogContent, DialogTitle, DialogActions,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { 
-  ArrowBack as ArrowBackIcon, 
-  Share as ShareIcon, 
-  Home as HomeIcon, 
-  BarChart as BarChartIcon, 
-  Info as InfoIcon, 
-  Tune as TuneIcon, 
-  Email as EmailIcon, 
-  Bookmark as BookmarkIcon, 
-  BookmarkBorder as BookmarkBorderIcon 
+import {
+  BarChart as BarChartIcon, Home as HomeIcon, ArrowBack as ArrowBackIcon,
+  ContentCopy as ContentCopyIcon, Share as ShareIcon, Link as LinkIcon,
+  Info as InfoIcon, Edit as EditIcon, 
+  Email as EmailIcon, ExpandMore as ExpandMoreIcon, Bookmark as BookmarkIcon, BookmarkBorder as BookmarkBorderIcon,
+  PictureAsPdf as PdfIcon
 } from '@mui/icons-material';
-import HomeWorkIcon from '@mui/icons-material/HomeWork';
-import EditIcon from '@mui/icons-material/Edit';
+import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Legend, Line, Bar, ComposedChart, ReferenceLine } from 'recharts';
 import { Property, Cashflow, CashflowSettings } from '../types';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { usePDF } from 'react-to-pdf';
+import { QRCodeSVG } from 'qrcode.react';
+import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import Drawer from '@mui/material/Drawer';
 
 interface PropertyDetailsPageProps {
@@ -717,40 +691,31 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   const location = useLocation();
   const navigate = useNavigate();
   
-  // Local state for property data
-  const [property, setProperty] = useState<Property | undefined>(undefined);
+  // Define state
+  const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Local state for settings (copied from props, but editable)
-  const [settings, setSettings] = useState<CashflowSettings>(defaultSettings);
-  
-  // Custom rent estimate state
   const [customRentEstimate, setCustomRentEstimate] = useState<number | null>(null);
   const [displayRent, setDisplayRent] = useState<string>('');
   const [isRentEditing, setIsRentEditing] = useState(false);
-  // Add a flag to track if user has manually edited the rent
   const [userEditedRent, setUserEditedRent] = useState(false);
-  
-  // Share state
-  const [copySuccess, setCopySuccess] = useState('');
-  
-  // Change isAssumptionsPanelOpen to use a drawer instead of a floating panel
-  const [isAssumptionsDrawerOpen, setIsAssumptionsDrawerOpen] = useState(false);
-  
-  // Add state for showing text preview
+  const [settings, setSettings] = useState<CashflowSettings>(defaultSettings);
+  const [rentAppreciationRate, setRentAppreciationRate] = useState<number>(3);  
+  const [propertyValueIncreaseRate, setPropertyValueIncreaseRate] = useState<number>(3);
+  const [yearsToProject, setYearsToProject] = useState<number>(30); // Default 30 years
   const [showTextPreview, setShowTextPreview] = useState(false);
-  
-  // Add state for long-term analysis
-  const [rentAppreciationRate, setRentAppreciationRate] = useState<number>(3); // Default 3%
-  const [propertyValueIncreaseRate, setPropertyValueIncreaseRate] = useState<number>(3); // Default 3%
-  const [yearsToProject, /* setYearsToProject removed */ ] = useState<number>(30); // Default 30 years
-  
-  // Add state for bookmarking
+  const [copySuccess, setCopySuccess] = useState('');
+  const [notes, setNotes] = useState('');
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [isAssumptionsDrawerOpen, setIsAssumptionsDrawerOpen] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [showPdfModal, setShowPdfModal] = useState(false);
   
-  // Add state for notes
-  const [notes, setNotes] = useState<string>('');
+  // PDF generation
+  const pdfRef = useRef<HTMLDivElement>(null);
+  const { toPDF, targetRef } = usePDF({
+    filename: property ? `${property.address.replace(/\s+/g, '_')}_analysis.pdf` : 'property_analysis.pdf',
+  });
   
   // Scroll to top when component mounts
   useEffect(() => {
@@ -1754,6 +1719,220 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
     }
   }, [property]);
   
+  // Handle PDF generation
+  const handleGeneratePDF = useCallback(() => {
+    setShowPdfModal(true);
+  }, []);
+
+  const handleDownloadPDF = useCallback(() => {
+    toPDF();
+    setCopySuccess('PDF downloaded successfully!');
+    setTimeout(() => setCopySuccess(''), 3000);
+  }, [toPDF]);
+
+  // Close PDF modal
+  const handleClosePdfModal = useCallback(() => {
+    setShowPdfModal(false);
+  }, []);
+
+  // PDF Report template component
+  const PropertyPDFReport = React.forwardRef<HTMLDivElement>((_, ref) => {
+    if (!property || !cashflow) return null;
+    
+    const rentValue = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
+    const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
+    const shareableURL = generateShareableURL();
+    
+    return (
+      <Box 
+        ref={ref} 
+        sx={{ 
+          width: '8.5in',
+          minHeight: '11in',
+          padding: '0.5in',
+          backgroundColor: 'white',
+          color: 'black',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '10pt'
+        }}
+      >
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#4f46e5', mb: 1 }}>
+              Property Investment Analysis
+            </Typography>
+            <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
+              {property.address}
+            </Typography>
+          </Box>
+          <Box sx={{ textAlign: 'right' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <Typography variant="body2" sx={{ color: '#6b7280', mb: 1 }}>
+                Scan for online analysis:
+              </Typography>
+              <QRCodeSVG value={shareableURL} size={100} />
+            </Box>
+          </Box>
+        </Box>
+        
+        <Box sx={{ display: 'flex', mb: 3 }}>
+          <Box sx={{ flex: 1, mr: 2 }}>
+            <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', borderBottom: '1px solid #e5e7eb', pb: 1, color: '#4f46e5' }}>
+                Property Details
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap' }}>
+                <Box sx={{ flex: '50%', mb: 2 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Price</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{formatCurrency(property.price)}</Typography>
+                </Box>
+                <Box sx={{ flex: '50%', mb: 2 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Rent Estimate</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{formatCurrency(rentValue)}</Typography>
+                </Box>
+                <Box sx={{ flex: '50%', mb: 2 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Bedrooms/Bathrooms</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{property.bedrooms} beds, {property.bathrooms} baths</Typography>
+                </Box>
+                <Box sx={{ flex: '50%', mb: 2 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Square Feet</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{property.sqft.toLocaleString()}</Typography>
+                </Box>
+                <Box sx={{ flex: '50%', mb: 2 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Days on Market</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{property.days_on_market !== null ? property.days_on_market : 'N/A'}</Typography>
+                </Box>
+                <Box sx={{ flex: '50%', mb: 2 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Rent-to-Price Ratio</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{formatPercent(property.ratio * 100)}</Typography>
+                </Box>
+              </Box>
+            </Paper>
+          </Box>
+          
+          <Box sx={{ flex: 1, ml: 2 }}>
+            <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', borderBottom: '1px solid #e5e7eb', pb: 1, color: '#4f46e5' }}>
+                Monthly Cashflow
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Rental Income:</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{formatCurrency(rentValue)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Mortgage Payment:</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.monthlyMortgage)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Property Tax & Insurance:</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.monthlyTaxInsurance)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Vacancy (${settings.vacancyPercent}%):</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.monthlyVacancy)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>CapEx (${settings.capexPercent}%):</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.monthlyCapex)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Property Management (${settings.propertyManagementPercent}%):</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.monthlyPropertyManagement)}</Typography>
+                </Box>
+                <Divider sx={{ my: 1 }} />
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Total Monthly Expenses:</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.totalMonthlyExpenses)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, bgcolor: '#f3f4f6', p: 1, borderRadius: 1 }}>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Monthly Cashflow:</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold', color: cashflow.monthlyCashflow >= 0 ? '#047857' : '#dc2626' }}>
+                    {formatCurrency(cashflow.monthlyCashflow)}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Annual Cashflow:</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold', color: cashflow.annualCashflow >= 0 ? '#047857' : '#dc2626' }}>
+                    {formatCurrency(cashflow.annualCashflow)}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Cash-on-Cash Return:</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold', color: cashflow.cashOnCashReturn >= 0 ? '#047857' : '#dc2626' }}>
+                    {formatPercent(cashflow.cashOnCashReturn)}
+                  </Typography>
+                </Box>
+              </Box>
+            </Paper>
+          </Box>
+        </Box>
+        
+        <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', borderBottom: '1px solid #e5e7eb', pb: 1, color: '#4f46e5' }}>
+            Long-Term Analysis (30-Year Projection)
+          </Typography>
+          <TableContainer sx={{ maxHeight: '250px' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Year</TableCell>
+                  <TableCell>Property Value</TableCell>
+                  <TableCell>Equity</TableCell>
+                  <TableCell>Annual Rent</TableCell>
+                  <TableCell>Annual Cashflow</TableCell>
+                  <TableCell>ROI</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {generateLongTermCashflow()
+                  .filter(data => [1, 5, 10, 15, 20, 25, 30].includes(data.year))
+                  .map((data) => (
+                  <TableRow key={data.year}>
+                    <TableCell>{data.year}</TableCell>
+                    <TableCell>{formatCurrency(data.propertyValue)}</TableCell>
+                    <TableCell>{formatCurrency(data.equity)}</TableCell>
+                    <TableCell>{formatCurrency(data.annualRent)}</TableCell>
+                    <TableCell 
+                      sx={{ color: data.yearlyCashflow >= 0 ? '#047857' : '#dc2626' }}
+                    >
+                      {formatCurrency(data.yearlyCashflow)}
+                    </TableCell>
+                    <TableCell 
+                      sx={{ color: data.roi >= 0 ? '#047857' : '#dc2626' }}
+                    >
+                      {formatPercent(data.roi)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+        
+        {notes && (
+          <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', borderBottom: '1px solid #e5e7eb', pb: 1, color: '#4f46e5' }}>
+              Notes
+            </Typography>
+            <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
+              {notes}
+            </Typography>
+          </Paper>
+        )}
+        
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, pt: 2, borderTop: '1px solid #e5e7eb' }}>
+          <Typography variant="body2" sx={{ color: '#6b7280' }}>
+            Generated with CashflowCrunch • https://cashflowcrunch.com
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#6b7280' }}>
+            {new Date().toLocaleDateString()}
+          </Typography>
+        </Box>
+      </Box>
+    );
+  });
+  
   // Display loading state
   if (loading) {
     return (
@@ -1819,12 +1998,12 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
             <ArrowBackIcon />
           </IconButton>
           {/* Wrap Icon and Title in a Link */}
-          <Link to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
+          <RouterLink to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
             <HomeWorkIcon sx={{ mr: 1, color: 'white' }} />
             <Typography variant="h6" color="inherit" noWrap >
               CashflowCrunch
             </Typography>
-          </Link>
+          </RouterLink>
           {/* Use flexGrow on a Box after the Link to push buttons to the right */}
           <Box sx={{ flexGrow: 1 }} /> 
           <Box sx={{ 
@@ -1885,7 +2064,8 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
                 minWidth: { xs: '40px', sm: 'auto' },
-                px: { xs: 1, sm: 2 }
+                px: { xs: 1, sm: 2 },
+                mr: 1
               }}
             >
               <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
@@ -1893,6 +2073,28 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
               </Box>
               <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
                 {showTextPreview ? 'Hide' : 'Text'}
+              </Box>
+            </Button>
+
+            <Button 
+              variant="outlined" 
+              startIcon={<PdfIcon />}
+              onClick={handleGeneratePDF}
+              size="small"
+              sx={{ 
+                color: 'white', 
+                borderColor: 'white', 
+                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
+                whiteSpace: 'nowrap',
+                minWidth: { xs: '40px', sm: 'auto' },
+                px: { xs: 1, sm: 2 }
+              }}
+            >
+              <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+                PDF Report
+              </Box>
+              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                PDF
               </Box>
             </Button>
           </Box>
@@ -2157,7 +2359,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 transition: 'right 225ms cubic-bezier(0, 0, 0.2, 1) 0ms'
               }}
             >
-              <TuneIcon />
+              <ExpandMoreIcon />
               <span style={{ 
                 writingMode: 'vertical-rl', 
                 textOrientation: 'mixed', 
@@ -2561,6 +2763,52 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
           </Box>
         </Box>
       </Container>
+
+      {/* PDF Preview Modal */}
+      <Dialog
+        open={showPdfModal}
+        onClose={handleClosePdfModal}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            maxHeight: '90vh', 
+            height: 'auto',
+            width: '100%',
+            maxWidth: '960px',
+            m: 2
+          }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6">PDF Report Preview</Typography>
+          <IconButton onClick={handleClosePdfModal} edge="end">
+            <ExpandMoreIcon sx={{ transform: 'rotate(180deg)' }} />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0, overflow: 'auto' }}>
+          <Box sx={{ 
+            bgcolor: '#f3f4f6', 
+            display: 'flex', 
+            justifyContent: 'center', 
+            p: 2, 
+            overflow: 'auto'
+          }}>
+            <PropertyPDFReport ref={targetRef} />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClosePdfModal}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            color="primary"
+            startIcon={<PdfIcon />}
+            onClick={handleDownloadPDF}
+          >
+            Download PDF
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };
