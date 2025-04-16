@@ -1788,8 +1788,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
         <Box 
           className="pdfPageContainer" // Add class for potential styling
           sx={{ 
-            // height: '11in', // Removed fixed height
-            minHeight: '10in', // Use minHeight instead to allow expansion
+            // Removed height and minHeight
             padding: '0.5in',
             paddingBottom: '0.7in', // Ensure footer space
             position: 'relative',
@@ -2010,8 +2009,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
         <Box 
           className="pdfPageContainer" // Add class for potential styling
           sx={{ 
-            // height: '11in', // Removed fixed height
-            minHeight: '10in', // Use minHeight instead
+            // Removed height and minHeight
             padding: '0.5in',
             paddingBottom: '0.7in', // Footer space
             position: 'relative',
