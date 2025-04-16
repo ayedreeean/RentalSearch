@@ -1369,9 +1369,10 @@ function App() {
                       }}
                       onClick={() => window.location.href = '#/'}
                     >
-                      <HomeWorkIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1.85rem' }} />
+                      {/* Replace HomeWorkIcon with img tag */}
+                      <img src="/favicon.png" alt="CashflowCrunch Logo" style={{ height: '40px', width: '40px', marginRight: '8px', verticalAlign: 'middle' }} /> {/* Increased size */} 
                       CashflowCrunch
-      </Typography>
+                    </Typography>
                     <Typography className="app-subtitle" variant="subtitle1" component="p">
                       Find properties with investment potential
                     </Typography>
@@ -1583,13 +1584,15 @@ function App() {
                             position: 'absolute',
                             width: '140%',
                             height: '140%',
-                            opacity: 0.15,
+                            opacity: 0.08, // Reduced opacity from 0.15
                             background: 'repeating-linear-gradient(45deg, #ffffff, #ffffff 10px, transparent 10px, transparent 20px)'
                           }}
                         />
                         
                         <Box sx={{ position: 'relative', zIndex: 1, p: 4, color: 'white', textAlign: 'center' }}>
-                          <HomeWorkIcon sx={{ fontSize: '4rem', mb: 2 }} />
+                          {/* Replace HomeWorkIcon and text with img tag */}
+                          <img src="/favicon.png" alt="CashflowCrunch Logo" style={{ height: '200px', width: '200px', marginBottom: '16px' }} /> {/* Increased size to 200px */}
+                          {/* Uncomment the text below */}
                           <Typography variant="h5" fontWeight="bold" gutterBottom>
                             Start Your Search
                           </Typography>
