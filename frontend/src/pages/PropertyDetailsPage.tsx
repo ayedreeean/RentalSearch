@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   Container, 
   Box, 
@@ -816,7 +816,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
           setNotes(foundProperty.notes);
       }
       // AUTO-EXPAND assumptions drawer if loaded from search
-      setIsAssumptionsDrawerOpen(true);
+      // setIsAssumptionsDrawerOpen(true); <-- Remove this
       
       return; // Exit early if loaded from search results
     }
@@ -1723,11 +1723,15 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
           >
             <ArrowBackIcon />
           </IconButton>
-          <HomeWorkIcon sx={{ mr: 1, color: 'white' }} />
-          <Typography variant="h6" color="inherit" noWrap sx={{ flexGrow: 1 }}>
-            RentalSearch
-          </Typography>
-          {/* Use a container for buttons with responsive layout */}
+          {/* Wrap Icon and Title in a Link */}
+          <Link to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
+            <HomeWorkIcon sx={{ mr: 1, color: 'white' }} />
+            <Typography variant="h6" color="inherit" noWrap >
+              RentalSearch
+            </Typography>
+          </Link>
+          {/* Use flexGrow on a Box after the Link to push buttons to the right */}
+          <Box sx={{ flexGrow: 1 }} /> 
           <Box sx={{ 
             display: 'flex', 
             gap: { xs: 1, sm: 2 }, 
@@ -2216,7 +2220,7 @@ Generated with RentalSearch - https://ayedreeean.github.io/RentalSearch/
                 multiline
                 rows={4}
                 variant="outlined"
-                placeholder="Add any notes about this property..."
+                placeholder="Add notes about this property... (saved with bookmarks & shared URLs)"
                 value={notes}
                 onChange={handleNotesChange}
                 sx={{
