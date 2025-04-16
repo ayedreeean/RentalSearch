@@ -1,13 +1,13 @@
 {
   "files": {
-    "main.css": "/RentalSearch/static/css/main.364fe35d.css",
-    "main.js": "/RentalSearch/static/js/main.d831794b.js",
-    "index.html": "/RentalSearch/index.html",
-    "main.364fe35d.css.map": "/RentalSearch/static/css/main.364fe35d.css.map",
-    "main.d831794b.js.map": "/RentalSearch/static/js/main.d831794b.js.map"
+    "main.css": "/CashflowCrunch/static/css/main.364fe35d.css",
+    "main.js": "/CashflowCrunch/static/js/main.adf2c5a6.js",
+    "index.html": "/CashflowCrunch/index.html",
+    "main.364fe35d.css.map": "/CashflowCrunch/static/css/main.364fe35d.css.map",
+    "main.adf2c5a6.js.map": "/CashflowCrunch/static/js/main.adf2c5a6.js.map"
   },
   "entrypoints": [
     "static/css/main.364fe35d.css",
-    "static/js/main.d831794b.js"
+    "static/js/main.adf2c5a6.js"
   ]
 }
