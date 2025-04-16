@@ -289,9 +289,11 @@ export const registerForPropertyUpdates = (callback: (property: Property) => voi
 // Function to get total properties count for pagination
 export const getTotalPropertiesCount = async (
   location: string,
-  minPrice?: number | null,
-  maxPrice?: number | null,
-  propertyType?: string
+  minPrice: number | null,
+  maxPrice: number | null,
+  minBeds: number | null,
+  minBaths: number | null,
+  propertyType: string | null
 ): Promise<number> => {
   try {
     // --- Prepare API Params ---
@@ -308,6 +310,15 @@ export const getTotalPropertiesCount = async (
     if (typeof maxPrice === 'number' && maxPrice > 0) {
       apiParams.maxPrice = maxPrice;
       console.log('[getTotalPropertiesCount] Adding maxPrice param:', apiParams.maxPrice);
+    }
+    // --- Add Bed/Bath Params ---
+    if (typeof minBeds === 'number' && minBeds >= 0) {
+      apiParams.bedsMin = minBeds;
+      console.log('[getTotalPropertiesCount] Adding bedsMin param:', apiParams.bedsMin);
+    }
+    if (typeof minBaths === 'number' && minBaths >= 0) {
+      apiParams.bathsMin = minBaths;
+      console.log('[getTotalPropertiesCount] Adding bathsMin param:', apiParams.bathsMin);
     }
 
     // Search for properties using the Zillow API
@@ -342,7 +353,9 @@ export const searchProperties = async (
   page: number = 0,
   minPrice?: number | null,
   maxPrice?: number | null,
-  propertyType?: string,
+  minBeds?: number | null,
+  minBaths?: number | null,
+  propertyType?: string | null,
   minRatio?: number | null
 ): Promise<{
   allProperties: Property[],
@@ -365,6 +378,15 @@ export const searchProperties = async (
     if (typeof maxPrice === 'number' && maxPrice > 0) {
       apiParams.maxPrice = maxPrice;
       console.log('[searchProperties] Adding maxPrice param:', apiParams.maxPrice);
+    }
+    // --- Add Bed/Bath Params ---
+    if (typeof minBeds === 'number' && minBeds >= 0) {
+      apiParams.bedsMin = minBeds;
+      console.log('[searchProperties] Adding bedsMin param:', apiParams.bedsMin);
+    }
+    if (typeof minBaths === 'number' && minBaths >= 0) {
+      apiParams.bathsMin = minBaths;
+      console.log('[searchProperties] Adding bathsMin param:', apiParams.bathsMin);
     }
 
     // Search for properties using the Zillow API

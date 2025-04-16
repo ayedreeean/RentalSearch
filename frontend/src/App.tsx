@@ -940,12 +940,17 @@ function App() {
     setDisplayedProperties([]); // Clear previous results immediately
     setLoading(true);
     setInitialLoading(true); // Indicate initial fetch is starting
-    setIsProcessingBackground(false); // Reset background processing state
+    setIsProcessingBackground(false);
 
     try {
       // --- Prepare Filters & Prices (Relaxed Validation) ---
       let minP: number | null = null;
       let maxP: number | null = null;
+      // Prepare Bed/Bath Filters
+      let minBd: number | null = null;
+      let maxBd: number | null = null;
+      let minBa: number | null = null;
+      let maxBa: number | null = null;
 
       // Parse Min Price
       const parsedMin = typeof minPrice === 'number' ? minPrice : parseFloat(minPrice);
@@ -965,7 +970,37 @@ function App() {
           console.log('No valid Max price filter applied.');
       }
       
-      // --- REMOVED max >= min check --- 
+      // Parse Bed Filters - Only Min needed
+      const parsedMinBeds = parseInt(minBeds, 10);
+      if (!isNaN(parsedMinBeds) && parsedMinBeds >= 0) {
+        minBd = parsedMinBeds;
+        console.log('Applying Min Beds filter:', minBd);
+      }
+      // Remove Max Beds logic
+      /*
+      const parsedMaxBeds = typeof maxBeds === 'number' ? maxBeds : parseInt(String(maxBeds), 10);
+      if (!isNaN(parsedMaxBeds) && parsedMaxBeds >= (minBd ?? 0)) { // Ensure Max >= Min if Min is set
+        maxBd = parsedMaxBeds;
+        console.log('Applying Max Beds filter:', maxBd);
+      }
+      */
+
+      // Parse Bath Filters - Only Min needed (allow float)
+      const parsedMinBaths = parseFloat(minBaths);
+      if (!isNaN(parsedMinBaths) && parsedMinBaths >= 0) {
+        minBa = parsedMinBaths;
+        console.log('Applying Min Baths filter:', minBa);
+      }
+      // Remove Max Baths logic
+      /*
+      const parsedMaxBaths = typeof maxBaths === 'number' ? maxBaths : parseFloat(String(maxBaths));
+      if (!isNaN(parsedMaxBaths) && parsedMaxBaths >= (minBa ?? 0)) { // Ensure Max >= Min if Min is set
+        maxBa = parsedMaxBaths;
+        console.log('Applying Max Baths filter:', maxBa);
+      }
+      */
+
+      // --- REMOVED max >= min check for price --- 
       // Note: If API doesn't support min > max, it might return no results or error.
       
       // Define other filters if needed (currently none active)
@@ -974,8 +1009,8 @@ function App() {
 
       // Get total properties first to determine page count
       console.log('Fetching total property count...');
-      // Pass prices directly
-      const totalCount = await getTotalPropertiesCount(location, minP, maxP, propertyType);
+      // Pass prices, min beds, min baths directly
+      const totalCount = await getTotalPropertiesCount(location, minP, maxP, minBd, minBa, propertyType);
       setTotalProperties(totalCount);
       console.log('Total properties found:', totalCount);
 
@@ -1004,8 +1039,8 @@ function App() {
         if (searchId !== currentSearchId.current) return; // Abort if new search started
         try {
           console.log(`Fetching page ${page + 1}/${totalPages}`);
-          // Pass prices directly
-          const results = await searchProperties(location, page, minP, maxP, propertyType, minRatio);
+          // Pass prices, min beds, min baths directly
+          const results = await searchProperties(location, page, minP, maxP, minBd, minBa, propertyType, minRatio);
           if (searchId === currentSearchId.current && results.allProperties.length > 0) {
             // Append basic property data for immediate display
             setDisplayedProperties(prev => {
@@ -1302,6 +1337,15 @@ function App() {
   // const handleDismissMarketing = () => {
   //   setShowMarketingIntro(false);
   // };
+  
+  // Add state variables for bed/bath filters
+  const [minBeds, setMinBeds] = useState<string>('');
+  const [maxBeds, setMaxBeds] = useState<number | string>('');
+  const [minBaths, setMinBaths] = useState<string>('');
+  const [maxBaths, setMaxBaths] = useState<number | string>('');
+
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortBy, setSortBy] = useState<'ratio' | 'price' | 'cashflow'>('ratio');
   
   return (
     <div className="App">
@@ -1605,6 +1649,41 @@ function App() {
                       fullWidth
                     />
                   </div>
+
+                  {/* Bed/Bath Filters - Replaced with Select Dropdowns */}
+                  <FormControl size="medium" sx={{ minWidth: 120 }}>
+                    <InputLabel id="min-beds-label">Min Beds</InputLabel>
+                    <Select
+                      labelId="min-beds-label"
+                      value={minBeds}
+                      label="Min Beds"
+                      onChange={(e) => setMinBeds(e.target.value)}
+                    >
+                      <MenuItem value=""><em>Any</em></MenuItem>
+                      <MenuItem value={1}>1+</MenuItem>
+                      <MenuItem value={2}>2+</MenuItem>
+                      <MenuItem value={3}>3+</MenuItem>
+                      <MenuItem value={4}>4+</MenuItem>
+                      <MenuItem value={5}>5+</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <FormControl size="medium" sx={{ minWidth: 120 }}>
+                    <InputLabel id="min-baths-label">Min Baths</InputLabel>
+                    <Select
+                      labelId="min-baths-label"
+                      value={minBaths}
+                      label="Min Baths"
+                      onChange={(e) => setMinBaths(e.target.value)}
+                    >
+                      <MenuItem value=""><em>Any</em></MenuItem>
+                      <MenuItem value={1}>1+</MenuItem>
+                      <MenuItem value={1.5}>1.5+</MenuItem>
+                      <MenuItem value={2}>2+</MenuItem>
+                      <MenuItem value={3}>3+</MenuItem>
+                      <MenuItem value={4}>4+</MenuItem>
+                    </Select>
+                  </FormControl>
                   
         <Button 
                     type="submit"
