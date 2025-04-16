@@ -2047,7 +2047,8 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
               width: '100%', 
               height: '300px',
               mb: 2,
-              pageBreakInside: 'avoid' // Avoid breaking inside chart
+              pageBreakInside: 'avoid', // Avoid breaking inside chart
+              pageBreakBefore: 'always' // Force break before this element
             }}
           >
             <SimpleChart data={chartData} height={300}/>
