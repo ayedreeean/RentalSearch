@@ -1786,8 +1786,10 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
       >
         {/* Page 1 */}
         <Box 
+          className="pdfPageContainer" // Add class for potential styling
           sx={{ 
-            height: '11in',
+            // height: '11in', // Removed fixed height
+            minHeight: '10in', // Use minHeight instead to allow expansion
             padding: '0.5in',
             paddingBottom: '0.7in', // Ensure footer space
             position: 'relative',
@@ -1906,9 +1908,9 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 </Box>
                 <Divider sx={{ my: 0.5 }} />
                 {/* Total Expenses */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Total Expenses:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.totalMonthlyExpenses)}</Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2" fontWeight="bold">Total Monthly Expenses:</Typography>
+                  <Typography variant="body2" fontWeight="bold">{formatCurrency(cashflow.totalMonthlyExpenses)}</Typography>
                 </Box>
                 {/* Net Cashflow */}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#f3f4f6', p: 1, borderRadius: 1 }}>
@@ -2001,13 +2003,15 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
           </Box>
         </Box>
         
-        {/* Force Page Break Element */}
+        {/* Force Page Break Element - Keep this */}
         <Box sx={{ pageBreakBefore: 'always' }} />
 
         {/* Page 2 - Charts and Long-term Analysis */}
         <Box 
+          className="pdfPageContainer" // Add class for potential styling
           sx={{ 
-            height: '11in',
+            // height: '11in', // Removed fixed height
+            minHeight: '10in', // Use minHeight instead
             padding: '0.5in',
             paddingBottom: '0.7in', // Footer space
             position: 'relative',
@@ -2039,24 +2043,32 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
           )}
           
           {/* Chart Visualization */}
-          <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '12pt', color: '#333' }}>
-              Projection: Value, Equity & Cashflow ({yearsToProject} Years)
-            </Typography>
-            <Typography variant="body2" sx={{ color: '#6b7280', mb: 1, fontSize: '9pt' }}>
-              Assumes {rentAppreciationRate}% rent appreciation & {propertyValueIncreaseRate}% value increase annually.
-            </Typography>
-            <Box sx={{ height: 280, mb: 1 }}> {/* Reduced height slightly */} 
-              <SimpleChart data={chartData} height={280} />
-            </Box>
-          </Paper>
+          <Box 
+            className="pdfChartContainer"
+            sx={{ 
+              width: '100%', 
+              height: '300px',
+              mb: 2,
+              pageBreakInside: 'avoid' // Avoid breaking inside chart
+            }}
+          >
+            <SimpleChart data={chartData} height={300}/>
+          </Box>
           
           {/* Long-term Analysis Table */}
-          <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '12pt', color: '#333' }}>
-              Yearly Projection Highlights
-            </Typography>
-            <TableContainer sx={{ maxHeight: '300px' }}> {/* Adjusted max height - Increased from 200px */}
+          <Paper 
+            elevation={0} 
+            sx={{ 
+              p: 0, 
+              border: '1px solid #e0e0e0', 
+              borderRadius: 1, 
+              mb: 2, 
+              maxHeight: '250px', // Keep max height for layout
+              overflowY: 'auto',
+              pageBreakInside: 'avoid' // Avoid breaking inside table
+            }}
+          >
+            <TableContainer sx={{ maxHeight: '100%' }}>
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
