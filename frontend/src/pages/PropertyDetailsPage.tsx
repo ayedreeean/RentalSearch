@@ -1508,7 +1508,7 @@ ${notesSection}🔗 ZILLOW LISTING: ${property.url}
 
 See full analysis: ${generateShareableURL()}
 
-Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
+Generated with CashflowCrunch - https://cashflowcrunch.com/
 `;
   };
   
@@ -1594,9 +1594,8 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
   const generateShareableURL = (): string => {
     if (!property) return window.location.href;
     
-    // Instead of using current pathname, create a proper path to the property details page
-    // This ensures the router will handle it correctly when shared
-    const baseUrl = `${window.location.origin}/CashflowCrunch/#/property/${property.property_id}`;
+    // Use the custom domain
+    const baseUrl = `https://cashflowcrunch.com/#/property/${property.property_id}`;
     
     // Create a URLSearchParams object for the query parameters
     const params = new URLSearchParams();
