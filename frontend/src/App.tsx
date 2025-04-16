@@ -1370,7 +1370,7 @@ function App() {
                       onClick={() => window.location.href = '#/'}
                     >
                       {/* Replace HomeWorkIcon with img tag */}
-                      <img src="/favicon.png" alt="CashflowCrunch Logo" style={{ height: '40px', width: '40px', marginRight: '8px', verticalAlign: 'middle' }} /> {/* Increased size */} 
+                      <img src={process.env.PUBLIC_URL + '/favicon.png'} alt="CashflowCrunch Logo" style={{ height: '40px', width: '40px', marginRight: '8px', verticalAlign: 'middle' }} /> {/* Use process.env.PUBLIC_URL */}
                       CashflowCrunch
       </Typography>
                     <Typography className="app-subtitle" variant="subtitle1" component="p">
@@ -1591,7 +1591,7 @@ function App() {
                         
                         <Box sx={{ position: 'relative', zIndex: 1, p: 4, color: 'white', textAlign: 'center' }}>
                           {/* Replace HomeWorkIcon and text with img tag */}
-                          <img src="/favicon.png" alt="CashflowCrunch Logo" style={{ height: '200px', width: '200px', marginBottom: '16px' }} /> {/* Increased size to 200px */}
+                          <img src={process.env.PUBLIC_URL + '/favicon.png'} alt="CashflowCrunch Logo" style={{ height: '200px', width: '200px', marginBottom: '16px' }} /> {/* Use process.env.PUBLIC_URL */}
                           {/* Uncomment the text below */}
                           <Typography variant="h5" fontWeight="bold" gutterBottom>
                             Start Your Search
