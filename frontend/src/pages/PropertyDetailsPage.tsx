@@ -730,7 +730,8 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   // PDF generation
   const pdfRef = useRef<HTMLDivElement>(null);
   const { toPDF, targetRef } = usePDF({
-    filename: property ? `${property.address.replace(/\s+/g, '_')}_analysis.pdf` : 'property_analysis.pdf',
+    // Conditionally generate filename only if property exists
+    filename: property && property.address ? `${property.address.replace(/\s+/g, '_')}_analysis.pdf` : 'property_analysis.pdf',
   });
   
   // Scroll to top when component mounts
