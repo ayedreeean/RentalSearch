@@ -2514,22 +2514,6 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
               </Box>
             </Paper>
             
-            {/* Cashflow Sankey Diagram */}
-            {cashflow && (
-              <CashflowSankeyChart
-                data={{
-                  rentalIncome: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
-                  mortgage: cashflow.monthlyMortgage,
-                  taxInsurance: cashflow.monthlyTaxInsurance,
-                  vacancy: cashflow.monthlyVacancy,
-                  capex: cashflow.monthlyCapex,
-                  propertyManagement: cashflow.monthlyPropertyManagement,
-                  monthlyCashflow: cashflow.monthlyCashflow
-                }}
-                formatCurrency={formatCurrency}
-              />
-            )}
-            
             {/* Assumptions Tab - positioned relative to drawer edge */}
             <div 
               className="assumptions-tab"
@@ -2730,6 +2714,24 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
             lng={property.longitude || null} 
           />
         </Paper>
+
+        {/* Cashflow Sankey Diagram */}
+        <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
+        {cashflow && (
+              <CashflowSankeyChart
+                data={{
+                  rentalIncome: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
+                  mortgage: cashflow.monthlyMortgage,
+                  taxInsurance: cashflow.monthlyTaxInsurance,
+                  vacancy: cashflow.monthlyVacancy,
+                  capex: cashflow.monthlyCapex,
+                  propertyManagement: cashflow.monthlyPropertyManagement,
+                  monthlyCashflow: cashflow.monthlyCashflow
+                }}
+                formatCurrency={formatCurrency}
+              />
+          )}
+          </Paper>
         
         {/* Add new Long-Term Cashflow Analysis Section - Moved outside the columns to span full width */}
         <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>

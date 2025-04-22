@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useCallback } from 'react';
 import { Box, Typography, Paper } from '@mui/material';
 // Use individual d3 imports instead of the whole package
 import { select } from 'd3-selection';
@@ -46,6 +46,7 @@ interface SankeyData {
 
 const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatCurrency }) => {
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null); // Ref for the container Box
   const totalIncome = data.rentalIncome;
   const totalExpenses = data.mortgage + data.taxInsurance + data.vacancy + data.capex + data.propertyManagement;
   const cashflow = data.monthlyCashflow;
@@ -136,39 +137,53 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
     };
   }, [cashflow]);
 
-  // Create the sankey diagram using D3
-  useEffect(() => {
-    if (!svgRef.current) return;
+  // Define the drawing function using useCallback
+  const drawChart = useCallback(() => {
+    if (!svgRef.current || !containerRef.current) return;
 
-    // Clear previous SVG content
-    select(svgRef.current).selectAll("*").remove();
-
-    const width = svgRef.current.clientWidth;
-    const height = 400;
-    const margin = { top: 40, right: 200, bottom: 40, left: 150 };
+    // Get container dimensions
+    const containerWidth = containerRef.current.clientWidth;
     
+    // Ensure width is valid
+    const effectiveWidth = containerWidth > 0 ? containerWidth : 600; 
+
+    const height = 400; // Keep height fixed or make it responsive too if needed
+
+    // Adjust margins based on width
+    const isSmallScreen = effectiveWidth < 600;
+    const margin = {
+      top: 40,
+      right: isSmallScreen ? 100 : 150, // Smaller right margin for small screens
+      bottom: 40,
+      left: isSmallScreen ? 100 : 150 // Smaller left margin for small screens
+    };
+    
+    // Clear previous SVG content
+    const svgElement = select(svgRef.current);
+    svgElement.selectAll("*").remove();
+
     // Set up SVG
-    const svg = select(svgRef.current)
-      .attr("width", width)
+    const svg = svgElement
+      .attr("width", effectiveWidth)
       .attr("height", height)
       .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const innerWidth = width - margin.left - margin.right;
+    const innerWidth = effectiveWidth - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
     
-    // Define column positions
+    // Adjust column positions based on width
     const columns = [
-      { x: 0 }, // Left column (income and negative cashflow)
-      { x: innerWidth * 0.4 }, // Middle column (expenses)
-      { x: innerWidth * 0.8 } // Right column (expense categories and positive cashflow)
+      { x: 0 },
+      { x: innerWidth * (isSmallScreen ? 0.35 : 0.4) }, // Columns closer on small screens
+      { x: innerWidth * (isSmallScreen ? 0.7 : 0.8) }
     ];
     
     // Calculate total flow for proper scaling
     const totalFlow = isPositiveCashflow ? totalIncome : totalIncome + Math.abs(cashflow);
     
     // Calculate height factor - use same scale for all nodes for consistency
-    const heightFactor = Math.min(240, innerHeight * 0.7) / totalFlow;
+    const heightFactor = Math.min(240, innerHeight * 0.7) / Math.max(totalFlow, 1); // Avoid division by zero
     
     // Initialize positions and heights for nodes
     const sankeyData: SankeyData = {
@@ -189,8 +204,8 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
       }))
     };
     
-    // Vertical spacing between categories
-    const categorySpacing = 25;
+    // Vertical spacing between categories - adjust for small screens
+    const categorySpacing = isSmallScreen ? 15 : 25;
     
     // STEP 1: Position all nodes
     
@@ -239,12 +254,11 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
     
     if (isPositiveCashflow) {
       // Position positive cashflow at bottom of right side
-      // Place it below all expense categories
       if (expenseCategories.length > 0) {
         const lastCategory = expenseCategories[expenseCategories.length - 1];
         cashflowNode.y = lastCategory.y + lastCategory.height + categorySpacing;
       } else {
-        cashflowNode.y = innerHeight / 2 + 50; // Default position if no categories
+        cashflowNode.y = innerHeight / 2 + 50; 
       }
       cashflowNode.height = heightFactor * cashflowNode.amount;
     } else {
@@ -266,27 +280,21 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
         link.sourceX = source.x + 15;
         
         if (isPositiveCashflow && cashflow > 0) {
-          // Positive cashflow: Link starts from top portion of income node
           const startOffset = incomeNode.height * (link.value / totalIncome) / 2;
           link.sourceY = source.y + startOffset;
         } else {
-          // Negative cashflow: Link represents total income, starts centered
           link.sourceY = source.y + (source.height / 2);
         }
         
         link.targetX = target.x;
-        // For negative cashflow, target point needs to be higher up on the expenses node
         link.targetY = target.y + (isPositiveCashflow ? target.height / 2 : (link.width / 2));
       }
       
       // Income to cashflow link (positive cashflow)
       else if (source.id === 'income' && target.id === 'cashflow') {
         link.sourceX = source.x + 15;
-        
-        // Position at bottom of income node, proportional to cashflow value
         const startOffset = incomeNode.height - (incomeNode.height * (link.value / totalIncome) / 2);
         link.sourceY = source.y + startOffset;
-        
         link.targetX = target.x;
         link.targetY = target.y + (target.height / 2);
       }
@@ -296,7 +304,6 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
         link.sourceX = source.x + 15;
         link.sourceY = source.y + (source.height / 2);
         link.targetX = target.x;
-        // Connect to bottom of expenses node
         link.targetY = target.y + target.height - (link.width / 2);
       }
       
@@ -304,52 +311,36 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
       else if (source.id === 'expenses') {
         const targetCategory = expenseCategories.find(cat => cat.id === target.id);
         if (targetCategory) {
-          // Calculate proportional position within expenses node
           let heightBefore = 0;
           for (const cat of expenseCategories) {
             if (cat.id === target.id) break;
             heightBefore += cat.amount;
           }
-          
-          // Position within expenses node proportionally to category position
           link.sourceX = source.x + 15;
           link.sourceY = source.y + (source.height * (heightBefore / totalExpenses)) + 
                           (source.height * (target.amount / totalExpenses / 2));
-          
           link.targetX = target.x;
           link.targetY = target.y + (target.height / 2);
         }
       }
     });
     
-    // STEP 3: Draw links from back to front for proper layering
-    
-    // First: Draw expense breakdown links
+    // STEP 3: Draw links
     svg.append("g")
-      .selectAll(".expense-links")
-      .data(sankeyData.links.filter(link => 
-        sankeyData.nodes[link.source].id === 'expenses'
-      ))
+      .selectAll("path")
+      .data(sankeyData.links)
       .join("path")
-      .attr("class", "expense-links")
       .attr("d", (d: SankeyLink) => {
         const x0 = d.sourceX;
         const y0 = d.sourceY;
         const x1 = d.targetX;
         const y1 = d.targetY;
-        
         const dx = x1 - x0;
-        
-        // Control points for a nice curve
         const controlX1 = x0 + dx * 0.4;
         const controlY1 = y0;
         const controlX2 = x1 - dx * 0.4;
         const controlY2 = y1;
-        
-        return `
-          M ${x0},${y0}
-          C ${controlX1},${controlY1} ${controlX2},${controlY2} ${x1},${y1}
-        `;
+        return `M ${x0},${y0} C ${controlX1},${controlY1} ${controlX2},${controlY2} ${x1},${y1}`;
       })
       .attr("stroke", (d: SankeyLink) => {
         const source = sankeyData.nodes[d.source];
@@ -360,89 +351,6 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
       .attr("stroke-width", (d: SankeyLink) => d.width)
       .attr("fill", "none")
       .attr("opacity", 0.8);
-    
-    // Second: Draw main flow links
-    // For the main income-expenses flow, we need to ensure the width looks consistent
-    const mainFlowLinks = sankeyData.links.filter(link => (
-      (sankeyData.nodes[link.source].id === 'income' && sankeyData.nodes[link.target].id === 'expenses') ||
-      (sankeyData.nodes[link.source].id === 'cashflow' && sankeyData.nodes[link.target].id === 'expenses')
-    ));
-    
-    svg.append("g")
-      .selectAll(".main-flow-links")
-      .data(mainFlowLinks)
-      .join("path")
-      .attr("class", "main-flow-links")
-      .attr("d", (d: SankeyLink) => {
-        const x0 = d.sourceX;
-        const y0 = d.sourceY;
-        const x1 = d.targetX;
-        const y1 = d.targetY;
-        
-        const dx = x1 - x0;
-        
-        // Control points for a nice curve that maintains the flow width
-        const controlX1 = x0 + dx * 0.4;
-        const controlY1 = y0;
-        const controlX2 = x1 - dx * 0.4;
-        const controlY2 = y1;
-        
-        return `
-          M ${x0},${y0}
-          C ${controlX1},${controlY1} ${controlX2},${controlY2} ${x1},${y1}
-        `;
-      })
-      .attr("stroke", (d: SankeyLink) => {
-        const source = sankeyData.nodes[d.source];
-        const nodeClr = getNodeColor(source.id);
-        const c = d3Color(nodeClr);
-        return c ? c.toString() : nodeClr;
-      })
-      .attr("stroke-width", (d: SankeyLink) => d.width)
-      .attr("fill", "none")
-      .attr("opacity", 0.8);
-    
-    // Last: Draw cashflow link
-    if (isPositiveCashflow) {
-      const cashflowLinks = sankeyData.links.filter(link => 
-        sankeyData.nodes[link.source].id === 'income' && 
-        sankeyData.nodes[link.target].id === 'cashflow'
-      );
-      
-      svg.append("g")
-        .selectAll(".cashflow-link")
-        .data(cashflowLinks)
-        .join("path")
-        .attr("class", "cashflow-link")
-        .attr("d", (d: SankeyLink) => {
-          const x0 = d.sourceX;
-          const y0 = d.sourceY;
-          const x1 = d.targetX;
-          const y1 = d.targetY;
-          
-          const dx = x1 - x0;
-          
-          // Control points for a nice curve
-          const controlX1 = x0 + dx * 0.4;
-          const controlY1 = y0; 
-          const controlX2 = x1 - dx * 0.4;
-          const controlY2 = y1;
-          
-          return `
-            M ${x0},${y0}
-            C ${controlX1},${controlY1} ${controlX2},${controlY2} ${x1},${y1}
-          `;
-        })
-        .attr("stroke", (d: SankeyLink) => {
-          const source = sankeyData.nodes[d.source];
-          const nodeClr = getNodeColor(source.id);
-          const c = d3Color(nodeClr);
-          return c ? c.toString() : nodeClr;
-        })
-        .attr("stroke-width", (d: SankeyLink) => d.width)
-        .attr("fill", "none")
-        .attr("opacity", 0.8);
-    }
     
     // STEP 4: Draw node rectangles
     const nodeGroups = svg.append("g")
@@ -451,7 +359,6 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
       .join("g")
       .attr("transform", (d: SankeyNode) => `translate(${d.x},${d.y})`);
     
-    // Add rectangles for nodes
     nodeGroups.append("rect")
       .attr("width", 15)
       .attr("height", (d: SankeyNode) => d.height)
@@ -465,6 +372,8 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
         // Position text based on node position
         if (d.id === 'income' || (d.id === 'cashflow' && !isPositiveCashflow)) {
           return -10; // Left-side labels
+        } else if (d.id === 'expenses') {
+          return 60; // Move Expenses label further right into whitespace
         } else {
           return 25; // Right-side labels
         }
@@ -483,16 +392,36 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
       .attr("fill", "#333333")
       .attr("font-size", "14px")
       .attr("font-weight", (d: SankeyNode) => ['income', 'expenses', 'cashflow'].includes(d.id) ? "bold" : "normal");
-    
-  }, [dataNodes, links, getNodeColor, isPositiveCashflow, totalIncome, totalExpenses, cashflow, formatCurrency]);
+      
+  }, [dataNodes, links, getNodeColor, isPositiveCashflow, totalIncome, totalExpenses, cashflow, formatCurrency]); // Include drawChart dependencies
+
+  // Add ResizeObserver
+  useEffect(() => {
+    // Initial draw
+    drawChart();
+
+    const resizeObserver = new ResizeObserver(() => {
+      drawChart(); // Redraw on resize
+    });
+
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    // Cleanup observer on component unmount
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [drawChart]); // Dependency on the memoized drawChart function
 
   return (
-    <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
+    <Paper sx={{ p: 3, borderRadius: 2, mb: 3, overflow: 'hidden' }}> {/* Add overflow hidden */} 
       <Typography variant="h5" mb={2}>
         Cashflow Breakdown
       </Typography>
-      <Box sx={{ width: '100%', height: 400, position: 'relative' }}>
-        <svg ref={svgRef} width="100%" height="100%" />
+      {/* Use a Box as the container for ResizeObserver */} 
+      <Box ref={containerRef} sx={{ width: '100%', height: 400, position: 'relative' }}>
+        <svg ref={svgRef} style={{ display: 'block' }} /> {/* Ensure SVG takes block display */} 
       </Box>
     </Paper>
   );
