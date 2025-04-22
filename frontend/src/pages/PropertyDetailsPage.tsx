@@ -23,6 +23,7 @@ import { usePDF } from 'react-to-pdf';
 import { QRCodeSVG } from 'qrcode.react';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import Drawer from '@mui/material/Drawer';
+import CashflowSankeyChart from '../components/CashflowSankeyChart';
 
 interface PropertyDetailsPageProps {
   properties: Property[];
@@ -1906,9 +1907,9 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 </Box>
                 <Divider sx={{ my: 0.5 }} />
                 {/* Total Expenses */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Total Expenses:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>-{formatCurrency(cashflow.totalMonthlyExpenses)}</Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2" fontWeight="bold">Total Monthly Expenses:</Typography>
+                  <Typography variant="body2" fontWeight="bold">{formatCurrency(cashflow.totalMonthlyExpenses)}</Typography>
                 </Box>
                 {/* Net Cashflow */}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#f3f4f6', p: 1, borderRadius: 1 }}>
@@ -2512,6 +2513,22 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 </Box>
               </Box>
             </Paper>
+            
+            {/* Cashflow Sankey Diagram */}
+            {cashflow && (
+              <CashflowSankeyChart
+                data={{
+                  rentalIncome: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
+                  mortgage: cashflow.monthlyMortgage,
+                  taxInsurance: cashflow.monthlyTaxInsurance,
+                  vacancy: cashflow.monthlyVacancy,
+                  capex: cashflow.monthlyCapex,
+                  propertyManagement: cashflow.monthlyPropertyManagement,
+                  monthlyCashflow: cashflow.monthlyCashflow
+                }}
+                formatCurrency={formatCurrency}
+              />
+            )}
             
             {/* Assumptions Tab - positioned relative to drawer edge */}
             <div 
