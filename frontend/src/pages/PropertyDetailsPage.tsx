@@ -2718,21 +2718,21 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
 
         {/* Cashflow Sankey Diagram */}
         <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
-        {cashflow && (
-              <CashflowSankeyChart
-                data={{
-                  rentalIncome: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
-                  mortgage: cashflow.monthlyMortgage,
-                  taxInsurance: cashflow.monthlyTaxInsurance,
-                  vacancy: cashflow.monthlyVacancy,
-                  capex: cashflow.monthlyCapex,
-                  propertyManagement: cashflow.monthlyPropertyManagement,
-                  monthlyCashflow: cashflow.monthlyCashflow
-                }}
-                formatCurrency={formatCurrency}
-              />
+          {cashflow && (
+            <CashflowSankeyChart
+              data={{
+                rentalIncome: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
+                mortgage: cashflow.monthlyMortgage,
+                taxInsurance: cashflow.monthlyTaxInsurance,
+                vacancy: cashflow.monthlyVacancy,
+                capex: cashflow.monthlyCapex,
+                propertyManagement: cashflow.monthlyPropertyManagement,
+                monthlyCashflow: cashflow.monthlyCashflow
+              }}
+              formatCurrency={formatCurrency}
+            />
           )}
-          </Paper>
+        </Paper>
         
         {/* Add new Long-Term Cashflow Analysis Section - Moved outside the columns to span full width */}
         <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
