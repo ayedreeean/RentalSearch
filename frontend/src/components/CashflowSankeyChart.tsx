@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Box, Typography, Paper } from '@mui/material';
+import { Box, Typography, Paper, useTheme, useMediaQuery } from '@mui/material';
 // Use individual d3 imports instead of the whole package
 import { ResponsiveSankey } from '@nivo/sankey'; // Import ResponsiveSankey
 
@@ -54,6 +54,10 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
   const totalExpenses = data.mortgage + data.taxInsurance + data.vacancy + data.capex + data.propertyManagement;
   const cashflow = data.monthlyCashflow;
   const isPositiveCashflow = cashflow >= 0;
+
+  // Add media query hook
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Prepare data nodes and links with useMemo to avoid dependency warnings
   const nivoData = useMemo(() => {
@@ -191,7 +195,10 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
       <Box sx={{ width: '100%', height: 400 }}>
         <ResponsiveSankey
           data={nivoData}
-          margin={{ top: 20, right: 120, bottom: 20, left: 120 }}
+          margin={isMobile ? 
+            { top: 20, right: 30, bottom: 20, left: 30 } : 
+            { top: 20, right: 120, bottom: 20, left: 120 }
+          }
           align="justify" // Or "start", "end", "center"
           colors={getNodeColor} // Use the color function
           nodeOpacity={1}
@@ -207,20 +214,30 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
           linkContract={3}
           // enableLinkGradient={true}
 
-          // Customize label to include the value
-          label={node => `${node.id}: ${formatCurrency(node.value)}`}
+          // Conditionally set label based on screen size
+          label={isMobile ? () => '' : node => `${node.id}: ${formatCurrency(node.value)}`}
 
           labelPosition="outside"
           labelOrientation="horizontal"
           labelPadding={16}
           labelTextColor={{ from: 'color', modifiers: [['darker', 1]] }}
           valueFormat={value => formatCurrency(value)} // Format tooltip values
-          // Optional: customize tooltips if needed
-          // nodeTooltip={node => (
-          //   <span style={{ background: 'white', padding: '5px', border: '1px solid #ccc' }}>
-          //     <strong>{node.id}</strong>: {formatCurrency(node.value)}
-          //   </span>
-          // )}
+          
+          // Add custom node tooltip
+          nodeTooltip={({ node }) => (
+            <div style={{
+              background: 'white',
+              color: 'black',
+              padding: '5px 10px',
+              border: '1px solid #ccc',
+              borderRadius: '3px',
+              boxShadow: '2px 2px 5px rgba(0,0,0,0.1)',
+              fontSize: '12px'
+            }}>
+              <strong>{node.id}:</strong> {formatCurrency(node.value)}
+            </div>
+          )}
+
           // linkTooltip={link => (
           //   <span style={{ background: 'white', padding: '5px', border: '1px solid #ccc' }}>
           //     {link.source.id} → {link.target.id}: {formatCurrency(link.value)}

