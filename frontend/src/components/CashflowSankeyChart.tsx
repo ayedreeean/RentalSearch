@@ -238,11 +238,21 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
             </div>
           )}
 
-          // linkTooltip={link => (
-          //   <span style={{ background: 'white', padding: '5px', border: '1px solid #ccc' }}>
-          //     {link.source.id} → {link.target.id}: {formatCurrency(link.value)}
-          //   </span>
-          // )}
+          // Add custom link tooltip
+          linkTooltip={({ link }) => (
+            <div style={{
+              background: 'white',
+              color: 'black',
+              padding: '5px 10px',
+              border: '1px solid #ccc',
+              borderRadius: '3px',
+              boxShadow: '2px 2px 5px rgba(0,0,0,0.1)',
+              fontSize: '12px'
+            }}>
+              <strong>{link.source.id} → {link.target.id}:</strong> {formatCurrency(link.value)}
+            </div>
+          )}
+
           legends={[]} // Disable built-in Nivo legends if using custom one below
         />
       </Box>

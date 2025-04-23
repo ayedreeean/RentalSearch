@@ -2041,20 +2041,45 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
           )}
           
           {/* Chart Visualization */}
-          <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+          <Paper elevation={0} sx={{ p: 2, mb: 1.5, border: '1px solid #e0e0e0', borderRadius: 1 }}> {/* Reduced mb */}
             <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '12pt', color: '#333' }}>
               Projection: Value, Equity & Cashflow ({yearsToProject} Years)
             </Typography>
             <Typography variant="body2" sx={{ color: '#6b7280', mb: 1, fontSize: '9pt' }}>
               Assumes {rentAppreciationRate}% rent appreciation & {propertyValueIncreaseRate}% value increase annually.
             </Typography>
-            <Box sx={{ height: 280, mb: 1 }}> {/* Reduced height slightly */} 
-              <SimpleChart data={chartData} height={280} />
+            <Box sx={{ height: 260, mb: 1 }}> {/* Reduced height */}
+              <SimpleChart data={chartData} height={260} /> {/* Reduced height */} 
             </Box>
           </Paper>
           
+          {/* **** Add Sankey Chart Here **** */}
+          {/* Force this section onto a new page */}
+          <Paper elevation={0} sx={{ p: 2, mb: 1.5, border: '1px solid #e0e0e0', borderRadius: 1, pageBreakBefore: 'always' }}> 
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '12pt', color: '#333' }}>
+              Monthly Cashflow Breakdown
+            </Typography>
+            <Box sx={{ height: 575 }}> {/* Increased height to 575px */}
+              <CashflowSankeyChart 
+                data={{
+                  rentalIncome: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
+                  mortgage: cashflow.monthlyMortgage,
+                  taxInsurance: cashflow.monthlyTaxInsurance,
+                  vacancy: cashflow.monthlyVacancy,
+                  capex: cashflow.monthlyCapex,
+                  propertyManagement: cashflow.monthlyPropertyManagement,
+                  monthlyCashflow: cashflow.monthlyCashflow
+                }}
+                formatCurrency={formatCurrency}
+                // Note: Sankey component doesn't use mobile checks, labels will always show
+                // Let's remove labels entirely for PDF to save space
+                // label={isMobile ? () => '' : node => `${node.id}: ${formatCurrency(node.value)}`} 
+              />
+            </Box>
+          </Paper>
+
           {/* Long-term Analysis Table */}
-          <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+          <Paper elevation={0} sx={{ p: 2, mb: 1.5, border: '1px solid #e0e0e0', borderRadius: 1 }}> {/* Reduced mb */}
             <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '12pt', color: '#333' }}>
               Yearly Projection Highlights
             </Typography>
@@ -2103,7 +2128,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
           </Paper>
 
           {/* IRR Summary Panel - Added Here */}
-          <Paper elevation={0} sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+          <Paper elevation={0} sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, mb: 1.5 }}> {/* Added Reduced mb */}
             <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', fontSize: '12pt', color: '#333' }}>
               Internal Rate of Return (IRR) by Holding Period
             </Typography>
@@ -2248,7 +2273,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
           <Box sx={{ flexGrow: 1 }} /> 
           <Box sx={{ 
             display: 'flex', 
-            gap: { xs: 0.5, sm: 1.5 }, // Reduced gap on xs screens
+            gap: { xs: 1, sm: 2 }, 
             flexWrap: 'nowrap'
           }}>
             {/* Add Bookmark Button */}
@@ -2262,14 +2287,16 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 borderColor: 'white', 
                 '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
-                minWidth: { xs: 'auto', sm: 'auto' }, // Allow button to shrink on xs
-                px: { xs: 1, sm: 2 } // Reduced padding on xs
+                minWidth: { xs: '40px', sm: 'auto' },
+                px: { xs: 1, sm: 2 }
               }}
             >
               <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
                 {isBookmarked ? 'Bookmarked' : 'Bookmark'}
               </Box>
-              {/* Icon is always visible via startIcon */}
+              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                {isBookmarked ? '' : ''}
+              </Box>
             </Button>
             
             <Button 
@@ -2282,12 +2309,12 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 borderColor: 'white', 
                 '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
-                minWidth: { xs: 'auto', sm: 'auto' }, // Allow button to shrink on xs
-                px: { xs: 1, sm: 2 } // Reduced padding on xs
+                minWidth: { xs: '40px', sm: 'auto' },
+                px: { xs: 1, sm: 2 }
               }}
             >
               <Box sx={{ display: { xs: 'none', sm: 'block' } }}>Copy URL</Box>
-               {/* Icon is always visible via startIcon */}
+              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>URL</Box>
             </Button>
 
             <Button 
@@ -2300,14 +2327,16 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 borderColor: 'white', 
                 '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
-                minWidth: { xs: 'auto', sm: 'auto' }, // Allow button to shrink on xs
-                px: { xs: 1, sm: 2 } // Reduced padding on xs
+                minWidth: { xs: '40px', sm: 'auto' },
+                px: { xs: 1, sm: 2 }
               }}
             >
               <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
                 PDF Report
               </Box>
-               {/* Icon is always visible via startIcon */}
+              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                PDF
+              </Box>
             </Button>
           </Box>
         </Toolbar>
@@ -2714,21 +2743,21 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
 
         {/* Cashflow Sankey Diagram */}
         <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
-          {cashflow && (
-            <CashflowSankeyChart
-              data={{
-                rentalIncome: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
-                mortgage: cashflow.monthlyMortgage,
-                taxInsurance: cashflow.monthlyTaxInsurance,
-                vacancy: cashflow.monthlyVacancy,
-                capex: cashflow.monthlyCapex,
-                propertyManagement: cashflow.monthlyPropertyManagement,
-                monthlyCashflow: cashflow.monthlyCashflow
-              }}
-              formatCurrency={formatCurrency}
-            />
+        {cashflow && (
+              <CashflowSankeyChart
+                data={{
+                  rentalIncome: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
+                  mortgage: cashflow.monthlyMortgage,
+                  taxInsurance: cashflow.monthlyTaxInsurance,
+                  vacancy: cashflow.monthlyVacancy,
+                  capex: cashflow.monthlyCapex,
+                  propertyManagement: cashflow.monthlyPropertyManagement,
+                  monthlyCashflow: cashflow.monthlyCashflow
+                }}
+                formatCurrency={formatCurrency}
+              />
           )}
-        </Paper>
+          </Paper>
         
         {/* Add new Long-Term Cashflow Analysis Section - Moved outside the columns to span full width */}
         <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
