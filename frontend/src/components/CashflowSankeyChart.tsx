@@ -60,7 +60,7 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
     // Filter out expense categories with zero values
     const expenseCategories = [
       { id: 'Mortgage', name: 'Mortgage', amount: data.mortgage },
-      { id: 'Tax & Insurance', name: 'Tax & Insurance', amount: data.taxInsurance },
+      { id: 'Tax/Ins', name: 'Tax/Ins', amount: data.taxInsurance },
       { id: 'Vacancy', name: 'Vacancy', amount: data.vacancy },
       { id: 'CapEx', name: 'CapEx', amount: data.capex },
       { id: 'Property Mgmt', name: 'Property Mgmt', amount: data.propertyManagement },
@@ -135,7 +135,7 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
         case 'Income': return '#4ade80'; // Green
         case 'Expenses': return '#f87171'; // Red
         case 'Mortgage': return '#fb923c'; // Orange
-        case 'Tax & Insurance': return '#a78bfa'; // Purple
+        case 'Tax/Ins': return '#a78bfa'; // Purple - Shortened label
         case 'Vacancy': return '#60a5fa'; // Blue
         case 'CapEx': return '#fbbf24'; // Yellow
         case 'Property Mgmt': return '#e879f9'; // Pink
@@ -154,7 +154,7 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
     const items = [
       { id: 'Income', name: 'Income' },
       { id: 'Mortgage', name: 'Mortgage' },
-      { id: 'Tax & Insurance', name: 'Tax & Insurance' },
+      { id: 'Tax/Ins', name: 'Tax/Ins' }, // Shortened label
       { id: 'Vacancy', name: 'Vacancy' },
       { id: 'CapEx', name: 'CapEx' },
       { id: 'Property Mgmt', name: 'Property Mgmt' },
@@ -167,7 +167,7 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
     const activeItems = items.filter(item => {
         if (item.id === 'Income') return data.rentalIncome > 0;
         if (item.id === 'Mortgage') return data.mortgage > 0;
-        if (item.id === 'Tax & Insurance') return data.taxInsurance > 0;
+        if (item.id === 'Tax/Ins') return data.taxInsurance > 0; // Shortened label
         if (item.id === 'Vacancy') return data.vacancy > 0;
         if (item.id === 'CapEx') return data.capex > 0;
         if (item.id === 'Property Mgmt') return data.propertyManagement > 0;
@@ -191,7 +191,7 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
       <Box sx={{ width: '100%', height: 400 }}>
         <ResponsiveSankey
           data={nivoData}
-          margin={{ top: 20, right: 80, bottom: 20, left: 80 }}
+          margin={{ top: 20, right: 120, bottom: 20, left: 120 }}
           align="justify" // Or "start", "end", "center"
           colors={getNodeColor} // Use the color function
           nodeOpacity={1}
@@ -206,6 +206,10 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
           linkHoverOpacity={0.8}
           linkContract={3}
           // enableLinkGradient={true}
+
+          // Customize label to include the value
+          label={node => `${node.id}: ${formatCurrency(node.value)}`}
+
           labelPosition="outside"
           labelOrientation="horizontal"
           labelPadding={16}
