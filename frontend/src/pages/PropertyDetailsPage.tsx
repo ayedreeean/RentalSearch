@@ -1950,7 +1950,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
         {/* --- Page 2 (or continuation) Start --- */}
         
         {/* Long-Term Chart Visualization */}
-        <Paper elevation={0} sx={{...sectionStyle, pageBreakBefore: 'auto'}}> {/* Allow breaking before this section */}
+        <Paper elevation={0} sx={{...sectionStyle, pageBreakBefore: 'always'}}> {/* Force page break before this section */}
           <Typography sx={headingStyle}>Projection: Value, Equity & Cashflow ({yearsToProject} Years)</Typography>
           <Typography sx={bodyStyle}>
             Assumes {rentAppreciationRate}% rent appreciation & {propertyValueIncreaseRate}% value increase annually.
@@ -1973,7 +1973,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
         </Paper>
         
         {/* Long-term Analysis Table */}
-        <Paper elevation={0} sx={sectionStyle}>
+        <Paper elevation={0} sx={{...sectionStyle, pageBreakBefore: 'always'}}> {/* Force page break before this section */}
           <Typography sx={headingStyle}>Yearly Projection Highlights</Typography>
           <TableContainer sx={{ maxHeight: '350px', pageBreakInside: 'avoid' }}> {/* Increased height slightly & added pageBreakInside */} 
             <Table size="small" stickyHeader>
@@ -2143,7 +2143,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
           <RouterLink to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
             {/* Replace HomeWorkIcon with img tag */}
             <img src={process.env.PUBLIC_URL + '/favicon.png'} alt="CashflowCrunch Logo" style={{ height: '40px', width: '40px', marginRight: '8px', verticalAlign: 'middle' }} /> {/* Use process.env.PUBLIC_URL */}
-            <Typography variant="h6" color="inherit" noWrap >
+            <Typography variant="h6" color="inherit" noWrap sx={{ display: { xs: 'none', sm: 'block' } }}>
               CashflowCrunch
             </Typography>
           </RouterLink>
@@ -2172,9 +2172,6 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
               <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
                 {isBookmarked ? 'Bookmarked' : 'Bookmark'}
               </Box>
-              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-                {isBookmarked ? '' : ''}
-              </Box>
             </Button>
             
             <Button 
@@ -2192,7 +2189,6 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
               }}
             >
               <Box sx={{ display: { xs: 'none', sm: 'block' } }}>Copy URL</Box>
-              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>URL</Box>
             </Button>
 
             <Button 
@@ -2211,9 +2207,6 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
             >
               <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
                 PDF Report
-              </Box>
-              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-                PDF
               </Box>
             </Button>
           </Box>
