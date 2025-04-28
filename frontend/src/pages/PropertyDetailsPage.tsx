@@ -859,7 +859,8 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
             const urlParams = new URLSearchParams(location.search);
             const hasSettingsInUrl = urlParams.has('ir') || urlParams.has('lt') || 
                                     urlParams.has('dp') || urlParams.has('ti') || 
-                                    urlParams.has('vc') || urlParams.has('cx') || urlParams.has('pm');
+                                    urlParams.has('vc') || urlParams.has('cx') || 
+                                    urlParams.has('pm') || urlParams.has('rh'); // Added rh check
             
             // Apply saved cashflow settings if valid and no URL settings
             if (!hasSettingsInUrl) {
@@ -867,11 +868,12 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
               const hasValidSettings = propertySettings.interestRate !== undefined && 
                                       propertySettings.loanTerm !== undefined &&
                                       propertySettings.downPaymentPercent !== undefined;
+                                      // No need to check rehabAmount explicitly, it's handled by spread
               
               if (hasValidSettings) {
                 setSettings(prev => ({
                   ...prev,
-                  ...propertySettings
+                  ...propertySettings // Spread saved settings, including rehabAmount if present
                 }));
               }
             }
@@ -918,9 +920,10 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     const cx = searchParams.get('cx'); // capex
     const pm = searchParams.get('pm'); // property management
     const re = searchParams.get('re'); // custom rent estimate
+    const rh = searchParams.get('rh'); // rehab amount - Added
     
     // Update settings if values exist in URL
-    const newSettings = {...defaultSettings};
+    const newSettings = {...settings}; // Start with current settings to preserve any already set
     let updated = false;
     
     if (ir) { 
@@ -975,6 +978,16 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       const val = parseInt(pm, 10);
       if (!isNaN(val) && val >= 0 && val <= 20) {
         newSettings.propertyManagementPercent = val;
+        updated = true;
+      }
+    }
+    
+    // Handle rehab amount parameter
+    if (rh) {
+      const val = parseFloat(rh);
+      // Updated max rehab amount range
+      if (!isNaN(val) && val >= 0 && val <= 100000) { // Increased max to 100k
+        newSettings.rehabAmount = val;
         updated = true;
       }
     }
@@ -1159,7 +1172,8 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       taxInsurancePercent: 'ti',
       vacancyPercent: 'vc',
       capexPercent: 'cx',
-      propertyManagementPercent: 'pm'
+      propertyManagementPercent: 'pm',
+      rehabAmount: 'rh' // Added rehab amount mapping
     };
     
     // Update URL with new setting
@@ -1187,7 +1201,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       if (setting && value !== undefined) {
         savedSettings[propertyId][setting] = value;
       } else {
-        // Otherwise update all settings
+        // Otherwise update all settings (including rehabAmount)
         savedSettings[propertyId] = { ...settings };
       }
       
@@ -1419,7 +1433,10 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       previousYearEquity = equity;
       
       // Calculate ROI
-      const initialInvestment = property.price * (settings.downPaymentPercent / 100) + property.price * 0.03;
+      // Include rehabAmount in initial investment for ROI calculations
+      const initialInvestment = property.price * (settings.downPaymentPercent / 100) 
+                                + property.price * 0.03 // Closing costs
+                                + settings.rehabAmount; // Rehab costs
       const cashOnCashReturn = (yearlyCashflow / initialInvestment) * 100;
       
       // Calculate ROI with equity growth included
@@ -1451,6 +1468,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     
     const rentValue = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
     const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
+    // Calculate total initial investment including rehab
+    const closingCosts = property.price * 0.03;
+    const totalInvestment = downPaymentAmount + closingCosts + settings.rehabAmount;
     
     // Add notes to summary if they exist
     const notesSection = notes ? `\n📝 NOTES:\n${notes}\n` : '\n';
@@ -1468,13 +1488,18 @@ RENT-TO-PRICE RATIO: ${formatPercent(property.ratio * 100)}
 ${property.days_on_market !== null ? `• Days on market: ${property.days_on_market}` : ''}
 
 💰 CASHFLOW ANALYSIS (Monthly):
-• Down payment (${settings.downPaymentPercent}%): ${formatCurrency(property.price * (settings.downPaymentPercent / 100))}
+• Down payment (${settings.downPaymentPercent}%): ${formatCurrency(downPaymentAmount)}
+• Initial Rehab: ${formatCurrency(settings.rehabAmount)} 
+• Closing Costs (est. 3%): ${formatCurrency(closingCosts)}
+• Total Investment: ${formatCurrency(totalInvestment)}
+-----------------------------
 • Mortgage payment: ${formatCurrency(cashflow.monthlyMortgage)}
 • Property Tax & Insurance: ${formatCurrency(cashflow.monthlyTaxInsurance)}
 • Vacancy (${settings.vacancyPercent}%): ${formatCurrency(cashflow.monthlyVacancy)}
 • CapEx (${settings.capexPercent}%): ${formatCurrency(cashflow.monthlyCapex)}
 • Property Management (${settings.propertyManagementPercent}%): ${formatCurrency(cashflow.monthlyPropertyManagement)}
 • Total Monthly Expenses: ${formatCurrency(cashflow.totalMonthlyExpenses)}
+-----------------------------
 • Monthly Cashflow: ${formatCurrency(cashflow.monthlyCashflow)}
 • Annual Cashflow: ${formatCurrency(cashflow.annualCashflow)}
 • Cash-on-Cash Return: ${formatPercent(cashflow.cashOnCashReturn)}
@@ -1647,6 +1672,11 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
       params.set('pm', settings.propertyManagementPercent.toString());
     }
     
+    // Add rehab amount if non-zero
+    if (settings.rehabAmount !== 0) {
+      params.set('rh', settings.rehabAmount.toString());
+    }
+    
     // Only add these if they're not default values (assuming 3% and 3% are defaults)
     if (rentAppreciationRate !== 3) {
       params.set('ra', rentAppreciationRate.toString());
@@ -1760,7 +1790,10 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
     const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
     const shareableURL = generateShareableURL();
     const longTermData = generateLongTermCashflow();
-    const initialInvestment = downPaymentAmount + (property.price * 0.03); // Down payment + closing costs
+    // Calculate initial investment including rehab for PDF
+    const initialInvestment = downPaymentAmount 
+                             + (property.price * 0.03) // Closing costs
+                             + settings.rehabAmount; // Rehab costs
     
     // Simplified chart data prep (assuming SimpleChart accepts this)
     const longTermChartData = {
@@ -1865,6 +1898,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
               <Typography sx={bodyStyle}>Vacancy: {settings.vacancyPercent}%</Typography>
               <Typography sx={bodyStyle}>CapEx: {settings.capexPercent}%</Typography>
               <Typography sx={bodyStyle}>Management: {settings.propertyManagementPercent}%</Typography>
+              <Typography sx={bodyStyle}>Initial Rehab: {formatCurrency(settings.rehabAmount)}</Typography> {/* Added Rehab */}
             </Box>
           </Box>
         </Paper>
@@ -1919,12 +1953,16 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                       <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(downPaymentAmount)}</TableCell>
                     </TableRow>
                     <TableRow sx={{ pageBreakInside: 'avoid' }}>
+                      <TableCell sx={tableCellStyle}>Initial Rehab:</TableCell> {/* Added Rehab */}
+                      <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(settings.rehabAmount)}</TableCell>
+                    </TableRow>
+                    <TableRow sx={{ pageBreakInside: 'avoid' }}>
                       <TableCell sx={tableCellStyle}>Closing Costs (est. 3%):</TableCell>
                       <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(property.price * 0.03)}</TableCell>
                     </TableRow>
                     <TableRow sx={{ pageBreakInside: 'avoid', bgcolor: '#f0f7ff' }}>
                       <TableCell sx={{...tableCellStyle, fontWeight: 'bold'}}>Total Investment:</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(initialInvestment)}</TableCell>
+                      <TableCell sx={{...tableCellStyle, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(initialInvestment)}</TableCell> {/* Uses updated initialInvestment */}
                     </TableRow>
                      <TableRow sx={{ pageBreakInside: 'avoid' }}>
                       <TableCell sx={tableCellStyle}>Annual Cashflow:</TableCell>
@@ -2109,6 +2147,8 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
   
   // Calculate values for display
   const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
+  const closingCosts = property.price * 0.03; // Calculate closing costs
+  const totalInvestment = downPaymentAmount + closingCosts + settings.rehabAmount; // Calculate total investment including rehab
   
   // Generate long-term cashflow data
   const longTermCashflowData: YearlyProjection[] = generateLongTermCashflow();
@@ -2143,7 +2183,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
           <RouterLink to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
             {/* Replace HomeWorkIcon with img tag */}
             <img src={process.env.PUBLIC_URL + '/favicon.png'} alt="CashflowCrunch Logo" style={{ height: '40px', width: '40px', marginRight: '8px', verticalAlign: 'middle' }} /> {/* Use process.env.PUBLIC_URL */}
-            <Typography variant="h6" color="inherit" noWrap sx={{ display: { xs: 'none', sm: 'block' } }}>
+            <Typography variant="h6" color="inherit" noWrap >
               CashflowCrunch
             </Typography>
           </RouterLink>
@@ -2151,7 +2191,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
           <Box sx={{ flexGrow: 1 }} /> 
           <Box sx={{ 
             display: 'flex', 
-            gap: { xs: 1, sm: 2 }, 
+            gap: { xs: 1, sm: 2 }, // Reverted gap
             flexWrap: 'nowrap'
           }}>
             {/* Add Bookmark Button */}
@@ -2165,12 +2205,15 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 borderColor: 'white', 
                 '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
-                minWidth: { xs: '40px', sm: 'auto' },
-                px: { xs: 1, sm: 2 }
+                minWidth: { xs: 'auto', sm: 'auto' }, // Allow shrink on xs
+                px: { xs: 1, sm: 2 } // Less padding on xs
               }}
             >
-              <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+              <Box sx={{ display: { xs: 'none', sm: 'block' }, ml: 1 }}> {/* Text only on sm+, add margin */} 
                 {isBookmarked ? 'Bookmarked' : 'Bookmark'}
+              </Box>
+              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                {isBookmarked ? '' : ''}
               </Box>
             </Button>
             
@@ -2184,11 +2227,11 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 borderColor: 'white', 
                 '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
-                minWidth: { xs: '40px', sm: 'auto' },
-                px: { xs: 1, sm: 2 }
+                minWidth: { xs: 'auto', sm: 'auto' }, // Allow shrink on xs
+                px: { xs: 1, sm: 2 } // Less padding on xs
               }}
             >
-              <Box sx={{ display: { xs: 'none', sm: 'block' } }}>Copy URL</Box>
+              <Box sx={{ display: { xs: 'none', sm: 'block' }, ml: 1 }}>Copy URL</Box> {/* Text only on sm+, add margin */}
             </Button>
 
             <Button 
@@ -2201,12 +2244,15 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 borderColor: 'white', 
                 '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 whiteSpace: 'nowrap',
-                minWidth: { xs: '40px', sm: 'auto' },
-                px: { xs: 1, sm: 2 }
+                minWidth: { xs: 'auto', sm: 'auto' }, // Allow shrink on xs
+                px: { xs: 1, sm: 2 } // Less padding on xs
               }}
             >
-              <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+              <Box sx={{ display: { xs: 'none', sm: 'block' }, ml: 1 }}> {/* Text only on sm+, add margin */} 
                 PDF Report
+              </Box>
+              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                PDF
               </Box>
             </Button>
           </Box>
@@ -2398,15 +2444,22 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                   <Typography variant="body2">Down Payment:</Typography>
                   <Typography variant="body2">{formatCurrency(downPaymentAmount)}</Typography>
                 </Box>
-                
+
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Closing Costs (est. 3%):</Typography>
-                  <Typography variant="body2">{formatCurrency(property.price * 0.03)}</Typography>
+                  <Typography variant="body2">Initial Rehab:</Typography> {/* Added Rehab */}
+                  <Typography variant="body2">{formatCurrency(settings.rehabAmount)}</Typography>
                 </Box>
                 
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Total Investment:</Typography>
-                  <Typography variant="body2">{formatCurrency(downPaymentAmount + property.price * 0.03)}</Typography>
+                  <Typography variant="body2">Closing Costs (est. 3%):</Typography>
+                  <Typography variant="body2">{formatCurrency(closingCosts)}</Typography> {/* Use calculated closing costs */}
+                </Box>
+                
+                <Divider sx={{ my: 1 }} />
+
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2" fontWeight="bold">Total Investment:</Typography>
+                  <Typography variant="body2" fontWeight="bold">{formatCurrency(totalInvestment)}</Typography> {/* Use calculated total investment */}
                 </Box>
               </Box>
             </Paper>
@@ -2502,6 +2555,26 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 </Typography>
                 <Slider value={settings.downPaymentPercent} onChange={handleSettingChange('downPaymentPercent')} aria-labelledby="down-payment-slider" valueLabelDisplay="auto" step={1} min={0} max={100} sx={{ color: '#4f46e5' }} />
               </Box>
+              
+              {/* --- Add Initial Rehab Slider --- */}
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <Tooltip title="Initial rehab costs needed before renting. This amount is added to your total investment when calculating ROI." arrow>
+                    <span>Initial Rehab: {formatCurrency(settings.rehabAmount)}</span>
+                  </Tooltip>
+                </Typography>
+                <Slider 
+                  value={settings.rehabAmount} 
+                  onChange={handleSettingChange('rehabAmount')} 
+                  min={0} 
+                  max={100000} // Increased max to 100k
+                  step={500} 
+                  valueLabelDisplay="auto" 
+                  valueLabelFormat={(value) => formatCurrency(value)}
+                  sx={{ color: '#4f46e5' }} 
+                />
+              </Box>
+              {/* --- End Initial Rehab Slider --- */}
               
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" gutterBottom>
@@ -2802,8 +2875,9 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
               const finalEquity = finalYearData ? finalYearData.equity : 0;
               
               // Assume sale at end of period and use equity as final value
+              // Make sure to use the totalInvestment calculated earlier
               const irr = calculateIRR(
-                property.price * (settings.downPaymentPercent / 100) + property.price * 0.03,
+                totalInvestment, // Use total investment including rehab
                 relevantCashflows,
                 finalEquity
               );
@@ -2850,7 +2924,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
           
           <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #e0e0e0' }}>
             <Typography variant="body2" color="#666">
-              <strong>Assumptions:</strong> IRR calculations include annual cash flows and assume property sale at the end of the holding period with proceeds equal to your equity. Sale costs (agent fees, closing costs, etc.) are not factored in.
+              <strong>Assumptions:</strong> IRR calculations include annual cash flows and assume property sale at the end of the holding period with proceeds equal to your equity. Sale costs (agent fees, closing costs, etc.) are not factored in. Initial rehab cost is included in the initial investment. {/* Added note about rehab cost */}
             </Typography>
           </Box>
         </Box>
