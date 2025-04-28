@@ -67,14 +67,14 @@ function App() {
 
   // Add state for assumptions drawer
   const [isAssumptionsDrawerOpen, setIsAssumptionsDrawerOpen] = useState(false);
-
+  
   // State for FAQ modal
   const [isFaqOpen, setIsFaqOpen] = useState(false); // Restore state
   const [activeFaqSection, setActiveFaqSection] = useState<'general' | 'search' | 'filters' | 'cashflow' | 'bookmarks' | 'details'>('general'); // Restore state
-
+  
   // New state for marketing intro panel - always show
   const [showMarketingIntro] = useState(true);
-
+  
   // Mortgage calculator state
   const [interestRate, setInterestRate] = useState(7.5);
   const [loanTerm, setLoanTerm] = useState(30);
@@ -93,7 +93,7 @@ function App() {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   // --- End Saved Searches State ---
-
+  
   // Pagination state
   const [totalProperties, setTotalProperties] = useState(0);
 
@@ -175,7 +175,7 @@ function App() {
 
   const handleMinPriceFocus = () => {
     // Show raw number (or empty) on focus
-    setDisplayMinPrice(minPrice === '' ? '' : String(minPrice));
+    setDisplayMinPrice(minPrice === '' ? '' : String(minPrice)); 
   };
 
   const handleMaxPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,7 +190,7 @@ function App() {
 
   const handleMaxPriceFocus = () => {
     // Show raw number (or empty) on focus
-    setDisplayMaxPrice(maxPrice === '' ? '' : String(maxPrice));
+    setDisplayMaxPrice(maxPrice === '' ? '' : String(maxPrice)); 
   };
 
   // Function to handle search button click
@@ -224,7 +224,7 @@ function App() {
       } else {
           console.log('No valid Min price filter applied.');
       }
-
+      
       // Parse Max Price
       const parsedMax = typeof maxPrice === 'number' ? maxPrice : parseFloat(String(maxPrice));
       if (!isNaN(parsedMax) && parsedMax > 0) {
@@ -233,7 +233,7 @@ function App() {
       } else {
           console.log('No valid Max price filter applied.');
       }
-
+      
       // Parse Bed Filters - Only Min needed
       const parsedMinBeds = parseInt(minBeds, 10);
       if (!isNaN(parsedMinBeds) && parsedMinBeds >= 0) {
@@ -248,9 +248,9 @@ function App() {
         console.log('Applying Min Baths filter:', minBa);
       }
 
-      // --- REMOVED max >= min check for price ---
+      // --- REMOVED max >= min check for price --- 
       // Note: If API doesn't support min > max, it might return no results or error.
-
+      
       // Define other filters if needed (currently none active)
       const propertyType = 'Houses'; // Example
       const minRatio = null; // Example
@@ -307,7 +307,7 @@ function App() {
               return [...prev, ...newProps];
             });
             // Indicate background processing has started (if not already)
-            if (!isProcessingBackground) setIsProcessingBackground(true);
+            if (!isProcessingBackground) setIsProcessingBackground(true); 
           }
           console.log(`Completed search for page ${page + 1}`);
         } catch (pageError) {
@@ -323,7 +323,7 @@ function App() {
 
       console.log('All page fetches initiated.');
       setInitialLoading(false); // Initial loading complete, background processing continues
-
+      
       // Scroll to results area when initial data loads
       setTimeout(() => {
         const resultsElement = document.querySelector('.property-grid') || document.querySelector('.loading-container');
@@ -336,26 +336,26 @@ function App() {
           console.warn('[App] Results element not found for scrolling');
         }
       }, 300); // Increase timeout to ensure elements are rendered
-
+      
     } catch (err: any) {
       console.error('Search failed:', err);
       if (searchId === currentSearchId.current) { // Only update state if it's the latest search
         setError(err.message || 'Failed to fetch properties. Please check the location and try again.');
         setLoading(false);
-        setInitialLoading(false);
-        setIsProcessingBackground(false);
-        // Scroll to error message
-        setTimeout(() => {
-          const errorElement = document.querySelector('.MuiAlert-root');
-          if (errorElement) {
-            console.log('[App] Scrolling to error message');
-            errorElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            // Add a smaller offset for the error message
-            window.scrollBy(0, -50);
-          } else {
-            console.warn('[App] Error element not found for scrolling');
-          }
-        }, 300); // Increase timeout to ensure elements are rendered
+      setInitialLoading(false);
+      setIsProcessingBackground(false);
+      // Scroll to error message
+      setTimeout(() => {
+        const errorElement = document.querySelector('.MuiAlert-root');
+        if (errorElement) {
+          console.log('[App] Scrolling to error message');
+          errorElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Add a smaller offset for the error message
+          window.scrollBy(0, -50);
+        } else {
+          console.warn('[App] Error element not found for scrolling');
+        }
+      }, 300); // Increase timeout to ensure elements are rendered
       }
     }
   };
@@ -454,13 +454,13 @@ function App() {
     const loanAmount = price - downPayment;
     const monthlyRate = interestRate / 100 / 12;
     const payments = loanTerm * 12;
-
+    
     if (monthlyRate === 0) return loanAmount / payments;
-
+    
     const x = Math.pow(1 + monthlyRate, payments);
     return loanAmount * (monthlyRate * x) / (x - 1);
   };
-
+  
   // Function to calculate cashflow
   // Ensure this uses the imported Property and Cashflow types
   const calculateCashflow = useCallback((property: Property): Cashflow => {
@@ -471,19 +471,19 @@ function App() {
     const monthlyVacancy = rentEstimate * (vacancyPercent / 100);
     const monthlyCapex = rentEstimate * (capexPercent / 100);
     const monthlyPropertyManagement = rentEstimate * (propertyManagementPercent / 100);
-
+    
     const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
     const monthlyCashflow = rentEstimate - totalMonthlyExpenses;
     const annualCashflow = monthlyCashflow * 12;
-
+    
     // Down payment amount plus closing costs (estimated at 3%)
     const initialInvestment = (property.price * (downPaymentPercent / 100)) + (property.price * 0.03);
-    // Add rehab amount to initial investment
+    // Add rehab amount to initial investment 
     const totalInvestment = initialInvestment + rehabAmount;
-
+    
     // Handle division by zero if totalInvestment is 0 or less
     const cashOnCashReturn = totalInvestment > 0 ? annualCashflow / totalInvestment : 0;
-
+    
     return {
       monthlyMortgage,
       monthlyTaxInsurance,
@@ -497,12 +497,12 @@ function App() {
     };
     // Add dependencies based on state variables used inside
   }, [interestRate, loanTerm, downPaymentPercent, taxInsurancePercent, vacancyPercent, capexPercent, propertyManagementPercent, rehabAmount]); 
-
+  
   // Helper function to format percentage
   const formatPercent = (percent: number): string => {
     return `${(percent).toFixed(2)}%`;
   };
-
+  
   // Default settings for PropertyDetailsPage
   const defaultSettings: CashflowSettings = {
     interestRate,
@@ -521,16 +521,16 @@ function App() {
     console.log('[handlePropertyUpdate] Called for property:', updatedProperty?.address);
     if (!updatedProperty || !updatedProperty.property_id) {
       console.error('[handlePropertyUpdate] Received invalid property data.');
-           return;
-       }
-
+      return;
+    }
+    
     setDisplayedProperties(prevProperties => {
       // --- Add Check: Only update if list isn't cleared by new search --- 
       if (prevProperties.length === 0 && searchPerformed) { // Check searchPerformed flag
         console.log('[handlePropertyUpdate] Ignoring update, list is empty (likely new search started).');
         return prevProperties; // Return unchanged state
       }
-
+      
       // Check if property already exists
       const exists = prevProperties.some(p => p.property_id === updatedProperty.property_id);
       if (exists) {
@@ -540,10 +540,10 @@ function App() {
           p.property_id === updatedProperty.property_id ? updatedProperty : p
         );
       } else {
-          // Add the newly completed property
+        // Add the newly completed property
            console.log(`[handlePropertyUpdate] Adding new property: ${updatedProperty.property_id}`);
-          const newPropertyList = [...prevProperties, updatedProperty];
-
+        const newPropertyList = [...prevProperties, updatedProperty];
+        
           // Sort based on current config
           if (sortConfig.key) {
             return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, calculateCashflow);
@@ -559,7 +559,7 @@ function App() {
        const timer = setTimeout(() => {
             if (totalProperties > 0 && currentProperties.length >= totalProperties) {
               console.log('All properties processed. Setting loading states to false.');
-              setLoading(false);
+            setLoading(false);
               setIsProcessingBackground(false);
             } else if (currentProperties.length > 0 && !initialLoading) {
               // Only set background processing if initial loading is complete
@@ -607,12 +607,12 @@ function App() {
           let valB: number | string | null | undefined = null;
 
           if (key === 'ratio') {
-              valA = a.price > 0 ? a.rent_estimate / a.price : 0;
-              valB = b.price > 0 ? b.rent_estimate / b.price : 0;
+          valA = a.price > 0 ? a.rent_estimate / a.price : 0;
+          valB = b.price > 0 ? b.rent_estimate / b.price : 0;
           } else if (key === 'cashflow') {
               valA = calculateCashflowFn(a).monthlyCashflow;
               valB = calculateCashflowFn(b).monthlyCashflow;
-          } else {
+        } else {
               valA = a[key as keyof Property];
               valB = b[key as keyof Property];
           }
@@ -627,7 +627,7 @@ function App() {
           // Comparison
           if (valA < valB) return direction === 'asc' ? -1 : 1;
           if (valA > valB) return direction === 'asc' ? 1 : -1;
-          return 0;
+        return 0;
       });
       return sorted;
   };
@@ -638,36 +638,36 @@ function App() {
 
   // --- Rent Estimate Handling ---
   const handleRentEstimateChange = useCallback((propertyId: string, newRentString: string) => {
-      const newRent = parseFloat(newRentString.replace(/[^\d.]/g, '')); // Clean and parse
+    const newRent = parseFloat(newRentString.replace(/[^\d.]/g, '')); // Clean and parse
 
-      if (isNaN(newRent) || newRent < 0) {
-          console.warn(`[handleRentEstimateChange] Invalid rent value entered: ${newRentString}`);
-          return;
-      }
+    if (isNaN(newRent) || newRent < 0) {
+      console.warn(`[handleRentEstimateChange] Invalid rent value entered: ${newRentString}`);
+      return;
+    }
 
-      console.log(`[handleRentEstimateChange] Updating rent for ${propertyId} to ${newRent}`);
-      setDisplayedProperties(prev =>
-          prev.map(p =>
-              p.property_id === propertyId
-                  ? { ...p, rent_estimate: newRent } // Update the rent estimate
-                  : p
-          )
-      );
+    console.log(`[handleRentEstimateChange] Updating rent for ${propertyId} to ${newRent}`);
+    setDisplayedProperties(prev =>
+      prev.map(p =>
+        p.property_id === propertyId
+          ? { ...p, rent_estimate: newRent } // Update the rent estimate
+          : p
+      )
+    );
   }, []); // No dependencies needed
-
+  
   // --- FAQ Handlers ---
   const handleOpenFaq = () => {
     setIsFaqOpen(true);
   };
-
+  
   const handleCloseFaq = () => {
     setIsFaqOpen(false);
   };
-
+  
   const handleFaqSectionChange = (section: string) => {
     setActiveFaqSection(section as 'general' | 'search' | 'filters' | 'cashflow' | 'bookmarks' | 'details');
   };
-
+  
   // --- Other UI Handlers ---
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -702,69 +702,70 @@ function App() {
     setIsAssumptionsDrawerOpen(open);
   };
 
-
+  
   return (
-    <div className="app-container"> {/* Changed from App to app-container for consistency */} 
-      {/* Ensure header is outside Routes if it should persist */}
-      <header className="app-header">
-         <div className="container">
-           <div className="header-content">
-             <div>
-               <Typography
-                 className="app-title"
-                 variant="h4"
-                 component="h1"
-                 sx={{
-                   cursor: 'pointer',
-                   display: 'inline-flex',
-                   alignItems: 'center',
-                   '&:hover': { opacity: 0.9 }
-                 }}
-                 onClick={() => window.location.href = '#/'}
-               >
-                 {/* Replace HomeWorkIcon with img tag */}
-                 <img src={process.env.PUBLIC_URL + '/logo-optimized.png'} alt="CashflowCrunch Logo" style={{ height: '40px', width: '40px', marginRight: '8px', verticalAlign: 'middle' }} /> {/* Use optimized logo */}
-                 CashflowCrunch
-               </Typography>
-               <Typography className="app-subtitle" variant="subtitle1" component="p">
-                 Find properties with investment potential
-               </Typography>
-             </div>
-             <div className="header-actions">
-               <Button
-                 variant="outlined"
-                 onClick={handleOpenFaq}
-                 className="help-button"
-                 startIcon={<HelpOutlineIcon />}
-                 sx={{ mr: 2 }}
-               >
-                 FAQ
-               </Button>
-               <Button
-                 variant="outlined"
-                 component="a"
-                 href="#/bookmarks"
-                 className="bookmarks-button"
-                 startIcon={<BookmarkIcon />}
-               >
-                 Bookmarks
-               </Button>
-             </div>
-           </div>
-         </div>
-       </header>
+    <div className="app-container"> 
+      {/* --- Header Removed from here --- */}
 
       <Routes>
         <Route path="/" element={
           <>
-            {/* Removed duplicate header */}
+            {/* --- Header Moved inside the root route element --- */}
+            <header className="app-header">
+              <div className="container">
+                <div className="header-content">
+                  <div>
+                    <Typography 
+                      className="app-title" 
+                      variant="h4" 
+                      component="h1"
+                      sx={{ 
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        '&:hover': { opacity: 0.9 }
+                      }}
+                      onClick={() => window.location.href = '#/'}
+                    >
+                       <img src={process.env.PUBLIC_URL + '/logo-optimized.png'} alt="CashflowCrunch Logo" style={{ height: '40px', width: '40px', marginRight: '8px', verticalAlign: 'middle' }} />
+                      CashflowCrunch
+      </Typography>
+                    <Typography className="app-subtitle" variant="subtitle1" component="p">
+                      Find properties with investment potential
+                    </Typography>
+                  </div>
+                  <div className="header-actions">
+                    <Button 
+                      variant="outlined" 
+                      onClick={handleOpenFaq}
+                      className="help-button"
+                      startIcon={<HelpOutlineIcon />}
+                      sx={{ mr: 2 }}
+                    >
+                       FAQ
+                    </Button>
+                    <Button 
+                      variant="outlined" 
+                      component="a"
+                      href="#/bookmarks"
+                      className="bookmarks-button"
+                      startIcon={<BookmarkIcon />}
+                    >
+                      Bookmarks
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </header>
+            
+            {/* --- Rest of the root route content --- */}
             <Container maxWidth="lg" sx={{ py: 3 }}>
               {/* Marketing intro section */}
               {showMarketingIntro && (
-                <Paper
-                  elevation={3}
-                  sx={{
-                    mb: 4,
+                <Paper 
+                  elevation={3} 
+                  sx={{ 
+                    mb: 4, 
                     borderRadius: 3,
                     overflow: 'hidden',
                     position: 'relative',
@@ -773,92 +774,92 @@ function App() {
                   }}
                 >
                   {/* Colored stripe at the top */}
-                  <Box
-                    sx={{
-                      height: '5px',
+                  <Box 
+                    sx={{ 
+                      height: '5px', 
                       background: 'linear-gradient(90deg, #4f46e5, #6366f1, #818cf8)'
-                    }}
+                    }} 
                   />
-
+                  
                   {/* Main content */}
-                  <Box
-                    sx={{
-                      display: 'flex',
+                  <Box 
+                    sx={{ 
+                      display: 'flex', 
                       flexDirection: { xs: 'column', md: 'row' },
                       alignItems: 'center'
                     }}
                   >
                     {/* Left side content */}
-                    <Box
-                      sx={{
-                        p: 4,
+                    <Box 
+                      sx={{ 
+                        p: 4, 
                         flex: '1.5',
                         position: 'relative',
                         zIndex: 1
                       }}
                     >
-                      <Typography
-                        variant="h3"
-                        fontWeight="bold"
-                        sx={{
-                          mb: 2,
+                      <Typography 
+                        variant="h3" 
+                        fontWeight="bold" 
+                        sx={{ 
+                          mb: 2, 
                           color: '#1f2937',
                           fontSize: { xs: '1.75rem', sm: '2.25rem', md: '2.5rem' }
                         }}
                       >
                         Find Your Ideal
-                        <Box
-                          component="span"
-                          sx={{
+                        <Box 
+                          component="span" 
+                          sx={{ 
                             color: '#4f46e5',
-                            display: 'block'
+                            display: 'block' 
                           }}
                         >
                           Investment Property
                         </Box>
                       </Typography>
-
-                      <Typography
-                        variant="body1"
-                        sx={{
-                          mb: 3,
+                      
+                      <Typography 
+                        variant="body1" 
+                        sx={{ 
+                          mb: 3, 
                           color: '#4b5563',
                           lineHeight: 1.6,
                           maxWidth: '500px'
                         }}
                       >
-                        CashflowCrunch helps you discover and analyze potential real estate investments in seconds.
-                        Get detailed cash flow analysis, long-term equity projections, and returns on investment
+                        CashflowCrunch helps you discover and analyze potential real estate investments in seconds. 
+                        Get detailed cash flow analysis, long-term equity projections, and returns on investment 
                         for properties in any location.
                       </Typography>
-
-                      <Box
-                        sx={{
-                          display: 'flex',
+                      
+                      <Box 
+                        sx={{ 
+                          display: 'flex', 
                           flexDirection: { xs: 'column', sm: 'row' },
                           gap: 2,
                           mt: 3
                         }}
                       >
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
+                        <Box 
+                          sx={{ 
+                            display: 'flex', 
+                            alignItems: 'flex-start', 
                             p: 2,
                             borderRadius: 2,
                             background: 'rgba(79, 70, 229, 0.05)',
                             border: '1px solid rgba(79, 70, 229, 0.1)'
                           }}
                         >
-                          <Box
-                            sx={{
-                              width: 40,
-                              height: 40,
+                          <Box 
+                            sx={{ 
+                              width: 40, 
+                              height: 40, 
                               borderRadius: 2,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              bgcolor: '#4f46e5',
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              bgcolor: '#4f46e5', 
                               mr: 2,
                               flexShrink: 0
                             }}
@@ -874,26 +875,26 @@ function App() {
                             </Typography>
                           </Box>
                         </Box>
-
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
+                        
+                        <Box 
+                          sx={{ 
+                            display: 'flex', 
+                            alignItems: 'flex-start', 
                             p: 2,
                             borderRadius: 2,
                             background: 'rgba(79, 70, 229, 0.05)',
                             border: '1px solid rgba(79, 70, 229, 0.1)'
                           }}
                         >
-                          <Box
-                            sx={{
-                              width: 40,
-                              height: 40,
+                          <Box 
+                            sx={{ 
+                              width: 40, 
+                              height: 40, 
                               borderRadius: 2,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              bgcolor: '#4f46e5',
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              bgcolor: '#4f46e5', 
                               mr: 2,
                               flexShrink: 0
                             }}
@@ -911,10 +912,10 @@ function App() {
                         </Box>
                       </Box>
                     </Box>
-
+                    
                     {/* Right side image/graphic element */}
-                    <Box
-                      sx={{
+                    <Box 
+                      sx={{ 
                         flex: '1',
                         position: 'relative',
                         display: { xs: 'none', md: 'block' },
@@ -945,7 +946,7 @@ function App() {
                             background: 'repeating-linear-gradient(45deg, #ffffff, #ffffff 10px, transparent 10px, transparent 20px)'
                           }}
                         />
-
+                        
                         <Box sx={{ position: 'relative', zIndex: 1, p: 4, color: 'white', textAlign: 'center' }}>
                           {/* Replace HomeWorkIcon and text with img tag */}
                           <img src={process.env.PUBLIC_URL + '/logo-optimized.png'} alt="CashflowCrunch Logo" style={{ height: '200px', width: '200px', marginBottom: '16px' }} /> {/* Use optimized logo */}
@@ -962,7 +963,7 @@ function App() {
                   </Box>
                 </Paper>
               )}
-
+              
               {/* Search Controls (Moved inside Container) */}
               <Paper elevation={2} sx={{ p: { xs: 2, sm: 3 }, mb: 4, borderRadius: 2 }}>
                 <Typography variant="h5" component="h2" gutterBottom fontWeight="medium">
@@ -973,36 +974,36 @@ function App() {
                   {/* Input fields row - Allow wrapping */}
                   <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 1, sm: 2 }, flexWrap: 'wrap' }}> {/* Reduced gap on xs */}
                      {/* Location Input - Allow grow */}
-                    <TextField
+        <TextField
                       label="Location (City, State or Zip Code)"
                       variant="outlined"
-                      value={location}
-                      onChange={(e) => setLocation(e.target.value)}
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
                       required
                       // Apply flex only for sm+, use width for xs
                       sx={{ width: { xs: '100%' }, flex: { sm: '1 1 300px' }, mt: { xs: 0 }, mb: { xs: 0 } }} 
                     />
-                    {/* Price filters */}
+                  {/* Price filters */}
                     {/* Apply flex only for sm+, use width for xs */}
                     <Box sx={{ display: 'flex', gap: 2, width: { xs: '100%' }, flex: { sm: '1 1 250px' }, mt: { xs: 0 }, mb: { xs: 0 } }}> 
-                        <TextField
-                          label="Min Price"
-                          value={displayMinPrice}
-                          onChange={handleMinPriceChange}
-                          onBlur={handleMinPriceBlur}
-                          onFocus={handleMinPriceFocus}
-                          variant="outlined"
-                          size="medium"
+                    <TextField
+                      label="Min Price"
+                      value={displayMinPrice}
+                      onChange={handleMinPriceChange}
+                      onBlur={handleMinPriceBlur}
+                      onFocus={handleMinPriceFocus}
+                      variant="outlined"
+                      size="medium"
                           sx={{ flex: 1 }} // Equal width within this group
-                        />
-                        <TextField
-                          label="Max Price"
-                          value={displayMaxPrice}
-                          onChange={handleMaxPriceChange}
-                          onBlur={handleMaxPriceBlur}
-                          onFocus={handleMaxPriceFocus}
-                          variant="outlined"
-                          size="medium"
+                    />
+                    <TextField
+                      label="Max Price"
+                      value={displayMaxPrice}
+                      onChange={handleMaxPriceChange}
+                      onBlur={handleMaxPriceBlur}
+                      onFocus={handleMaxPriceFocus}
+                      variant="outlined"
+                      size="medium"
                           sx={{ flex: 1 }} // Equal width within this group
                         />
                     </Box>
@@ -1010,47 +1011,47 @@ function App() {
                     {/* Apply flex only for sm+, use width for xs */}
                     <Box sx={{ display: 'flex', gap: 2, width: { xs: '100%' }, flex: { sm: '1 1 250px' }, mt: { xs: 0 }, mb: { xs: 0 } }}> 
                       <FormControl size="medium" sx={{ minWidth: 120, flex: 1, mt: { xs: 0 }, mb: { xs: 0 } }}> {/* Remove xs margins */}
-                          <InputLabel id="min-beds-label">Min Beds</InputLabel>
-                          <Select
-                            labelId="min-beds-label"
-                            value={minBeds}
-                            label="Min Beds"
-                            onChange={(e) => setMinBeds(e.target.value)}
-                          >
+                    <InputLabel id="min-beds-label">Min Beds</InputLabel>
+                    <Select
+                      labelId="min-beds-label"
+                      value={minBeds}
+                      label="Min Beds"
+                      onChange={(e) => setMinBeds(e.target.value)}
+                    >
                             <MenuItem value="0"><em>Any</em></MenuItem>
                             <MenuItem value="1">1+</MenuItem>
                             <MenuItem value="2">2+</MenuItem>
                             <MenuItem value="3">3+</MenuItem>
                             <MenuItem value="4">4+</MenuItem>
                             <MenuItem value="5">5+</MenuItem>
-                          </Select>
-                        </FormControl>
+                    </Select>
+                  </FormControl>
 
                         <FormControl size="medium" sx={{ minWidth: 120, flex: 1, mt: { xs: 0 }, mb: { xs: 0 } }}> {/* Remove xs margins */}
-                          <InputLabel id="min-baths-label">Min Baths</InputLabel>
-                          <Select
-                            labelId="min-baths-label"
-                            value={minBaths}
-                            label="Min Baths"
-                            onChange={(e) => setMinBaths(e.target.value)}
-                          >
+                    <InputLabel id="min-baths-label">Min Baths</InputLabel>
+                    <Select
+                      labelId="min-baths-label"
+                      value={minBaths}
+                      label="Min Baths"
+                      onChange={(e) => setMinBaths(e.target.value)}
+                    >
                             <MenuItem value="0"><em>Any</em></MenuItem>
                             <MenuItem value="1">1+</MenuItem>
                             <MenuItem value="1.5">1.5+</MenuItem>
                             <MenuItem value="2">2+</MenuItem>
                             <MenuItem value="3">3+</MenuItem>
                             <MenuItem value="4">4+</MenuItem>
-                          </Select>
-                        </FormControl>
+                    </Select>
+                  </FormControl>
                       </Box>
                    </Box> 
                   
                   {/* Buttons row - Center align items */}
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap', flexDirection: 'column', alignItems: 'center' }}>
                     {/* Main Search Button */}
-                    <Button
-                      type="submit"
-                      variant="contained"
+        <Button 
+                    type="submit"
+          variant="contained" 
                       startIcon={<SearchIcon />}
                       size="large"
                       disabled={loading}
@@ -1058,7 +1059,7 @@ function App() {
                       sx={{ height: '56px', whiteSpace: 'nowrap', px: 3, order: 1, width: { xs: '100%', sm: 'auto' } }} // Order first now
                     >
                       {loading ? <CircularProgress size={24} color="inherit" /> : 'Crunch Properties'}
-                    </Button>
+        </Button>
 
                     {/* Save/Load Text Buttons Below */}
                     <Box sx={{ display: 'flex', gap: 1, order: 2, mt: 1 }}> {/* Order second now, add margin top */}
@@ -1092,7 +1093,7 @@ function App() {
                             </Button>
                          </span>
                       </Tooltip>
-                    </Box>
+      </Box>
                   </Box>
                 </Box> { /* End of main form Box */ }
               </Paper>
@@ -1167,10 +1168,10 @@ function App() {
                   message={snackbarMessage}
                   anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
               />
-
+              
               {/* Assumptions Tab */}
               <Tooltip title="Adjust mortgage and cashflow assumptions" placement="left">
-                <div
+                <div 
                   className="assumptions-tab"
                   onClick={() => setIsAssumptionsDrawerOpen(!isAssumptionsDrawerOpen)}
                   style={{
@@ -1191,9 +1192,9 @@ function App() {
                     transition: 'right 225ms cubic-bezier(0, 0, 0.2, 1) 0ms'
                   }}>
                   <TuneIcon />
-                  <span style={{
-                    writingMode: 'vertical-rl',
-                    textOrientation: 'mixed',
+                  <span style={{ 
+                    writingMode: 'vertical-rl', 
+                    textOrientation: 'mixed', 
                     transform: 'rotate(180deg)',
                     marginTop: '8px',
                     fontWeight: 'bold',
@@ -1202,7 +1203,7 @@ function App() {
                   }}>Assumptions</span>
                 </div>
               </Tooltip>
-
+              
               {/* Assumptions Drawer */}
               <Drawer
                 anchor="right"
@@ -1241,10 +1242,10 @@ function App() {
                   }
                 }}
               >
-                <Typography variant="h6" fontWeight="medium" gutterBottom>
+                <Typography variant="h6" fontWeight="medium" gutterBottom> 
                   Mortgage & Cashflow Assumptions
             </Typography>
-
+            
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>Interest Rate: {interestRate}%</Typography>
               <Slider
@@ -1258,7 +1259,7 @@ function App() {
                     sx={{ color: '#4f46e5' }}
               />
             </Box>
-
+            
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>Loan Term: {loanTerm} years</Typography>
               <Slider
@@ -1272,7 +1273,7 @@ function App() {
                     sx={{ color: '#4f46e5' }}
               />
             </Box>
-
+            
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>Down Payment: {downPaymentPercent}%</Typography>
               <Slider
@@ -1306,7 +1307,7 @@ function App() {
                  />
                </Box>
                {/* --- End Initial Rehab Slider --- */}
-
+            
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>Property Tax & Insurance: {taxInsurancePercent}%</Typography>
               <Slider
@@ -1320,7 +1321,7 @@ function App() {
                     sx={{ color: '#4f46e5' }}
               />
             </Box>
-
+            
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>Vacancy: {vacancyPercent}%</Typography>
               <Slider
@@ -1334,7 +1335,7 @@ function App() {
                     sx={{ color: '#4f46e5' }}
               />
             </Box>
-
+            
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>CapEx: {capexPercent}%</Typography>
               <Slider
@@ -1348,7 +1349,7 @@ function App() {
                     sx={{ color: '#4f46e5' }}
               />
             </Box>
-
+                
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>Property Management: {propertyManagementPercent}%</Typography>
                   <Slider
@@ -1364,14 +1365,14 @@ function App() {
           </Box>
 
               </Drawer>
-
+              
               {/* Property Results Section */}
               {error && (
                 <Alert severity="error" sx={{ mt: 2 }}>
                   {error}
                 </Alert>
               )}
-
+              
             {initialLoading ? (
               <Box className="loading-container">
                   <CircularProgress className="loading-spinner" />
@@ -1412,7 +1413,7 @@ function App() {
                           <MenuItem value="days_on_market">Days on Market</MenuItem>
                         </Select>
                       </FormControl>
-                      <IconButton
+                      <IconButton 
                         onClick={() => setSortConfig(prev => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))}
                       color="primary"
                         disabled={!sortConfig.key}
@@ -1421,7 +1422,7 @@ function App() {
                       </IconButton>
                   </Box>
                 </Box>
-
+                
                   <div className="property-grid">
                     {sortedProperties.map((property) => {
                       // Calculate cashflow using current assumptions from state
@@ -1443,30 +1444,30 @@ function App() {
                       const score = calculateCrunchScore(property, currentSettings, cashflow);
                       
                       return (
-                        <PropertyCard
-                          key={property.property_id}
-                          property={property}
+                      <PropertyCard
+                        key={property.property_id}
+                        property={property}
                           calculateCashflow={calculateCashflow} // Pass down the memoized calculateCashflow
-                          formatCurrency={formatCurrency}
-                          formatPercent={formatPercent}
+                  formatCurrency={formatCurrency}
+                  formatPercent={formatPercent}
                           vacancyPercent={vacancyPercent} // Still needed for display in share summary
                           capexPercent={capexPercent}     // Still needed for display in share summary
                           downPaymentPercent={downPaymentPercent} // Still needed for display
                           propertyManagementPercent={propertyManagementPercent} // Still needed for display
-                          handleRentEstimateChange={handleRentEstimateChange}
+                        handleRentEstimateChange={handleRentEstimateChange}
                           crunchScore={score} // Pass the calculated score
-                        />
+                      />
                       );
                     })}
                   </div>
-
+                  
                   {isProcessingBackground && (
                     <Box className="loading-container" sx={{ py: 2 }}>
                       <CircularProgress size={30} className="loading-spinner" />
                       <Typography className="loading-message">
                         Loading & Processing More Properties...
                       </Typography>
-                    </Box>
+                </Box>
                   )}
                 </>
               ) : searchPerformed && (loading || isProcessingBackground) ? (
@@ -1475,9 +1476,9 @@ function App() {
                   <Typography className="loading-message">
                     Loading & Processing Properties...
               </Typography>
-            </Box>
+          </Box>
               ) : null}
-
+              
               {/* FAQ Modal */}
               <Modal
                 open={isFaqOpen}
@@ -1494,57 +1495,57 @@ function App() {
                     <Typography id="faq-modal-title" className="faq-title">
                       Help & Frequently Asked Questions
                     </Typography>
-                    <IconButton
-                      edge="end"
-                      color="inherit"
-                      onClick={handleCloseFaq}
+                    <IconButton 
+                      edge="end" 
+                      color="inherit" 
+                      onClick={handleCloseFaq} 
                       aria-label="close"
                     >
                       <CloseIcon />
                     </IconButton>
                   </div>
-
+                  
                   <div className="faq-content">
                     {/* FAQ Navigation */}
                     <div className="faq-nav">
-                      <div
+                      <div 
                         className={`faq-nav-item ${activeFaqSection === 'general' ? 'active' : ''}`}
                         onClick={() => handleFaqSectionChange('general')}
                       >
                         General
                       </div>
-                      <div
+                      <div 
                         className={`faq-nav-item ${activeFaqSection === 'search' ? 'active' : ''}`}
                         onClick={() => handleFaqSectionChange('search')}
                       >
                         Searching & Sorting
                       </div>
-                      <div
+                      <div 
                         className={`faq-nav-item ${activeFaqSection === 'filters' ? 'active' : ''}`}
                         onClick={() => handleFaqSectionChange('filters')}
                       >
                         Filters & Assumptions
                       </div>
-                      <div
+                      <div 
                         className={`faq-nav-item ${activeFaqSection === 'cashflow' ? 'active' : ''}`}
                         onClick={() => handleFaqSectionChange('cashflow')}
                       >
                         Cashflow & Scoring
                       </div>
-                      <div
+                      <div 
                         className={`faq-nav-item ${activeFaqSection === 'bookmarks' ? 'active' : ''}`}
                         onClick={() => handleFaqSectionChange('bookmarks')}
                       >
                         Bookmarks
                       </div>
-                      <div
+                      <div 
                         className={`faq-nav-item ${activeFaqSection === 'details' ? 'active' : ''}`}
                         onClick={() => handleFaqSectionChange('details')}
                       >
                         Property Details & Sharing
                       </div>
                     </div>
-
+                    
                     {/* FAQ Content Container */} 
                     <div className="faq-sections-container">
                       {/* General FAQ Section */}
@@ -1556,14 +1557,14 @@ function App() {
                               CashflowCrunch helps you quickly find and analyze potential rental investment properties. It fetches current listings, estimates rent, and calculates potential cash flow and returns based on your customizable assumptions.
                             </div>
                           </div>
-
+                          
                           <div className="faq-section">
                             <div className="faq-question">How does it work?</div>
                             <div className="faq-answer">
                               Enter a location and optionally refine your search with price, beds, and baths filters. CashflowCrunch searches for matching properties, fetches details, estimates rent, and calculates financial metrics like cash flow and Cash-on-Cash return using the assumptions you set in the slide-out panel. Results are displayed as property cards, sorted by default by the "Crunch Score".
                             </div>
                           </div>
-
+                          
                           <div className="faq-section">
                             <div className="faq-question">Is the data accurate?</div>
                             <div className="faq-answer">
@@ -1572,7 +1573,7 @@ function App() {
                           </div>
                         </div>
                       )}
-
+                      
                       {/* Search & Sorting FAQ Section */}
                       {activeFaqSection === 'search' && (
                         <div>
@@ -1582,15 +1583,15 @@ function App() {
                               Enter a location (City, State, or Zip Code) in the main search bar and click "Crunch Properties". You can further refine your search using the price range, minimum beds, and minimum baths filters before searching.
                             </div>
                           </div>
-
+                          
                           <div className="faq-section">
                             <div className="faq-question">Why does searching take time?</div>
                             <div className="faq-answer">
                               CashflowCrunch processes potentially hundreds of properties for your location. It first fetches basic details quickly, then works in the background to get rent estimates and calculate detailed financials for each property. The results update progressively as this background processing completes.
                             </div>
                           </div>
-
-                           <div className="faq-section">
+                          
+                          <div className="faq-section">
                             <div className="faq-question">How can I save and load searches?</div>
                             <div className="faq-answer">
                               After entering search criteria (location, price, beds, baths), click "Save Search". Give it a name, and it will be stored in your browser. Click "Load Search" to see your saved searches, load the criteria back into the form, and automatically run the search again.
@@ -1615,7 +1616,7 @@ function App() {
                           </div>
                         </div>
                       )}
-
+                      
                       {/* Filters & Assumptions FAQ Section */}
                       {activeFaqSection === 'filters' && (
                         <div>
@@ -1652,7 +1653,7 @@ function App() {
                           </div>
                         </div>
                       )}
-
+                      
                       {/* Cashflow & Scoring FAQ Section */}
                       {activeFaqSection === 'cashflow' && (
                         <div>
@@ -1667,7 +1668,7 @@ function App() {
                               </ul>
                             </div>
                           </div>
-
+                          
                            {/* NEW CRUNCH SCORE SECTION */} 
                           <div className="faq-section">
                             <div className="faq-question">What is the "Crunch Score"?</div>
@@ -1684,7 +1685,7 @@ function App() {
                               It provides a more holistic view than just the rent-to-price ratio alone. Remember that adjusting your assumptions in the slide-out panel will change the Crunch Score!
                             </div>
                           </div>
-
+                          
                           <div className="faq-section">
                             <div className="faq-question">How do I interpret the Rent-to-Price Ratio?</div>
                             <div className="faq-answer">
@@ -1695,7 +1696,7 @@ function App() {
                               Focus on the Crunch Score and detailed cashflow analysis for a better picture.
                             </div>
                           </div>
-
+                          
                           <div className="faq-section">
                             <div className="faq-question">Can I edit the rent estimate on the card?</div>
                             <div className="faq-answer">
@@ -1704,7 +1705,7 @@ function App() {
                           </div>
                         </div>
                       )}
-
+                      
                       {/* Bookmarks FAQ Section */}
                       {activeFaqSection === 'bookmarks' && (
                         <div>
@@ -1714,14 +1715,14 @@ function App() {
                               Go to a property's detailed page (by clicking the address or "Deep Dive" link on a card). On the details page, click the "Bookmark" button in the header. This saves the property, including the specific assumptions and notes you had at that moment.
                             </div>
                           </div>
-
+                          
                           <div className="faq-section">
                             <div className="faq-question">Where can I find my bookmarked properties?</div>
                             <div className="faq-answer">
                               Click the "Bookmarks" button in the top navigation bar. This page displays all your saved properties with the analysis based on the assumptions *at the time they were bookmarked*.
                             </div>
                           </div>
-
+                          
                           <div className="faq-section">
                             <div className="faq-question">What information is saved in a bookmark?</div>
                             <div className="faq-answer">
@@ -1734,14 +1735,14 @@ function App() {
                               </ul>
                             </div>
                           </div>
-
+                          
                           <div className="faq-section">
                             <div className="faq-question">How do I remove a property from my bookmarks?</div>
                             <div className="faq-answer">
                               From the Bookmarks page, click the "Remove" button on the property card.
                             </div>
                           </div>
-
+                          
                           <div className="faq-section">
                             <div className="faq-question">Are my bookmarks saved if I close the browser?</div>
                             <div className="faq-answer">
@@ -1807,15 +1808,15 @@ function App() {
                   </div>
                 </Paper>
               </Modal>
-            </Container>
+    </Container>
           </>
         } />
-
+        
         {/* Property Details Route */}
-        <Route
-          path="/property/:propertyId"
+        <Route 
+          path="/property/:propertyId" 
           element={
-            <PropertyDetailsPage
+            <PropertyDetailsPage 
               properties={displayedProperties}
               calculateCashflow={(property, settings) => {
                 // Create a function that uses the settings passed in instead of the global state
@@ -1825,18 +1826,18 @@ function App() {
                   const monthlyVacancy = property.rent_estimate * (settings.vacancyPercent / 100);
                   const monthlyCapex = property.rent_estimate * (settings.capexPercent / 100);
                   const monthlyPropertyManagement = property.rent_estimate * (settings.propertyManagementPercent / 100);
-
+                  
                   const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
                   const monthlyCashflow = property.rent_estimate - totalMonthlyExpenses;
                   const annualCashflow = monthlyCashflow * 12;
-
+                  
                   // Down payment plus closing costs
                   const initialInvestment = (property.price * (settings.downPaymentPercent / 100)) + (property.price * 0.03);
                   // Add rehab amount to initial investment
                   const totalInvestment = initialInvestment + settings.rehabAmount;
-
+                  
                   const cashOnCashReturn = annualCashflow / totalInvestment;
-
+                  
                   return {
                     monthlyMortgage,
                     monthlyTaxInsurance,
@@ -1849,20 +1850,20 @@ function App() {
                     cashOnCashReturn
                   };
                 };
-
+                
                 // Helper function to calculate mortgage with specific settings
                 function calculateMortgageWithSettings(price: number, settings: CashflowSettings): number {
                   const downPayment = price * (settings.downPaymentPercent / 100);
                   const loanAmount = price - downPayment;
                   const monthlyRate = settings.interestRate / 100 / 12;
                   const payments = settings.loanTerm * 12;
-
+                  
                   if (monthlyRate === 0) return loanAmount / payments;
-
+                  
                   const x = Math.pow(1 + monthlyRate, payments);
                   return loanAmount * (monthlyRate * x) / (x - 1);
                 }
-
+                
                 const propertyForCashflow = {
                   ...property,
                   rent_source: property.rent_source ?? "calculated", // Default to 'calculated' if undefined
@@ -1873,13 +1874,13 @@ function App() {
               formatPercent={formatPercent}
               defaultSettings={defaultSettings}
             />
-          }
+          } 
         />
-
+        
         {/* Bookmarks Route */}
-        <Route
-          path="/bookmarks"
-          element={<BookmarksPage />}
+        <Route 
+          path="/bookmarks" 
+          element={<BookmarksPage />} 
         />
       </Routes>
     </div>

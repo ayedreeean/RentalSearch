@@ -4,11 +4,16 @@
     "@types/leaflet": "^1.9.17",
     "chart.js": "^4.4.8",
     "leaflet": "^1.9.4",
+    "react": "^18.3.1",
     "react-chartjs-2": "^5.3.0",
+    "react-dom": "^18.3.1",
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.5.0",
     "recharts": "^2.15.2",
     "victory": "^37.3.6"
   },
-  "homepage": "https://ayedreeean.github.io/CashflowCrunch/"
+  "homepage": "https://ayedreeean.github.io/CashflowCrunch/",
+  "devDependencies": {
+    "gh-pages": "^6.3.0"
+  }
 }

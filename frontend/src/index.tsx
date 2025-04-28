@@ -5,6 +5,7 @@ import './index.css';
 import App from './App';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { ToolsProvider } from './context/ToolsContext';
 
 const theme = createTheme({
   palette: {
@@ -42,7 +43,9 @@ root.render(
     <HashRouter>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <App />
+        <ToolsProvider>
+          <App />
+        </ToolsProvider>
       </ThemeProvider>
     </HashRouter>
   </React.StrictMode>

@@ -5,7 +5,7 @@ import {
   Button, Paper, Divider, IconButton, TextField, Alert, Tooltip, 
   CssBaseline, Grid, InputAdornment, Slider, Link as MuiLink,
   Tabs, Tab, useMediaQuery, useTheme, Card, CardContent, Dialog, DialogContent, DialogTitle, DialogActions,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Snackbar
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -21,9 +21,10 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { usePDF } from 'react-to-pdf';
 import { QRCodeSVG } from 'qrcode.react';
-import HomeWorkIcon from '@mui/icons-material/HomeWork';
+import HomeWorkIcon from '@mui/icons-material/HomeWork'; // Ensure this is imported if used
 import Drawer from '@mui/material/Drawer';
 import CashflowSankeyChart from '../components/CashflowSankeyChart';
+import { calculateCrunchScore } from '../utils/scoring'; // Moved import higher
 
 interface PropertyDetailsPageProps {
   properties: Property[];
@@ -679,9 +680,9 @@ const PropertyMap = ({
         zoom={15} 
         style={{ height: '100%', width: '100%' }}
         scrollWheelZoom={false}
+        {...({} as any)} // Suppress TS error for 'center'/'zoom'
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <Marker position={coordinates}>
@@ -1136,6 +1137,20 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   // Calculate cashflow using current settings
   const cashflow = propertyForCashflow ? calculateCashflow(propertyForCashflow, settings) : null;
   
+  // --- Calculate Crunch Score (Moved Higher) --- 
+  const crunchScore = property && cashflow ? calculateCrunchScore(property, settings, cashflow) : 0;
+
+  // --- Define Crunch Score CSS class based on score (Moved Higher) --- 
+  const getCrunchScoreClass = (score: number): string => {
+    if (score >= 65) return 'crunch-score-good';
+    if (score >= 45) return 'crunch-score-medium';
+    return 'crunch-score-poor';
+  };
+  const crunchScoreClass = getCrunchScoreClass(crunchScore);
+
+  // --- Tooltip Text (Moved Higher) --- 
+  const crunchScoreTooltip = "Overall investment potential (0-100) based on cash flow, rent/price ratio, and your assumptions (higher is better).";
+
   // Create RentCast URL
   const rentCastUrl = property ? `https://app.rentcast.io/app?address=${encodeURIComponent(property.address)}` : '#';
   
@@ -2276,11 +2291,22 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
             <Typography variant="h5" component="div" fontWeight="bold">
               {formatCurrency(property.price)}
             </Typography>
+            
+            {/* === Replace Ratio Pill with Crunch Score Pill START === */}
+            {/* Original Ratio Code:
             <span className={`ratio-chip ${property.ratio >= 0.007 ? 'ratio-good' : property.ratio >= 0.004 ? 'ratio-medium' : 'ratio-poor'}`}>
               Ratio: {formatPercent(property.ratio * 100)}
             </span>
+            */}
+            <Tooltip title={crunchScoreTooltip} arrow>
+               <span className={`crunch-score-chip ${crunchScoreClass}`}> {/* Use existing chip classes + new ones */} 
+                 Crunch Score: {crunchScore}
+               </span>
+            </Tooltip>
+            {/* === Replace Ratio Pill with Crunch Score Pill END === */} 
+            
             {property.days_on_market !== null && (
-              <span className="days-on-market ratio-chip">
+              <span className="days-on-market ratio-chip"> {/* Keep ratio-chip class for styling */} 
                 {property.days_on_market} days on market
               </span>
             )}
