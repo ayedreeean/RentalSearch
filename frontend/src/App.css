@@ -222,19 +222,19 @@ a:hover {
   font-weight: 600;
 }
 
-.ratio-good {
+.ratio-good, .crunch-score-good {
   background-color: #dcfce7;
-  color: #166534;
+  color: #16a34a;
 }
 
-.ratio-medium {
-  background-color: #fef3c7;
-  color: #b45309;
+.ratio-medium, .crunch-score-medium {
+  background-color: #ffedd5;
+  color: #f97316;
 }
 
-.ratio-poor {
+.ratio-poor, .crunch-score-poor {
   background-color: #fee2e2;
-  color: #b91c1c;
+  color: #dc2626;
 }
 
 .rent-source {
@@ -598,4 +598,29 @@ a:hover {
   .property-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* Style for the new crunch score chip specifically */
+.crunch-score-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 12px; /* Make it pill-shaped */
+  font-size: 0.75rem; /* Smaller font */
+  font-weight: 600;
+  margin-left: 8px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.days-on-market {
+  /* Keep existing styles or adjust if needed */
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-left: 8px;
+  vertical-align: middle;
+  background-color: #e5e7eb; /* Neutral gray */
+  color: #4b5563; 
 }

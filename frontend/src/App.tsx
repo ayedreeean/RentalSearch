@@ -25,807 +25,19 @@ import SaveAltIcon from '@mui/icons-material/SaveAlt'; // Restore import
 import HistoryIcon from '@mui/icons-material/History'; // Restore import
 import DeleteIcon from '@mui/icons-material/Delete'; // Restore import
 import './App.css';
-import { searchProperties, getTotalPropertiesCount, Property, registerForPropertyUpdates } from './api/propertyApi';
+import { searchProperties, getTotalPropertiesCount, registerForPropertyUpdates } from './api/propertyApi';
 import PropertyDetailsPage from './pages/PropertyDetailsPage';
-import { CashflowSettings } from './types';
+import { CashflowSettings, Property, Cashflow } from './types';
 import BookmarksPage from './pages/BookmarksPage';
 // Import the Drawer component
 import Drawer from '@mui/material/Drawer';
-
-// Define cashflow interface
-interface Cashflow {
-  monthlyMortgage: number;
-  monthlyTaxInsurance: number;
-  monthlyVacancy: number;
-  monthlyCapex: number;
-  monthlyPropertyManagement: number;
-  totalMonthlyExpenses: number;
-  monthlyCashflow: number;
-  annualCashflow: number;
-  cashOnCashReturn: number;
-}
-
-// Lazy Image component for better performance
-interface LazyImageProps {
-  src: string;
-  alt: string;
-  className?: string;
-}
-
-const LazyImage: React.FC<LazyImageProps> = ({ src, alt, className }) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [isInView, setIsInView] = useState(false);
-  const imgRef = useRef<HTMLImageElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            setIsInView(true);
-            observer.disconnect();
-          }
-        });
-      },
-      { threshold: 0.1 }
-    );
-
-    if (imgRef.current) {
-      observer.observe(imgRef.current);
-    }
-
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
-  return (
-    <div className="lazy-image-container" ref={imgRef}>
-      {isInView ? (
-        <>
-          {!isLoaded && <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" />}
-          <img
-            src={src}
-            alt={alt}
-            className={`lazy-image ${isLoaded ? 'loaded' : ''} ${className || ''}`}
-            onLoad={() => setIsLoaded(true)}
-            style={{ display: isLoaded ? 'block' : 'none' }}
-          />
-        </>
-      ) : (
-        <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" />
-      )}
-    </div>
-  );
-};
-
-// Property Card Component
-interface PropertyCardProps {
-  property: Property;
-  calculateCashflow: (property: Property) => Cashflow;
-  formatCurrency: (amount: number) => string;
-  formatPercent: (percent: number) => string;
-  vacancyPercent: number;
-  capexPercent: number;
-  downPaymentPercent: number;
-  propertyManagementPercent: number;
-  handleRentEstimateChange: (propertyId: string, newRentString: string) => void;
-}
-
-const PropertyCard: React.FC<PropertyCardProps> = ({ 
-  property, 
-  calculateCashflow, 
-  formatCurrency, 
-  formatPercent, 
-  vacancyPercent, 
-  capexPercent,
-  downPaymentPercent,
-  propertyManagementPercent,
-  handleRentEstimateChange
-}) => {
-  // --- State for editable rent estimate --- 
-  const [displayRent, setDisplayRent] = useState<string>('');
-  const [isRentEditing, setIsRentEditing] = useState(false);
-  // Add a separate state to track custom rent for cashflow calculation
-  const [customRentEstimate, setCustomRentEstimate] = useState<number | null>(null);
-  
-  // Share modal state
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [copySuccess, setCopySuccess] = useState('');
-  
-  // Deep dive modal state
-  const [isDeepDiveOpen, setIsDeepDiveOpen] = useState(false);
-
-  // Initialize display rent when property data changes
-  useEffect(() => {
-    // Use custom value or property value for display
-    const rentToDisplay = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
-    setDisplayRent(formatCurrency(rentToDisplay));
-  }, [property.rent_estimate, customRentEstimate, formatCurrency]);
-
-  // Handlers for rent input
-  const handleRentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDisplayRent(e.target.value);
-  };
-
-  const handleRentBlur = () => {
-    setIsRentEditing(false);
-    // Parse the rent value
-    const newRent = parseFloat(displayRent.replace(/[^\d.]/g, ''));
-    
-    if (!isNaN(newRent) && newRent >= 0) {
-      // Only update our local custom rent value - don't call the parent handler
-      setCustomRentEstimate(newRent);
-    } else {
-      // If invalid, revert to the current value
-      const currentRent = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
-      setDisplayRent(formatCurrency(currentRent));
-    }
-  };
-
-  const handleRentFocus = () => {
-    setIsRentEditing(true);
-    // Show raw number for editing
-    const currentRent = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
-    setDisplayRent(String(currentRent)); 
-  };
-  // --- End State/Handlers ---
-
-  // Create a modified property object for cashflow calculations
-  const propertyForCashflow = {
-    ...property,
-    rent_estimate: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
-    rent_source: property.rent_source ?? "calculated", // Default to 'calculated' if undefined
-  };
-
-  // Calculate cashflow using potentially modified rent value
-  const cashflow = calculateCashflow(propertyForCashflow);
-  const downPaymentAmount = property.price * (downPaymentPercent / 100);
-  
-  // --- Create RentCast URL --- 
-  const rentCastAddress = encodeURIComponent(property.address);
-  const rentCastUrl = `https://app.rentcast.io/app?address=${rentCastAddress}`;
-  
-  // Handler for opening and closing share modal
-  const handleOpenShareModal = () => setIsShareModalOpen(true);
-  const handleCloseShareModal = () => {
-    setIsShareModalOpen(false);
-    setCopySuccess(''); // Reset copy success message
-  };
-
-  // Add navigation
-  const navigate = useNavigate();
-  
-  // Update the deep dive handler to navigate to the details page
-  const handleOpenDeepDive = (e: React.MouseEvent) => {
-    e.preventDefault(); // Keep preventDefault
-    navigate(`/property/${property.property_id}`);
-  };
-  
-  const handleCloseDeepDive = () => {
-    setIsDeepDiveOpen(false);
-  };
-
-  // Create a copyable summary of the property with cashflow details
-  const generatePropertySummary = () => {
-    const rentValue = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
-    
-    return `🏠 Property Investment Analysis 🏠
-
-ADDRESS: ${property.address}
-PRICE: ${formatCurrency(property.price)}
-RENT ESTIMATE: ${formatCurrency(rentValue)}
-RENT-TO-PRICE RATIO: ${formatPercent(property.ratio * 100)}
-
-📊 PROPERTY DETAILS:
-• ${property.bedrooms} beds, ${property.bathrooms} baths
-• ${property.sqft.toLocaleString()} sq. ft.
-${property.days_on_market !== null ? `• Days on market: ${property.days_on_market}` : ''}
-
-💰 CASHFLOW ANALYSIS (Monthly):
-• Down payment (${downPaymentPercent}%): ${formatCurrency(property.price * (downPaymentPercent / 100))}
-• Mortgage payment: ${formatCurrency(cashflow.monthlyMortgage)}
-• Property Tax & Insurance: ${formatCurrency(cashflow.monthlyTaxInsurance)}
-• Vacancy (${vacancyPercent}%): ${formatCurrency(cashflow.monthlyVacancy)}
-• CapEx (${capexPercent}%): ${formatCurrency(cashflow.monthlyCapex)}
-• Property Management (${propertyManagementPercent}%): ${formatCurrency(cashflow.monthlyPropertyManagement)}
-• Total Monthly Expenses: ${formatCurrency(cashflow.totalMonthlyExpenses)}
-• Monthly Cashflow: ${formatCurrency(cashflow.monthlyCashflow)}
-• Annual Cashflow: ${formatCurrency(cashflow.annualCashflow)}
-• Cash-on-Cash Return: ${formatPercent(cashflow.cashOnCashReturn)}
-
-🔗 ZILLOW LISTING: ${property.url}
-🔗 RENTCAST ANALYSIS: ${rentCastUrl}
-
-Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
-`;
-  };
-
-  // Copy to clipboard handler
-  const handleCopyToClipboard = async () => {
-    const summary = generatePropertySummary();
-    
-    try {
-      await navigator.clipboard.writeText(summary);
-      setCopySuccess('Copied to clipboard!');
-      setTimeout(() => setCopySuccess(''), 3000); // Clear message after 3 seconds
-    } catch (err) {
-      setCopySuccess('Failed to copy! Try selecting and copying the text manually.');
-    }
-  };
-
-  // Email share handler
-  const handleEmailShare = () => {
-    const summary = encodeURIComponent(generatePropertySummary());
-    const subject = encodeURIComponent(`Property Investment Analysis: ${property.address}`);
-    window.open(`mailto:?subject=${subject}&body=${summary}`);
-    handleCloseShareModal();
-  };
-  
-  return (
-    <Card className="property-card">
-      <a href="#" onClick={handleOpenDeepDive} className="property-image-container">
-        <LazyImage
-          src={property.thumbnail}
-          alt={property.address}
-        />
-        <div className="property-price">
-          {formatCurrency(property.price)}
-        </div>
-      </a>
-      
-      <CardContent className="property-details">
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-          <Typography variant="h6" component="div" className="price-ratio-container" gutterBottom>
-          {formatCurrency(property.price)}
-            <span className={`ratio-chip ${property.ratio >= 0.007 ? 'ratio-good' : property.ratio >= 0.004 ? 'ratio-medium' : 'ratio-poor'}`}>
-              Ratio: {formatPercent(property.ratio * 100)}
-            </span>
-            {property.days_on_market !== null && (
-              <span className="days-on-market ratio-chip">
-                {property.days_on_market} days
-              </span>
-            )}
-        </Typography>
-        </Box>
-        
-        <a href="#" onClick={handleOpenDeepDive} className="property-address">
-          <Typography variant="body2" color="text.secondary">
-            {property.address}
-          </Typography>
-        </a>
-        
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <div>
-            <Typography variant="body2" fontWeight="medium">
-              Rent Est: {formatCurrency(property.rent_estimate)}
-              {property.rent_source === 'zillow' && (
-                <span className="rent-source">Zillow</span>
-              )}
-            </Typography>
-            </div>
-        </Box>
-        
-        <div className="metrics">
-          <div className="metric">
-            <Typography variant="body2" color="text.secondary">Beds</Typography>
-            <Typography variant="body1" fontWeight="medium">{property.bedrooms}</Typography>
-          </div>
-          <div className="metric">
-            <Typography variant="body2" color="text.secondary">Baths</Typography>
-            <Typography variant="body1" fontWeight="medium">{property.bathrooms}</Typography>
-          </div>
-          <div className="metric">
-            <Typography variant="body2" color="text.secondary">Sq Ft</Typography>
-            <Typography variant="body1" fontWeight="medium">{property.sqft.toLocaleString()}</Typography>
-          </div>
-        </div>
-      </CardContent>
-      
-      <div className="property-footer">
-        <Accordion>
-          <AccordionSummary 
-            expandIcon={<ExpandMoreIcon />}
-            aria-controls="cashflow-content"
-            id="cashflow-header"
-          >
-            <div className="cashflow-header">
-              <Typography fontWeight="medium">Cashflow Analysis</Typography>
-              <Typography 
-                variant="body2" 
-                fontWeight="bold" 
-                color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}
-                sx={{ ml: 'auto', mr: 1 }}
-              >
-                {formatCurrency(cashflow.monthlyCashflow)}/mo
-              </Typography>
-            </div>
-          </AccordionSummary>
-          <AccordionDetails>
-            <div className="cashflow-analysis">
-              {/* --- Editable Rent Estimate Row at the top --- */}
-              <div className="cashflow-row" style={{ alignItems: 'center' }}>
-                <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center' }}>
-                  Rent Estimate:
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
-                  <TextField
-                     variant="standard" // Use standard variant for less space
-                     size="small"
-                     value={isRentEditing ? displayRent : formatCurrency(customRentEstimate !== null ? customRentEstimate : property.rent_estimate)} // Show formatted or raw
-                     onChange={handleRentChange}
-                     onFocus={handleRentFocus}
-                     onBlur={handleRentBlur}
-                     InputProps={{
-                       // Remove the dollar sign startAdornment
-                       disableUnderline: !isRentEditing, // Hide underline when not editing
-                       sx: { fontSize: '0.875rem' } // Match Typography variant="body2"
-                     }}
-                     sx={{ 
-                       maxWidth: '100px', // Limit width
-                       '& .MuiInputBase-input': { textAlign: 'right' }, // Align text right
-                       cursor: 'pointer',
-                       ...(isRentEditing 
-                         ? { '& .MuiInputBase-root': { borderBottom: '1px solid rgba(0, 0, 0, 0.42)' } }
-                         : { })
-                     }}
-                     // Optional: Add onKeyDown for Enter key submission
-                     onKeyDown={(e) => {
-                         if (e.key === 'Enter') {
-                             (e.target as HTMLInputElement).blur(); // Trigger blur to save
-                         }
-                     }}
-                   />
-                   <EditIcon sx={{ fontSize: 14, ml: 0.5, color: '#6b7280', opacity: 0.7, cursor: 'pointer' }} />
-                </Box>
-              </div>
-
-              <div className="cashflow-row">
-                <Typography variant="body2">Down Payment:</Typography>
-                <Typography variant="body2">{formatCurrency(downPaymentAmount)}</Typography>
-              </div>
-              <div className="cashflow-row">
-                <Typography variant="body2">Monthly Mortgage Payment:</Typography>
-                <Typography variant="body2">{formatCurrency(cashflow.monthlyMortgage)}</Typography>
-              </div>
-              <div className="cashflow-row">
-                <Typography variant="body2">Property Tax & Insurance:</Typography>
-                <Typography variant="body2">{formatCurrency(cashflow.monthlyTaxInsurance)}</Typography>
-              </div>
-              <div className="cashflow-row">
-                <Typography variant="body2">Vacancy:</Typography>
-                <Typography variant="body2">{formatCurrency(cashflow.monthlyVacancy)}</Typography>
-              </div>
-              <div className="cashflow-row">
-                <Typography variant="body2">CapEx:</Typography>
-                <Typography variant="body2">{formatCurrency(cashflow.monthlyCapex)}</Typography>
-              </div>
-              <div className="cashflow-row">
-                <Typography variant="body2">Property Management:</Typography>
-                <Typography variant="body2">{formatCurrency(cashflow.monthlyPropertyManagement)}</Typography>
-              </div>
-              
-              <div className="cashflow-divider"></div>
-              
-              <div className="cashflow-row">
-                <Typography variant="body2" fontWeight="bold">Total Monthly Expenses:</Typography>
-                <Typography variant="body2" fontWeight="bold">{formatCurrency(cashflow.totalMonthlyExpenses)}</Typography>
-              </div>
-              
-              <div className="cashflow-total">
-                <div className="cashflow-row">
-                  <Typography variant="body2" fontWeight="bold">Monthly Cashflow:</Typography>
-                  <Typography variant="body2" fontWeight="bold" color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}>
-                    {formatCurrency(cashflow.monthlyCashflow)}
-                  </Typography>
-                </div>
-                <div className="cashflow-row">
-                  <Typography variant="body2" fontWeight="bold">Annual Cashflow:</Typography>
-                  <Typography variant="body2" fontWeight="bold" color={cashflow.annualCashflow >= 0 ? 'success.main' : 'error.main'}>
-                    {formatCurrency(cashflow.annualCashflow)}
-                  </Typography>
-                </div>
-                <div className="cashflow-row">
-                  <Typography variant="body2" fontWeight="bold">Cash-on-Cash Return:</Typography>
-                  <Typography variant="body2" fontWeight="bold" color={cashflow.cashOnCashReturn >= 0 ? 'success.main' : 'error.main'}>
-                    {formatPercent(cashflow.cashOnCashReturn)}
-                  </Typography>
-                </div>
-              </div>
-            </div>
-          </AccordionDetails>
-        </Accordion>
-        
-        {/* Quick Links Section - Updated for consistent styling */}
-        <div className="quick-links">
-          <div className="quick-links-title">Quick Links</div>
-          <div className="quick-links-buttons">
-            <a href={property.url} target="_blank" rel="noopener noreferrer" className="quick-link">
-              <HomeIcon sx={{ fontSize: 16, mr: 0.5, color: '#0D6EFD' }} /> Zillow
-            </a>
-            <a href={rentCastUrl} target="_blank" rel="noopener noreferrer" className="quick-link">
-              <BarChartIcon sx={{ fontSize: 16, mr: 0.5, color: '#6366F1' }} /> RentCast
-            </a>
-            <a 
-              href="#" // Add valid href for accessibility
-              onClick={(e) => { 
-                e.preventDefault();
-                navigate(`/property/${property.property_id}`);
-              }} 
-              className="quick-link"
-            >
-              <HomeWorkIcon sx={{ fontSize: 16, mr: 0.5, color: '#4F46E5' }} /> Deep Dive
-            </a>
-      </div>
-        </div>
-      </div>
-      
-      {/* Share Modal */}
-      <Modal
-        open={isShareModalOpen}
-        onClose={handleCloseShareModal}
-        aria-labelledby="share-modal-title"
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Paper 
-          sx={{ 
-            width: '90%', 
-            maxWidth: 600, 
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            p: 3, 
-            outline: 'none',
-            borderRadius: 2,
-          }}
-        >
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography id="share-modal-title" variant="h6" component="h2">
-              Share Property Analysis
-            </Typography>
-            <IconButton 
-              edge="end" 
-              color="inherit" 
-              onClick={handleCloseShareModal} 
-              aria-label="close"
-            >
-              <CloseIcon />
-            </IconButton>
-          </Box>
-
-          <Divider sx={{ mb: 2 }} />
-          
-          {/* Share options */}
-          <Box sx={{ mb: 3, display: 'flex', gap: 2 }}>
-            <Button 
-              variant="contained" 
-              startIcon={<ContentCopyIcon />} 
-              onClick={handleCopyToClipboard}
-              sx={{ flex: '1' }}
-            >
-              Copy to Clipboard
-            </Button>
-            <Button 
-              variant="outlined" 
-              startIcon={<EmailIcon />} 
-              onClick={handleEmailShare}
-              sx={{ flex: '1' }}
-            >
-              Email
-            </Button>
-          </Box>
-          
-          {copySuccess && (
-            <Alert severity="success" sx={{ mb: 2 }}>
-              {copySuccess}
-            </Alert>
-          )}
-          
-          {/* Preview of what will be shared */}
-          <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mb: 1 }}>
-            Preview:
-          </Typography>
-          
-          <Paper 
-            variant="outlined" 
-            sx={{ 
-              p: 2, 
-              backgroundColor: '#f8f9fa',
-              borderRadius: 1,
-              fontFamily: 'monospace',
-              whiteSpace: 'pre-wrap',
-              fontSize: '0.8rem',
-              wordBreak: 'break-word',
-              maxHeight: '50vh',
-              overflowY: 'auto'
-            }}
-          >
-            {generatePropertySummary()}
-          </Paper>
-        </Paper>
-      </Modal>
-      
-      {/* Deep Dive Modal */}
-      <Modal
-        open={isDeepDiveOpen}
-        onClose={handleCloseDeepDive}
-        aria-labelledby="deep-dive-title"
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Paper 
-          sx={{ 
-            width: '95%', 
-            maxWidth: 900, 
-            height: '90vh',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            p: 3, 
-            outline: 'none',
-            borderRadius: 2,
-          }}
-        >
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography id="deep-dive-title" variant="h5" component="h2">
-              {property.address}
-            </Typography>
-            <IconButton 
-              edge="end" 
-              color="inherit" 
-              onClick={handleCloseDeepDive} 
-              aria-label="close"
-            >
-              <CloseIcon />
-            </IconButton>
-          </Box>
-
-          <Divider sx={{ mb: 3 }} />
-          
-          {/* Property Image and Key Details */}
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, mb: 4 }}>
-            <Box sx={{ flex: '1', maxWidth: { xs: '100%', md: '50%' } }}>
-              <img 
-                src={property.thumbnail} 
-                alt={property.address}
-                style={{ 
-                  width: '100%', 
-                  borderRadius: '0.5rem',
-                  maxHeight: '300px',
-                  objectFit: 'cover'
-                }}
-              />
-              
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="h6" gutterBottom>Key Details</Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2 }}>
-                  <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#f8f9fa' }}>
-                    <Typography variant="body2" color="text.secondary">Price</Typography>
-                    <Typography variant="h6">{formatCurrency(property.price)}</Typography>
-                  </Paper>
-                  <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#f8f9fa' }}>
-                    <Typography variant="body2" color="text.secondary">Rent Estimate</Typography>
-                    <Typography variant="h6">{formatCurrency(customRentEstimate !== null ? customRentEstimate : property.rent_estimate)}</Typography>
-                  </Paper>
-                  <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#f8f9fa' }}>
-                    <Typography variant="body2" color="text.secondary">Ratio</Typography>
-                    <Typography variant="h6" color={property.ratio >= 0.007 ? 'success.main' : property.ratio >= 0.004 ? 'warning.main' : 'error.main'}>
-                      {formatPercent(property.ratio * 100)}
-                    </Typography>
-                  </Paper>
-                  <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#f8f9fa' }}>
-                    <Typography variant="body2" color="text.secondary">Cash-on-Cash Return</Typography>
-                    <Typography variant="h6" color={cashflow.cashOnCashReturn >= 0 ? 'success.main' : 'error.main'}>
-                      {formatPercent(cashflow.cashOnCashReturn)}
-                    </Typography>
-                  </Paper>
-                </Box>
-              </Box>
-              
-              <Box sx={{ mt: 3 }}>
-                <Typography variant="h6" gutterBottom>Property Details</Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
-                  <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#f8f9fa' }}>
-                    <Typography variant="body2" color="text.secondary">Beds</Typography>
-                    <Typography variant="h6">{property.bedrooms}</Typography>
-                  </Paper>
-                  <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#f8f9fa' }}>
-                    <Typography variant="body2" color="text.secondary">Baths</Typography>
-                    <Typography variant="h6">{property.bathrooms}</Typography>
-                  </Paper>
-                  <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#f8f9fa' }}>
-                    <Typography variant="body2" color="text.secondary">Sq Ft</Typography>
-                    <Typography variant="h6">{property.sqft.toLocaleString()}</Typography>
-                  </Paper>
-                </Box>
-              </Box>
-              
-              <Box sx={{ mt: 3 }}>
-                <Typography variant="h6" gutterBottom>External Links</Typography>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <Button 
-                    variant="outlined" 
-                    startIcon={<HomeIcon />} 
-                    fullWidth
-                    href={property.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    View on Zillow
-                  </Button>
-                  <Button 
-                    variant="outlined" 
-                    startIcon={<BarChartIcon />} 
-                    fullWidth
-                    href={rentCastUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Rentcast Analysis
-                  </Button>
-                </Box>
-              </Box>
-            </Box>
-            
-            {/* Cashflow Analysis Section */}
-            <Box sx={{ flex: '1', maxWidth: { xs: '100%', md: '50%' } }}>
-              <Typography variant="h6" gutterBottom>
-                Cashflow Analysis 
-                <Typography 
-                  component="span" 
-                  variant="h6" 
-                  color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}
-                  sx={{ ml: 1 }}
-                >
-                  ({formatCurrency(cashflow.monthlyCashflow)}/mo)
-                </Typography>
-              </Typography>
-              
-              {/* Rent Estimate Field */}
-              <Paper sx={{ mb: 3, p: 2, bgcolor: '#f8f9fa' }}>
-                <Typography variant="subtitle2" gutterBottom>Customize Your Analysis</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Typography variant="body2" sx={{ mr: 2 }}>Rent Estimate:</Typography>
-                  <TextField
-                    variant="outlined" 
-                    size="small"
-                    value={isRentEditing ? displayRent : formatCurrency(customRentEstimate !== null ? customRentEstimate : property.rent_estimate)}
-                    onChange={handleRentChange}
-                    onFocus={handleRentFocus}
-                    onBlur={handleRentBlur}
-                    sx={{ maxWidth: '150px' }}
-                    InputProps={{
-                      endAdornment: <EditIcon sx={{ fontSize: 16, color: '#6b7280', opacity: 0.7 }} />,
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        (e.target as HTMLInputElement).blur();
-                      }
-                    }}
-                  />
-                </Box>
-              </Paper>
-              
-              <Box sx={{ bgcolor: '#f9f9f9', p: 2, borderRadius: 2, mb: 2 }}>
-                <Typography variant="subtitle2" gutterBottom fontWeight="bold">Monthly Income</Typography>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Rental Income:</Typography>
-                  <Typography variant="body2" fontWeight="medium">
-                    {formatCurrency(customRentEstimate !== null ? customRentEstimate : property.rent_estimate)}
-                  </Typography>
-                </Box>
-              </Box>
-              
-              <Box sx={{ bgcolor: '#f9f9f9', p: 2, borderRadius: 2, mb: 2 }}>
-                <Typography variant="subtitle2" gutterBottom fontWeight="bold">Monthly Expenses</Typography>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Mortgage Payment:</Typography>
-                  <Typography variant="body2">{formatCurrency(cashflow.monthlyMortgage)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Property Tax & Insurance:</Typography>
-                  <Typography variant="body2">{formatCurrency(cashflow.monthlyTaxInsurance)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Vacancy:</Typography>
-                  <Typography variant="body2">{formatCurrency(cashflow.monthlyVacancy)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">CapEx:</Typography>
-                  <Typography variant="body2">{formatCurrency(cashflow.monthlyCapex)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Property Management:</Typography>
-                  <Typography variant="body2">{formatCurrency(cashflow.monthlyPropertyManagement)}</Typography>
-                </Box>
-                
-                <Divider sx={{ my: 1 }} />
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" fontWeight="bold">Total Monthly Expenses:</Typography>
-                  <Typography variant="body2" fontWeight="bold">{formatCurrency(cashflow.totalMonthlyExpenses)}</Typography>
-                </Box>
-              </Box>
-              
-              <Box sx={{ bgcolor: '#f0f7ff', p: 2, borderRadius: 2, mb: 2 }}>
-                <Typography variant="subtitle2" gutterBottom fontWeight="bold">Investment Returns</Typography>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Down Payment:</Typography>
-                  <Typography variant="body2">{formatCurrency(downPaymentAmount)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Closing Costs (est. 3%):</Typography>
-                  <Typography variant="body2">{formatCurrency(property.price * 0.03)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Total Investment:</Typography>
-                  <Typography variant="body2">{formatCurrency(downPaymentAmount + property.price * 0.03)}</Typography>
-                </Box>
-                
-                <Divider sx={{ my: 1 }} />
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" fontWeight="bold">Monthly Cashflow:</Typography>
-                  <Typography variant="body2" fontWeight="bold" color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}>
-                    {formatCurrency(cashflow.monthlyCashflow)}
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" fontWeight="bold">Annual Cashflow:</Typography>
-                  <Typography variant="body2" fontWeight="bold" color={cashflow.annualCashflow >= 0 ? 'success.main' : 'error.main'}>
-                    {formatCurrency(cashflow.annualCashflow)}
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" fontWeight="bold">Cash-on-Cash Return:</Typography>
-                  <Typography variant="body2" fontWeight="bold" color={cashflow.cashOnCashReturn >= 0 ? 'success.main' : 'error.main'}>
-                    {formatPercent(cashflow.cashOnCashReturn)}
-                  </Typography>
-                </Box>
-              </Box>
-            </Box>
-          </Box>
-          
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-            <Button 
-              variant="contained" 
-              startIcon={<ShareIcon />} 
-              onClick={handleOpenShareModal}
-              sx={{ mx: 1 }}
-            >
-              Share Analysis
-            </Button>
-            <Button 
-              variant="outlined" 
-              onClick={handleCloseDeepDive}
-              sx={{ mx: 1 }}
-            >
-              Close
-            </Button>
-          </Box>
-        </Paper>
-      </Modal>
-    </Card>
-  );
-};
+// Import the newly created PropertyCard component
+import PropertyCard from './components/PropertyCard';
+// Import the scoring function
+import { calculateCrunchScore } from './utils/scoring';
 
 // Define possible sort keys
-type SortableKey = keyof Pick<Property, 'price' | 'rent_estimate' | 'bedrooms' | 'bathrooms' | 'sqft' | 'days_on_market'> | 'ratio' | 'cashflow';
+type SortableKey = keyof Pick<Property, 'price' | 'rent_estimate' | 'bedrooms' | 'bathrooms' | 'sqft' | 'days_on_market'> | 'ratio' | 'cashflow' | 'crunchScore'; // Add crunchScore
 
 // Define structure for saved searches
 interface SavedSearch {
@@ -890,7 +102,7 @@ function App() {
   const [displayMaxPrice, setDisplayMaxPrice] = useState<string>('');
 
   // Add state for sorting
-  const [sortConfig, setSortConfig] = useState<{ key: SortableKey | null, direction: 'asc' | 'desc' }>({ key: 'price', direction: 'asc' }); // Default sort by price asc
+  const [sortConfig, setSortConfig] = useState<{ key: SortableKey | null, direction: 'asc' | 'desc' }>({ key: 'crunchScore', direction: 'desc' }); // Default sort by crunchScore desc
 
   // Ref for tracking search requests
   const currentSearchId = useRef<number>(0);
@@ -1250,15 +462,18 @@ function App() {
   };
 
   // Function to calculate cashflow
-  const calculateCashflow = (property: Property): Cashflow => {
+  // Ensure this uses the imported Property and Cashflow types
+  const calculateCashflow = useCallback((property: Property): Cashflow => {
     const monthlyMortgage = calculateMortgage(property.price);
     const monthlyTaxInsurance = property.price * (taxInsurancePercent / 100) / 12;
-    const monthlyVacancy = property.rent_estimate * (vacancyPercent / 100);
-    const monthlyCapex = property.rent_estimate * (capexPercent / 100);
-    const monthlyPropertyManagement = property.rent_estimate * (propertyManagementPercent / 100);
+    // Ensure rent_estimate is treated as a number
+    const rentEstimate = property.rent_estimate ?? 0; 
+    const monthlyVacancy = rentEstimate * (vacancyPercent / 100);
+    const monthlyCapex = rentEstimate * (capexPercent / 100);
+    const monthlyPropertyManagement = rentEstimate * (propertyManagementPercent / 100);
 
     const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
-    const monthlyCashflow = property.rent_estimate - totalMonthlyExpenses;
+    const monthlyCashflow = rentEstimate - totalMonthlyExpenses;
     const annualCashflow = monthlyCashflow * 12;
 
     // Down payment amount plus closing costs (estimated at 3%)
@@ -1266,7 +481,8 @@ function App() {
     // Add rehab amount to initial investment
     const totalInvestment = initialInvestment + rehabAmount;
 
-    const cashOnCashReturn = annualCashflow / totalInvestment;
+    // Handle division by zero if totalInvestment is 0 or less
+    const cashOnCashReturn = totalInvestment > 0 ? annualCashflow / totalInvestment : 0;
 
     return {
       monthlyMortgage,
@@ -1279,7 +495,8 @@ function App() {
       annualCashflow,
       cashOnCashReturn
     };
-  };
+    // Add dependencies based on state variables used inside
+  }, [interestRate, loanTerm, downPaymentPercent, taxInsurancePercent, vacancyPercent, capexPercent, propertyManagementPercent, rehabAmount]); 
 
   // Helper function to format percentage
   const formatPercent = (percent: number): string => {
@@ -1374,10 +591,10 @@ function App() {
   const handleSort = (key: SortableKey) => {
     setSortConfig(prev => ({
       key: key,
-      // If sorting by the same key, toggle direction, otherwise default to ascending (or descending for price/ratio/cashflow initially)
+      // If sorting by the same key, toggle direction, otherwise default to ascending (or descending for price/ratio/cashflow/crunchScore initially)
       direction: prev.key === key 
                  ? (prev.direction === 'asc' ? 'desc' : 'asc')
-                 : ('price ratio cashflow'.includes(key) ? 'desc' : 'asc') // Sensible defaults
+                 : ('price ratio cashflow crunchScore'.includes(key) ? 'desc' : 'asc') // Sensible defaults - added crunchScore here
     }));
   };
 
@@ -2185,6 +1402,7 @@ function App() {
                           }}
                         >
                           <MenuItem value="price">Price</MenuItem>
+                          <MenuItem value="crunchScore">Crunch Score</MenuItem> {/* Added Crunch Score */} 
                           <MenuItem value="rent_estimate">Rent Estimate</MenuItem>
                           <MenuItem value="ratio">Ratio</MenuItem>
                           <MenuItem value="cashflow">Monthly Cashflow</MenuItem>
@@ -2205,20 +1423,41 @@ function App() {
                 </Box>
 
                   <div className="property-grid">
-                    {sortedProperties.map((property) => (
-                      <PropertyCard
-                        key={property.property_id}
-                        property={property}
-                  calculateCashflow={calculateCashflow}
-                  formatCurrency={formatCurrency}
-                  formatPercent={formatPercent}
-                  vacancyPercent={vacancyPercent}
-                  capexPercent={capexPercent}
-                        downPaymentPercent={downPaymentPercent}
-                        propertyManagementPercent={propertyManagementPercent}
-                        handleRentEstimateChange={handleRentEstimateChange}
-                      />
-                    ))}
+                    {sortedProperties.map((property) => {
+                      // Calculate cashflow using current assumptions from state
+                      const cashflow = calculateCashflow(property);
+                      
+                      // Bundle current settings for the scoring function
+                      const currentSettings: CashflowSettings = {
+                        interestRate,
+                        loanTerm,
+                        downPaymentPercent,
+                        taxInsurancePercent,
+                        vacancyPercent,
+                        capexPercent,
+                        propertyManagementPercent,
+                        rehabAmount,
+                      };
+
+                      // Calculate the crunch score
+                      const score = calculateCrunchScore(property, currentSettings, cashflow);
+                      
+                      return (
+                        <PropertyCard
+                          key={property.property_id}
+                          property={property}
+                          calculateCashflow={calculateCashflow} // Pass down the memoized calculateCashflow
+                          formatCurrency={formatCurrency}
+                          formatPercent={formatPercent}
+                          vacancyPercent={vacancyPercent} // Still needed for display in share summary
+                          capexPercent={capexPercent}     // Still needed for display in share summary
+                          downPaymentPercent={downPaymentPercent} // Still needed for display
+                          propertyManagementPercent={propertyManagementPercent} // Still needed for display
+                          handleRentEstimateChange={handleRentEstimateChange}
+                          crunchScore={score} // Pass the calculated score
+                        />
+                      );
+                    })}
                   </div>
 
                   {isProcessingBackground && (
@@ -2227,7 +1466,7 @@ function App() {
                       <Typography className="loading-message">
                         Loading & Processing More Properties...
                       </Typography>
-                </Box>
+                    </Box>
                   )}
                 </>
               ) : searchPerformed && (loading || isProcessingBackground) ? (
@@ -2236,7 +1475,7 @@ function App() {
                   <Typography className="loading-message">
                     Loading & Processing Properties...
               </Typography>
-          </Box>
+            </Box>
               ) : null}
 
               {/* FAQ Modal */}
@@ -2278,19 +1517,19 @@ function App() {
                         className={`faq-nav-item ${activeFaqSection === 'search' ? 'active' : ''}`}
                         onClick={() => handleFaqSectionChange('search')}
                       >
-                        Searching
+                        Searching & Sorting
                       </div>
                       <div
                         className={`faq-nav-item ${activeFaqSection === 'filters' ? 'active' : ''}`}
                         onClick={() => handleFaqSectionChange('filters')}
                       >
-                        Filters
+                        Filters & Assumptions
                       </div>
                       <div
                         className={`faq-nav-item ${activeFaqSection === 'cashflow' ? 'active' : ''}`}
                         onClick={() => handleFaqSectionChange('cashflow')}
                       >
-                        Cashflow Analysis
+                        Cashflow & Scoring
                       </div>
                       <div
                         className={`faq-nav-item ${activeFaqSection === 'bookmarks' ? 'active' : ''}`}
@@ -2306,7 +1545,7 @@ function App() {
                       </div>
                     </div>
 
-                    {/* FAQ Content Container - Wrap all FAQ sections in a single container */}
+                    {/* FAQ Content Container */} 
                     <div className="faq-sections-container">
                       {/* General FAQ Section */}
                       {activeFaqSection === 'general' && (
@@ -2314,105 +1553,153 @@ function App() {
                           <div className="faq-section">
                             <div className="faq-question">What is CashflowCrunch?</div>
                             <div className="faq-answer">
-                              CashflowCrunch is a tool designed to help you find potential rental investment properties. It searches for properties on the market and analyzes their potential cash flow based on estimated rent and customizable assumptions.
+                              CashflowCrunch helps you quickly find and analyze potential rental investment properties. It fetches current listings, estimates rent, and calculates potential cash flow and returns based on your customizable assumptions.
                             </div>
                           </div>
 
                           <div className="faq-section">
-                            <div className="faq-question">How does CashflowCrunch work?</div>
+                            <div className="faq-question">How does it work?</div>
                             <div className="faq-answer">
-                              CashflowCrunch fetches property listings from real estate APIs and then calculates potential cash flow for each property based on rent estimates and your personalized investment criteria. Results are displayed as cards with expandable cashflow analysis.
+                              Enter a location and optionally refine your search with price, beds, and baths filters. CashflowCrunch searches for matching properties, fetches details, estimates rent, and calculates financial metrics like cash flow and Cash-on-Cash return using the assumptions you set in the slide-out panel. Results are displayed as property cards, sorted by default by the "Crunch Score".
                             </div>
                           </div>
 
                           <div className="faq-section">
-                            <div className="faq-question">Are the rent estimates accurate?</div>
+                            <div className="faq-question">Is the data accurate?</div>
                             <div className="faq-answer">
-                              Rent estimates are sourced from market data and algorithms, but they should be considered as general guidelines. For more accurate estimates, we recommend checking the RentCast link available on each property card or consulting with a local real estate professional.
+                              Property listing data (price, beds, baths, status) comes from real-time sources. Rent estimates are algorithmically generated based on market data but should be verified (e.g., using the provided RentCast link or local research). Financial calculations depend heavily on the accuracy of your input assumptions (interest rate, expenses, etc.). Always do your own due diligence.
                             </div>
                           </div>
                         </div>
                       )}
 
-                      {/* Search FAQ Section */}
+                      {/* Search & Sorting FAQ Section */}
                       {activeFaqSection === 'search' && (
                         <div>
                           <div className="faq-section">
                             <div className="faq-question">How do I search for properties?</div>
                             <div className="faq-answer">
-                              Enter a location in the search bar at the top of the page. You can use a city name, state, zip code, or a specific property address (e.g., "Austin, TX", "78701", or "123 Main St, Austin, TX"). For specific properties, entering the full address will give you the most accurate results. Then click the "Crunch Properties" button to see results.
+                              Enter a location (City, State, or Zip Code) in the main search bar and click "Crunch Properties". You can further refine your search using the price range, minimum beds, and minimum baths filters before searching.
                             </div>
                           </div>
 
                           <div className="faq-section">
                             <div className="faq-question">Why does searching take time?</div>
                             <div className="faq-answer">
-                              CashflowCrunch processes a large amount of property data and performs calculations for each property. The search first fetches basic property data, then progressively enhances it with additional information like rent estimates, which occurs in the background.
+                              CashflowCrunch processes potentially hundreds of properties for your location. It first fetches basic details quickly, then works in the background to get rent estimates and calculate detailed financials for each property. The results update progressively as this background processing completes.
+                            </div>
+                          </div>
+
+                           <div className="faq-section">
+                            <div className="faq-question">How can I save and load searches?</div>
+                            <div className="faq-answer">
+                              After entering search criteria (location, price, beds, baths), click "Save Search". Give it a name, and it will be stored in your browser. Click "Load Search" to see your saved searches, load the criteria back into the form, and automatically run the search again.
                             </div>
                           </div>
 
                           <div className="faq-section">
-                            <div className="faq-question">How can I see more details about a property?</div>
+                            <div className="faq-question">How do I sort the results?</div>
                             <div className="faq-answer">
-                              Click on the property address or image to visit the original listing. You can also expand the "Cashflow Analysis" section on each property card to see financial details. Additionally, use the "Quick Links" at the bottom of each card to access Zillow and RentCast for more information.
+                              Use the "Sort By" dropdown menu above the property grid. You can sort by:
+                              <ul>
+                                <li><b>Crunch Score (Default):</b> Overall investment potential (higher is better).</li>
+                                <li>Price</li>
+                                <li>Rent Estimate</li>
+                                <li>Ratio (Rent-to-Price)</li>
+                                <li>Monthly Cashflow</li>
+                                <li>Bedrooms, Bathrooms, Sq Ft</li>
+                                <li>Days on Market</li>
+                              </ul>
+                              Click the arrow icon next to the dropdown to toggle between ascending and descending order.
                             </div>
                           </div>
                         </div>
                       )}
 
-                      {/* Filters FAQ Section */}
+                      {/* Filters & Assumptions FAQ Section */}
                       {activeFaqSection === 'filters' && (
                         <div>
                           <div className="faq-section">
-                            <div className="faq-question">How do I use the price filters?</div>
+                            <div className="faq-question">How do the filters work?</div>
                             <div className="faq-answer">
-                              After performing a search, you can use the "Min Price" and "Max Price" fields to narrow down the results. Enter the desired price range and the list will automatically update to show only properties within that range.
+                              The filters (Min/Max Price, Min Beds, Min Baths) are applied *before* the search request is sent. This means the tool only fetches properties that meet these initial criteria.
                             </div>
                           </div>
-
                           <div className="faq-section">
-                            <div className="faq-question">Can I sort the search results?</div>
+                            <div className="faq-question">How do I adjust the investment assumptions?</div>
                             <div className="faq-answer">
-                              Yes, you can sort the results by various criteria including price, rent estimate, bedrooms, bathrooms, square footage, and the rent-to-price ratio. Use the sort controls to organize the properties in ascending or descending order.
+                              Click the purple "Assumptions" tab floating on the right side of the screen (visible on the main search page and property details page). This opens a drawer where you can adjust sliders for:
+                              <ul>
+                                <li>Mortgage: Interest Rate, Loan Term, Down Payment %</li>
+                                <li>Initial Costs: Rehab Amount (added to total investment for CoC calculation)</li>
+                                <li>Operating Expenses: Property Tax & Insurance %, Vacancy %, CapEx %, Property Management %</li>
+                              </ul>
+                              Changes you make here instantly update the cashflow analysis and Crunch Score for all displayed properties and are used as defaults on the Property Details page.
+                            </div>
+                          </div>
+                           <div className="faq-section">
+                            <div className="faq-question">What do the expense assumptions mean?</div>
+                            <div className="faq-answer">
+                              <ul>
+                                <li><b>Tax & Insurance %:</b> Annual property taxes and insurance expressed as a percentage of the property price.</li>
+                                <li><b>Vacancy %:</b> Percentage of the estimated monthly rent set aside for potential vacancies.</li>
+                                <li><b>CapEx %:</b> (Capital Expenditures) Percentage of the estimated monthly rent set aside for large, infrequent repairs and replacements (e.g., roof, HVAC).</li>
+                                <li><b>Property Management %:</b> Percentage of the estimated monthly rent allocated for property management fees (if applicable).</li>
+                                <li><b>Rehab Amount:</b> Estimated upfront cost for repairs/renovations needed before renting. This is added to your initial investment.</li>
+                              </ul>
+                              Adjust these based on your research and risk tolerance.
                             </div>
                           </div>
                         </div>
                       )}
 
-                      {/* Cashflow FAQ Section */}
+                      {/* Cashflow & Scoring FAQ Section */}
                       {activeFaqSection === 'cashflow' && (
                         <div>
                           <div className="faq-section">
                             <div className="faq-question">What is the cashflow analysis?</div>
                             <div className="faq-answer">
-                              The cashflow analysis provides a detailed breakdown of the potential income and expenses for each property as a rental investment. It includes mortgage payments, tax and insurance costs, vacancy allowances, capital expenditure reserves, and calculates the monthly and annual cash flow as well as cash-on-cash return.
-                            </div>
-                          </div>
-
-                          <div className="faq-section">
-                            <div className="faq-question">Can I adjust the investment assumptions?</div>
-                            <div className="faq-answer">
-                              Yes, you can customize the investment assumptions to match your specific situation. Adjustable parameters include interest rate, loan term, down payment percentage, tax and insurance percentage, vacancy allowance, and capital expenditure (CapEx) reserve.
-                            </div>
-                          </div>
-
-                          <div className="faq-section">
-                            <div className="faq-question">How do I interpret the rent-to-price ratio?</div>
-                            <div className="faq-answer">
-                              The rent-to-price ratio is a quick way to assess a property's potential as a rental investment. It shows the monthly rent as a percentage of the purchase price. Generally, a higher ratio is better:
+                              Found in the expandable section of each property card (and on the details page), this breaks down the estimated monthly finances:
                               <ul>
-                                <li>0.7% and above (green): Potentially strong cash flow</li>
-                                <li>0.4% to 0.7% (yellow): Moderate potential</li>
-                                <li>Below 0.4% (red): May be challenging to achieve positive cash flow</li>
+                                <li>Income: Rent Estimate (you can edit this value directly on the card)</li>
+                                <li>Expenses: Calculated Mortgage (P&I), Tax & Insurance, Vacancy, CapEx, and Property Management based on your assumptions.</li>
+                                <li>Results: Total Monthly Expenses, Monthly Cashflow, Annual Cashflow, and Cash-on-Cash (CoC) Return.</li>
                               </ul>
-                              Remember that this is just one metric and should be considered alongside other factors like location, property condition, and growth potential.
+                            </div>
+                          </div>
+
+                           {/* NEW CRUNCH SCORE SECTION */} 
+                          <div className="faq-section">
+                            <div className="faq-question">What is the "Crunch Score"?</div>
+                            <div className="faq-answer">
+                              The Crunch Score is a custom metric (0-100, higher is better) designed to give you a quick assessment of a property's overall investment potential based on the data available and **your current assumptions**. It considers multiple factors, including:
+                              <ul>
+                                <li>Cash-on-Cash Return (CoC)</li>
+                                <li>Monthly Cashflow relative to Rent</li>
+                                <li>Rent-to-Price Ratio</li>
+                                <li>Down Payment % (slightly favors higher DP for lower risk)</li>
+                                <li>Days on Market (slightly favors lower DOM)</li>
+                                <li>Estimated Rehab Costs (favors lower rehab)</li>
+                              </ul>
+                              It provides a more holistic view than just the rent-to-price ratio alone. Remember that adjusting your assumptions in the slide-out panel will change the Crunch Score!
                             </div>
                           </div>
 
                           <div className="faq-section">
-                            <div className="faq-question">Can I edit the rent estimate?</div>
+                            <div className="faq-question">How do I interpret the Rent-to-Price Ratio?</div>
                             <div className="faq-answer">
-                              Yes, you can edit the rent estimate for any property by clicking on the rent estimate value in the cashflow analysis section. This allows you to input a custom rent amount if you have more accurate information about potential rental income.
+                              While the Crunch Score is the primary ranking metric, the Rent-to-Price Ratio (monthly rent / price) is still shown in the shareable summary. It's a traditional rough indicator:
+                              <ul>
+                                <li>Generally, ratios above 0.7% are considered potentially good, but this varies greatly by market.</li>
+                              </ul>
+                              Focus on the Crunch Score and detailed cashflow analysis for a better picture.
+                            </div>
+                          </div>
+
+                          <div className="faq-section">
+                            <div className="faq-question">Can I edit the rent estimate on the card?</div>
+                            <div className="faq-answer">
+                              Yes. In the expanded Cashflow Analysis section on each property card, click the pencil icon next to the Rent Estimate. You can type in your own value. This will update the cashflow calculations and Crunch Score *for that specific card only* based on your input. It does not permanently change the underlying property data.
                             </div>
                           </div>
                         </div>
@@ -2424,68 +1711,60 @@ function App() {
                           <div className="faq-section">
                             <div className="faq-question">How do I save properties I'm interested in?</div>
                             <div className="faq-answer">
-                              When viewing a property's detailed page, click the "Bookmark" button in the header. This will save the property, including all your custom settings and notes, for later reference. You'll see the button change to "Bookmarked" to confirm the property has been saved.
+                              Go to a property's detailed page (by clicking the address or "Deep Dive" link on a card). On the details page, click the "Bookmark" button in the header. This saves the property, including the specific assumptions and notes you had at that moment.
                             </div>
                           </div>
 
                           <div className="faq-section">
                             <div className="faq-question">Where can I find my bookmarked properties?</div>
                             <div className="faq-answer">
-                              Click the "Bookmarks" button in the top navigation bar from any page of the application. This will take you to your bookmarks page where you can see all saved properties displayed in a card layout similar to the search results.
+                              Click the "Bookmarks" button in the top navigation bar. This page displays all your saved properties with the analysis based on the assumptions *at the time they were bookmarked*.
                             </div>
                           </div>
 
                           <div className="faq-section">
                             <div className="faq-question">What information is saved in a bookmark?</div>
                             <div className="faq-answer">
-                              Bookmarks save the complete property data along with any customizations you've made, including:
+                              Bookmarks save a snapshot of the property and your analysis at the time of saving:
                               <ul>
-                                <li>All property details (price, address, bedrooms, etc.)</li>
-                                <li>Your custom rent estimate (if you modified it)</li>
-                                <li>Your investment assumption settings (interest rate, down payment, etc.)</li>
-                                <li>Custom projection settings for long-term analysis</li>
-                                <li>Any notes you added in the Notes section</li> {/* Added notes */} 
+                                <li>All core property details (price, address, beds, baths, etc.)</li>
+                                <li>Your custom rent estimate (if edited on the details page)</li>
+                                <li>The specific investment and projection assumptions used for that analysis</li>
+                                <li>Any notes you added on the details page</li>
                               </ul>
-                              This ensures that when you revisit a bookmarked property, you'll see it exactly as you left it.
                             </div>
                           </div>
 
                           <div className="faq-section">
                             <div className="faq-question">How do I remove a property from my bookmarks?</div>
                             <div className="faq-answer">
-                              There are two ways to remove a bookmark:
-                              <ol>
-                                <li>From the bookmarks page, click the "Remove" button on the property card you wish to delete.</li>
-                                <li>From the property details page, click the "Bookmarked" button to toggle it off and remove the bookmark.</li>
-                              </ol>
+                              From the Bookmarks page, click the "Remove" button on the property card.
                             </div>
                           </div>
 
                           <div className="faq-section">
                             <div className="faq-question">Are my bookmarks saved if I close the browser?</div>
                             <div className="faq-answer">
-                              Yes, bookmarks are stored in your browser's local storage, which means they'll persist even when you close the browser or shut down your computer. However, they are specific to the device and browser you're using. If you switch devices or browsers, you won't see the same bookmarks.
+                              Yes, bookmarks (and saved searches) are stored in your browser's local storage. They will persist unless you clear your browser data. They are specific to the browser and device you used.
                             </div>
                           </div>
                         </div>
                       )}
 
-                      {/* Add New Property Details & Sharing Section */}
+                      {/* Property Details & Sharing Section */}
                       {activeFaqSection === 'details' && (
                         <div>
                            <div className="faq-section">
                             <div className="faq-question">What's on the Property Details Page?</div>
                             <div className="faq-answer">
-                              The Property Details page provides an in-depth look at a single property, including:
+                              This page offers a deep dive into a single property:
                               <ul>
-                                <li>Basic property information (price, beds, baths, sqft)</li>
-                                <li>An interactive map showing the property location</li>
-                                <li>Detailed monthly and annual cashflow analysis based on current assumptions</li>
-                                <li>A long-term projection chart showing potential growth in property value, equity, and cashflow over 30 years</li>
-                                <li>A table summarizing key metrics for years 1, 5, 10, 15, 20, 25, and 30</li>
-                                <li>An editable Notes section to jot down your thoughts</li>
-                                <li>Controls to adjust investment assumptions (in the slide-out drawer) and long-term projection assumptions</li>
-                                <li>Links to view the property on Zillow and RentCast</li>
+                                <li>Key Info & Interactive Map</li>
+                                <li>Detailed Cashflow Analysis (using assumptions adjustable via the side panel)</li>
+                                <li>Long-Term Projection Chart & Table (visualizing value, equity, cashflow over 30 years based on adjustable appreciation rates)</li>
+                                <li>Editable Notes Section</li>
+                                <li>Buttons to Bookmark and Share</li>
+                                <li>Links to Zillow and RentCast</li>
                               </ul>
                             </div>
                           </div>
@@ -2493,44 +1772,33 @@ function App() {
                           <div className="faq-section">
                             <div className="faq-question">How does the "Copy URL" sharing feature work?</div>
                             <div className="faq-answer">
-                              Clicking "Copy URL" on the Property Details page generates a unique web address (URL) that contains all the necessary information about the property, your current investment assumptions, projection settings, custom rent estimate (if changed), and any notes you've added. This data is encoded directly into the URL itself. When someone opens this link, the application reads the data from the URL and displays the property details exactly as you configured them, without needing to fetch anything from a server.
+                              On the Property Details page, clicking "Copy URL" creates a unique web link containing all the property data, your *current* analysis settings (assumptions, custom rent, projections), and notes, encoded directly into the URL. Anyone opening this link will see the property analysis exactly as you configured it at that moment.
                             </div>
                           </div>
 
                           <div className="faq-section">
-                            <div className="faq-question">How do I use the Notes section?</div>
+                            <div className="faq-question">How do I use the Notes section on the details page?</div>
                             <div className="faq-answer">
-                              The Notes section on the Property Details page allows you to write down any thoughts, observations, or questions about the property. Simply type into the text box. These notes are automatically saved when you bookmark the property or generate a shareable URL.
+                              Type your observations or questions into the text box. Notes are saved automatically with Bookmarks and included in Shared URLs.
                             </div>
                           </div>
 
                           <div className="faq-section">
                             <div className="faq-question">What does the Long-Term Projection chart show?</div>
                             <div className="faq-answer">
-                              This chart visualizes the potential financial performance of the property over 30 years based on your assumptions. It shows:
+                              It visualizes potential financial performance over 30 years based on the assumptions set (in the side panel or below the chart):
                               <ul>
-                                <li><b>Property Value (Purple Line):</b> Estimated appreciation based on the 'Property Value Increase' rate.</li>
-                                <li><b>Equity (Green Line):</b> Your ownership stake, growing from principal payments and appreciation.</li>
-                                <li><b>Annual Cashflow (Orange/Red Bars):</b> Projected cash flow for each year, based on rent appreciation and expense assumptions. Orange bars indicate positive cashflow, red bars indicate negative.</li>
+                                <li><b>Property Value (Purple Line):</b> Growth based on 'Property Value Increase' % assumption.</li>
+                                <li><b>Equity (Green Line):</b> Your ownership stake, growing via principal paydown and appreciation.</li>
+                                <li><b>Annual Cashflow (Orange/Red Bars):</b> Yearly cash flow, factoring in 'Rent Appreciation' % assumption.</li>
                               </ul>
-                              Hover over the chart to see specific values for each year. You can adjust the 'Rent Appreciation' and 'Property Value Increase' rates using the sliders below the chart or in the Assumptions drawer.
+                              Hover over the chart for yearly details.
                             </div>
                           </div>
                            <div className="faq-section">
-                            <div className="faq-question">How do I adjust the assumptions?</div>
+                            <div className="faq-question">How do I adjust assumptions on the details page?</div>
                             <div className="faq-answer">
-                             Click the purple "Assumptions" tab on the right side of the Property Details page. This opens a drawer where you can adjust sliders for:
-                              <ul>
-                                <li><b>Cashflow Assumptions:</b> Interest Rate, Loan Term, Down Payment, Tax/Insurance %, Vacancy %, CapEx %, Property Management %.</li>
-                                <li><b>Long-Term Projection Assumptions:</b> Rent Appreciation % and Property Value Increase %.</li>
-                              </ul>
-                              Changes you make here instantly update the cashflow analysis and long-term projections. These settings are also saved with bookmarks and shared URLs.
-                            </div>
-                          </div>
-                           <div className="faq-section">
-                            <div className="faq-question">What is the map for?</div>
-                            <div className="faq-answer">
-                              The map on the Property Details page shows the approximate location of the property based on its address or latitude/longitude coordinates. It helps you visualize the property's surroundings and neighborhood context.
+                             Use the purple "Assumptions" tab on the right to open the drawer (adjusts analysis globally) or use the specific sliders below the long-term projection chart (adjusts *only* the projection assumptions: Rent Appreciation % and Property Value Increase %). Settings made here are saved with bookmarks/shared URLs.
                             </div>
                           </div>
                         </div>

@@ -36,4 +36,5 @@ export interface CashflowSettings {
   vacancyPercent: number;
   capexPercent: number;
   propertyManagementPercent: number;
+  rehabAmount: number;
 } 
