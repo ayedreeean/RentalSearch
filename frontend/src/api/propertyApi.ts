@@ -310,6 +310,28 @@ interface ZillowRentEstimateResponseData {
     rent: number;
     // Add other potential fields if needed
 }
+
+// Interface for the Property Details endpoint response
+interface ZillowPropertyDetailsData {
+    zpid: string | number;
+    address: {
+      streetAddress: string;
+      city: string;
+      state: string;
+      zipcode: string;
+    };
+    price: number;
+    rentZestimate?: number;
+    zestimate?: number; // Zillow's estimated market value
+    bedrooms?: number;
+    bathrooms?: number;
+    livingArea?: number; // Square footage
+    photos?: { url: string }[]; // Array of photos, take the first?
+    hdpUrl?: string; // Relative URL to Zillow details page
+    daysOnZillow?: number;
+    homeStatus?: string; // e.g., FOR_SALE, SOLD
+    // Add other potentially useful fields from the details endpoint
+}
 // --- End Zillow API Response Type Definitions ---
 
 // Function to get total properties count for pagination
@@ -617,4 +639,143 @@ const getPropertyWithRentEstimate = async (property: Property, isPriority: boole
     console.error(`Error getting rent estimate for ${property.address}:`, error);
     throw error; // Propagate error for retry logic
   }
+};
+
+// Function to get property details by ZPID
+export const getPropertyDetailsByZpid = async (zpid: string): Promise<Property | null> => {
+    try {
+        console.log(`[getPropertyDetailsByZpid] Fetching details for ZPID: ${zpid}`);
+        const detailsResponse = await rateLimiter.enqueue<AxiosResponse<ZillowPropertyDetailsData>>(async () => {
+            return await axios.request<ZillowPropertyDetailsData>({
+                method: 'GET',
+                url: 'https://zillow-com1.p.rapidapi.com/property', // Use the correct endpoint
+                params: { zpid: zpid },
+                headers: {
+                    'X-RapidAPI-Key': RAPIDAPI_KEY,
+                    'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
+                },
+                timeout: 15000 // Increased timeout for potentially slower detail requests
+            });
+        }, 2); // Higher priority than standard search
+
+        if (!detailsResponse.data || !detailsResponse.data.zpid) {
+            console.warn(`[getPropertyDetailsByZpid] Invalid or empty response for ZPID ${zpid}:`, detailsResponse.data);
+            return null;
+        }
+
+        const details = detailsResponse.data;
+        
+        // --- Format the response into our Property type ---
+        const street = details.address?.streetAddress || '';
+        const city = details.address?.city || '';
+        const state = details.address?.state || '';
+        const zip = details.address?.zipcode || '';
+        const fullAddress = `${street}, ${city}, ${state} ${zip}`.replace(/^, |, $/g, '').trim(); // Clean up address string
+
+        const price = details.price || details.zestimate || 0; // Use listed price, fallback to zestimate
+        const rentEstimate = details.rentZestimate || price * 0.007; // Use Zillow rent, fallback to 0.7% rule
+        
+        // --- Use the correct image field from the response --- 
+        const thumbnail = details.image_url // Prioritize image_url
+                       || details.imgSrc    // Fallback to imgSrc
+                       || (details.photos && details.photos.length > 0 ? details.photos[0].url : null) // Fallback to photos array
+                       || './placeholder-house.png'; // Final fallback to a placeholder image
+
+        if (price === 0) {
+            console.warn(`[getPropertyDetailsByZpid] Price is zero for ZPID ${zpid}, skipping property.`);
+            return null; // Cannot calculate ratio if price is zero
+        }
+
+        const property: Property = {
+            property_id: String(details.zpid),
+            address: fullAddress,
+            price: price,
+            rent_estimate: rentEstimate,
+            ratio: rentEstimate / price,
+            thumbnail: thumbnail,
+            bedrooms: details.bedrooms || 0,
+            bathrooms: details.bathrooms || 0,
+            sqft: details.livingArea || 0,
+            url: details.hdpUrl ? `https://www.zillow.com${details.hdpUrl}` : '#', // Construct full URL
+            days_on_market: details.daysOnZillow || null,
+            rent_source: details.rentZestimate ? 'zillow' : 'calculated',
+            // homeStatus: details.homeStatus // Could add homeStatus if needed in the Property type
+        };
+
+        console.log(`[getPropertyDetailsByZpid] Successfully fetched and formatted details for ZPID ${zpid}`);
+        return property;
+
+    } catch (error) {
+        console.error(`Error fetching property details for ZPID ${zpid}:`, error);
+        // Consider how to handle specific errors (e.g., 404 Not Found)
+        // if (axios.isAxiosError(error) && error.response?.status === 404) {
+        //     console.log(`Property with ZPID ${zpid} not found.`);
+        // }
+        return null; // Return null on error
+    }
+};
+
+// Function to search for a single property by specific address
+export const searchPropertyByAddress = async (address: string): Promise<Property | null> => {
+    try {
+        console.log(`[searchPropertyByAddress] Searching for address: ${address}`);
+
+        // --- Step 1: Use extended search to find ZPID ---
+        const searchParams = {
+            location: address,
+            status: 'any' // Explicitly search for any status (including sold)
+        };
+
+        const searchResponse = await rateLimiter.enqueue<AxiosResponse<ZillowSearchResponseData>>(async () => {
+            return await axios.request<ZillowSearchResponseData>({
+                method: 'GET',
+                url: 'https://zillow-com1.p.rapidapi.com/propertyExtendedSearch',
+                params: searchParams,
+                headers: {
+                    'X-RapidAPI-Key': RAPIDAPI_KEY,
+                    'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
+                },
+                timeout: 10000
+            });
+        }, 3); // Highest priority
+
+        // --- Log the raw response --- 
+        console.log('[searchPropertyByAddress] Raw API Response Data:', searchResponse.data);
+
+        let zpid: string | null = null;
+
+        // --- Check for direct ZPID in response (likely for exact address match) ---
+        if (searchResponse.data && searchResponse.data.zpid) {
+             zpid = String(searchResponse.data.zpid);
+             console.log(`[searchPropertyByAddress] Found direct ZPID: ${zpid}`);
+        }
+        // --- Fallback: Check if it returned a props array (like general search) ---
+        else if (searchResponse.data && Array.isArray(searchResponse.data.props) && searchResponse.data.props.length > 0) {
+            // Heuristic: Assume the first result is the most relevant
+            const firstResult = searchResponse.data.props[0];
+            if (firstResult.zpid) {
+                zpid = String(firstResult.zpid);
+                console.log(`[searchPropertyByAddress] Found ZPID in props array: ${zpid}`);
+            } else {
+                console.warn(`[searchPropertyByAddress] First result in props array lacks ZPID for address: ${address}`, firstResult);
+            }
+        } else {
+            console.warn(`[searchPropertyByAddress] No ZPID found or properties array in response for address: ${address}`, searchResponse.data);
+            return null; // No usable data found
+        }
+
+        if (!zpid) {
+             console.warn(`[searchPropertyByAddress] Final ZPID is null or undefined for address: ${address}`);
+             return null;
+        }
+
+        // --- Step 2: Get detailed property info using the ZPID ---
+        return await getPropertyDetailsByZpid(zpid);
+
+    } catch (error) {
+        console.error(`Error searching for address ${address}:`, error);
+        // Rethrow or handle specific errors as needed
+        // For example, if the extended search fails, we can't proceed
+        return null; // Return null if any step fails
+    }
 };

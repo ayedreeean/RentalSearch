@@ -25,7 +25,7 @@ import SaveAltIcon from '@mui/icons-material/SaveAlt'; // Restore import
 import HistoryIcon from '@mui/icons-material/History'; // Restore import
 import DeleteIcon from '@mui/icons-material/Delete'; // Restore import
 import './App.css';
-import { searchProperties, getTotalPropertiesCount, registerForPropertyUpdates } from './api/propertyApi';
+import { searchProperties, getTotalPropertiesCount, registerForPropertyUpdates, searchPropertyByAddress } from './api/propertyApi';
 import PropertyDetailsPage from './pages/PropertyDetailsPage';
 import { CashflowSettings, Property, Cashflow } from './types';
 import BookmarksPage from './pages/BookmarksPage';
@@ -205,8 +205,46 @@ function App() {
     setLoading(true);
     setInitialLoading(true); // Indicate initial fetch is starting
     setIsProcessingBackground(false);
+    setTotalProperties(0); // Reset total properties for new search
+
+    // --- Check if location looks like a specific address (simple heuristic) ---
+    const isSpecificAddressSearch = /\d/.test(location) && /[a-zA-Z]/.test(location);
+    console.log('Is specific address search:', isSpecificAddressSearch);
 
     try {
+      // --- Handle Specific Address Search ---
+      if (isSpecificAddressSearch) {
+        console.log(`Searching for specific address: ${location}`);
+        const singleProperty = await searchPropertyByAddress(location);
+        if (searchId === currentSearchId.current) { // Check if this is still the latest request
+          if (singleProperty) {
+            setDisplayedProperties([singleProperty]);
+            setTotalProperties(1);
+            setError(null);
+            console.log('Specific address found:', singleProperty);
+          } else {
+            setError(`Could not find details for the address: "${location}". Please check the address or try a broader location search.`);
+            setDisplayedProperties([]);
+            setTotalProperties(0);
+            console.log('Specific address not found or failed to fetch details.');
+          }
+          setLoading(false);
+          setInitialLoading(false);
+          setIsProcessingBackground(false);
+          // Scroll to results/error
+          setTimeout(() => {
+            const resultsElement = document.querySelector('.property-grid, .MuiAlert-root');
+            if (resultsElement) {
+              resultsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              window.scrollBy(0, -50);
+            }
+          }, 300);
+        }
+        return; // Exit handleSearch early for specific address
+      }
+
+      // --- Handle General Location Search (Existing Logic) ---
+      console.log(`Searching for general location: ${location}`);
       // --- Prepare Filters & Prices (Relaxed Validation) ---
       let minP: number | null = null;
       let maxP: number | null = null;

@@ -1150,7 +1150,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
 
   // --- Tooltip Text (Moved Higher) --- 
   const crunchScoreTooltip = "Overall investment potential (0-100) based on cash flow, rent/price ratio, and your assumptions (higher is better).";
-
+  
   // Create RentCast URL
   const rentCastUrl = property ? `https://app.rentcast.io/app?address=${encodeURIComponent(property.address)}` : '#';
   
@@ -2482,7 +2482,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 </Box>
                 
                 <Divider sx={{ my: 1 }} />
-
+                
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                   <Typography variant="body2" fontWeight="bold">Total Investment:</Typography>
                   <Typography variant="body2" fontWeight="bold">{formatCurrency(totalInvestment)}</Typography> {/* Use calculated total investment */}

@@ -87,12 +87,12 @@ interface PropertyCardProps {
   crunchScore: number;
 }
 
-const PropertyCard: React.FC<PropertyCardProps> = ({ 
-  property, 
+const PropertyCard: React.FC<PropertyCardProps> = ({
+  property,
   calculateCashflow, 
-  formatCurrency, 
-  formatPercent, 
-  vacancyPercent, 
+  formatCurrency,
+  formatPercent,
+  vacancyPercent,
   capexPercent,
   downPaymentPercent,
   propertyManagementPercent,
@@ -259,7 +259,7 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
       <CardContent className="property-details">
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
           <Typography variant="h6" component="div" className="price-ratio-container" gutterBottom>
-            {formatCurrency(property.price)}
+          {formatCurrency(property.price)}
             {/* --- Wrap Crunch Score Pill with Tooltip --- */}
             <Tooltip title={crunchScoreTooltip} arrow>
               <span className={`crunch-score-chip ${crunchScoreClass}`}>
@@ -271,7 +271,7 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
                 {property.days_on_market} days
               </span>
             )}
-          </Typography>
+        </Typography>
         </Box>
         
         <a href="#" onClick={handleOpenDeepDive} className="property-address">
@@ -283,7 +283,7 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <div>
             <Typography variant="body2" fontWeight="medium">
-              Rent Est: {formatCurrency(property.rent_estimate)} 
+              Rent Est: {formatCurrency(property.rent_estimate)}
               {property.rent_source === 'zillow' && (
                 <span className="rent-source">Zillow</span>
               )}
