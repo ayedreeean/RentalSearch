@@ -26,8 +26,6 @@ import Drawer from '@mui/material/Drawer';
 import PropertyCard from './components/PropertyCard';
 // Import the scoring function
 import { calculateCrunchScore } from './utils/scoring';
-// Import the context hook
-import { useSettings } from './context/SettingsContext';
 
 // Define possible sort keys
 type SortableKey = keyof Pick<Property, 'price' | 'rent_estimate' | 'bedrooms' | 'bathrooms' | 'sqft' | 'days_on_market'> | 'ratio' | 'cashflow' | 'crunchScore'; // Add crunchScore
@@ -44,15 +42,12 @@ interface SavedSearch {
 }
 
 function App() {
-  // Get settings from context
-  const { settings } = useSettings();
-
   // --- Define state variables ---
   const [location, setLocation] = useState('');
   const [minPrice, setMinPrice] = useState<string | number>('');
   const [maxPrice, setMaxPrice] = useState<string | number>('');
-  const [minBeds, setMinBeds] = useState<string>('0');
-  const [minBaths, setMinBaths] = useState<string>('0');
+  const [minBeds, setMinBeds] = useState<string>('0'); // Restore state
+  const [minBaths, setMinBaths] = useState<string>('0'); // Restore state
   const [displayedProperties, setDisplayedProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(false);
   const [isProcessingBackground, setIsProcessingBackground] = useState(false);
@@ -71,6 +66,16 @@ function App() {
   // New state for marketing intro panel - always show
   const [showMarketingIntro] = useState(true);
   
+  // Mortgage calculator state
+  const [interestRate, setInterestRate] = useState(7.5);
+  const [loanTerm, setLoanTerm] = useState(30);
+  const [downPaymentPercent, setDownPaymentPercent] = useState(20);
+  const [taxInsurancePercent, setTaxInsurancePercent] = useState(3);
+  const [vacancyPercent, setVacancyPercent] = useState(8);
+  const [capexPercent, setCapexPercent] = useState(5);
+  const [propertyManagementPercent, setPropertyManagementPercent] = useState(0);
+  const [rehabAmount, setRehabAmount] = useState(0); // New state for initial rehab costs
+
   // --- State for Saved Searches ---
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -399,34 +404,54 @@ function App() {
 
   // --- Mortgage Calculation and Cashflow ---
   // Function to calculate mortgage payment
-  const calculateMortgage = useCallback((price: number): number => {
-    const downPayment = price * (settings.downPaymentPercent / 100);
+  const calculateMortgage = (price: number): number => {
+    const downPayment = price * (downPaymentPercent / 100);
     const loanAmount = price - downPayment;
-    const monthlyRate = settings.interestRate / 100 / 12;
-    const payments = settings.loanTerm * 12;
+    const monthlyRate = interestRate / 100 / 12;
+    const payments = loanTerm * 12;
     
     if (monthlyRate === 0) return loanAmount / payments;
     
     const x = Math.pow(1 + monthlyRate, payments);
     return loanAmount * (monthlyRate * x) / (x - 1);
-  // Add settings dependencies
-  }, [settings.downPaymentPercent, settings.interestRate, settings.loanTerm]);
+  };
   
   // Function to calculate cashflow
+  // Ensure this uses the imported Property and Cashflow types
   const calculateCashflow = useCallback((property: Property): Cashflow => {
+    // Use override price if it exists, otherwise use property price
     const propertyPrice = overridePrices[property.property_id] ?? property.price;
-    const rentEstimate = property.rent_estimate;
+    
+    // Get final rent value - use custom rent if available
+    const rentEstimate = 
+      property.rent_estimate;
+    
+    // Calculate mortgage as a monthly expense
     const monthlyMortgage = calculateMortgage(propertyPrice);
-    const annualTaxInsurance = propertyPrice * (settings.taxInsurancePercent / 100);
+    
+    // Calculate tax and insurance (monthly)
+    const annualTaxInsurance = propertyPrice * (taxInsurancePercent / 100);
     const monthlyTaxInsurance = annualTaxInsurance / 12;
-    const monthlyVacancy = rentEstimate * (settings.vacancyPercent / 100);
-    const monthlyCapex = rentEstimate * (settings.capexPercent / 100);
-    const monthlyPropertyManagement = rentEstimate * (settings.propertyManagementPercent / 100);
+    
+    // Calculate vacancy (monthly)
+    const monthlyVacancy = rentEstimate * (vacancyPercent / 100);
+    
+    // Calculate capital expenditures (capex)
+    const monthlyCapex = rentEstimate * (capexPercent / 100);
+    
+    // Calculate property management fees (if any)
+    const monthlyPropertyManagement = rentEstimate * (propertyManagementPercent / 100);
+    
+    // Calculate total monthly expenses
     const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
+    
+    // Calculate cashflow
     const monthlyCashflow = rentEstimate - totalMonthlyExpenses;
     const annualCashflow = monthlyCashflow * 12;
-    const downPaymentAmount = propertyPrice * (settings.downPaymentPercent / 100);
-    const totalInitialInvestment = downPaymentAmount + settings.rehabAmount;
+    
+    // Calculate cash on cash return
+    const downPaymentAmount = propertyPrice * (downPaymentPercent / 100);
+    const totalInitialInvestment = downPaymentAmount + rehabAmount;
     const cashOnCashReturn = totalInitialInvestment > 0 ? (annualCashflow / totalInitialInvestment) * 100 : 0;
     
     return {
@@ -440,8 +465,7 @@ function App() {
       annualCashflow,
       cashOnCashReturn
     };
-  // Update settings dependencies
-  }, [settings.taxInsurancePercent, settings.vacancyPercent, settings.capexPercent, settings.propertyManagementPercent, settings.downPaymentPercent, settings.rehabAmount, overridePrices, calculateMortgage]);
+  }, [interestRate, loanTerm, downPaymentPercent, taxInsurancePercent, vacancyPercent, capexPercent, propertyManagementPercent, rehabAmount, overridePrices, calculateMortgage]);
   
   // Helper function to format percentage
   const formatPercent = (percent: number): string => {
@@ -450,14 +474,14 @@ function App() {
   
   // Default settings for PropertyDetailsPage
   const defaultSettings: CashflowSettings = {
-    interestRate: settings.interestRate,
-    loanTerm: settings.loanTerm,
-    downPaymentPercent: settings.downPaymentPercent,
-    taxInsurancePercent: settings.taxInsurancePercent,
-    vacancyPercent: settings.vacancyPercent,
-    capexPercent: settings.capexPercent,
-    propertyManagementPercent: settings.propertyManagementPercent,
-    rehabAmount: settings.rehabAmount
+    interestRate,
+    loanTerm,
+    downPaymentPercent,
+    taxInsurancePercent,
+    vacancyPercent,
+    capexPercent,
+    propertyManagementPercent,
+    rehabAmount
   };
 
   // --- Sorting Logic ---
@@ -528,7 +552,7 @@ function App() {
       });
       
       return sorted;
-  // Update settings dependency
+  // Add settings dependencies to useCallback
   }, [calculateCrunchScore, calculateCashflow]); 
 
   // --- Add useEffect for handling property updates ---
@@ -561,8 +585,8 @@ function App() {
         
           // Sort based on current config, passing current settings
           if (sortConfig.key) {
-            // Get settings directly from context here
-            return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, calculateCashflow, overridePrices, settings);
+            const currentSettings: CashflowSettings = defaultSettings; // Get current settings
+            return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, calculateCashflow, overridePrices, currentSettings);
           } else {
             return newPropertyList;
           }
@@ -590,7 +614,7 @@ function App() {
        return currentProperties; 
     });
 
-  }, [sortConfig, totalProperties, calculateCashflow, searchPerformed, overridePrices, sortProperties, settings]); // Removed initialLoading, added settings
+  }, [sortConfig, totalProperties, calculateCashflow, searchPerformed, initialLoading, overridePrices, sortProperties, defaultSettings]); // Add missing dependencies
 
   // UseEffect to register for updates when component mounts
   useEffect(() => {
@@ -614,10 +638,11 @@ function App() {
   }, []);
 
   const sortedProperties = useMemo(() => {
-      // Pass overridePrices and current settings (from context) to the sort function
-      return sortProperties(displayedProperties, sortConfig.key, sortConfig.direction, calculateCashflow, overridePrices, settings);
+      // Pass overridePrices and current settings to the sort function
+      const currentSettings: CashflowSettings = defaultSettings; // Get current settings
+      return sortProperties(displayedProperties, sortConfig.key, sortConfig.direction, calculateCashflow, overridePrices, currentSettings);
   // Update dependencies for useMemo
-  }, [displayedProperties, sortConfig, calculateCashflow, overridePrices, sortProperties, settings]); 
+  }, [displayedProperties, sortConfig, calculateCashflow, overridePrices, sortProperties, defaultSettings]); 
 
   // --- Rent Estimate Handling ---
   const handleRentEstimateChange = useCallback((propertyId: string, newRentString: string) => {
@@ -743,18 +768,18 @@ function App() {
                 <Paper 
                   elevation={3} 
                   sx={{ 
-                    mb: 4, // Keep bottom margin to separate from search
-                    borderRadius: 3,
+                    mb: 3, // Reduced bottom margin
+                    borderRadius: 2, // Slightly smaller border radius
                     overflow: 'hidden',
                     position: 'relative',
                     background: '#ffffff',
-                    boxShadow: '0 6px 20px rgba(79, 70, 229, 0.1)' // Slightly softer shadow
+                    boxShadow: '0 8px 25px rgba(79, 70, 229, 0.12)' // Adjusted shadow
                   }}
                 >
                   {/* Colored stripe at the top */}
                   <Box 
                     sx={{ 
-                      height: '5px', 
+                      height: '4px', // Thinner stripe 
                       background: 'linear-gradient(90deg, #4f46e5, #6366f1, #818cf8)'
                     }} 
                   />
@@ -767,22 +792,21 @@ function App() {
                       alignItems: 'center'
                     }}
                   >
-                    {/* Left side content - Reduced padding */}
-                    <Box 
+                    {/* Left side content */}                    <Box 
                       sx={{ 
-                        p: { xs: 2, sm: 3 }, // Reduced padding 
+                        p: { xs: 2, sm: 3 }, // Reduced padding
                         flex: '1.5',
                         position: 'relative',
                         zIndex: 1
                       }}
                     >
                       <Typography 
-                        variant="h4" // Slightly smaller heading
+                        variant="h4" // Reduced from h3
                         fontWeight="bold" 
                         sx={{ 
-                          mb: 1.5, // Reduced margin
+                          mb: 1.5, // Reduced bottom margin
                           color: '#1f2937',
-                          fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' } // Adjust font sizes
+                          fontSize: { xs: '1.5rem', sm: '1.8rem', md: '2rem' } // Smaller font sizes
                         }}
                       >
                         Find Your Ideal
@@ -798,19 +822,19 @@ function App() {
                       </Typography>
                       
                       <Typography 
-                        variant="body1" 
+                        variant="body1" // Keep as body1, maybe slightly smaller line height if needed
                         sx={{ 
-                          mb: 2, // Reduced margin
+                          mb: 2, // Reduced bottom margin
                           color: '#4b5563',
-                          lineHeight: 1.5, // Slightly tighter line height
-                          maxWidth: '500px'
+                          lineHeight: 1.5, // Slightly reduced line height
+                          maxWidth: '500px',
+                          fontSize: '0.95rem' // Slightly smaller font size
                         }}
                       >
-                        Discover and analyze potential real estate investments. Get cash flow analysis, 
-                        projections, and returns for properties anywhere.
+                        CashflowCrunch helps you discover and analyze potential real estate investments in seconds. 
+                        Get detailed cash flow analysis and returns on investment for properties.
                       </Typography>
                       
-                      {/* Feature boxes - Reduced padding and margins */}
                       <Box 
                         sx={{ 
                           display: 'flex', 
@@ -819,124 +843,44 @@ function App() {
                           mt: 2 // Reduced top margin
                         }}
                       >
-                        <Box 
-                          sx={{ 
-                            display: 'flex', 
-                            alignItems: 'flex-start', 
-                            p: 1.5, // Reduced padding
-                            borderRadius: 2,
-                            background: 'rgba(79, 70, 229, 0.05)',
-                            border: '1px solid rgba(79, 70, 229, 0.1)'
-                          }}
-                        >
-                          <Box 
-                            sx={{ 
-                              width: 40, 
-                              height: 40, 
-                              borderRadius: 2,
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'center', 
-                              bgcolor: '#4f46e5', 
-                              mr: 2,
-                              flexShrink: 0
-                            }}
-                          >
-                            <SearchIcon sx={{ color: 'white' }} />
-                          </Box>
-                          <Box>
-                            <Typography variant="subtitle1" fontWeight="600" color="#1f2937">
-                              Find Properties Fast
-                            </Typography>
-                            <Typography variant="body2" color="#6b7280">
-                              Discover properties with high cash flow potential
-                            </Typography>
-                          </Box>
-                        </Box>
-                        
-                        <Box 
-                          sx={{ 
-                            display: 'flex', 
-                            alignItems: 'flex-start', 
-                            p: 1.5, // Reduced padding
-                            borderRadius: 2,
-                            background: 'rgba(79, 70, 229, 0.05)',
-                            border: '1px solid rgba(79, 70, 229, 0.1)'
-                          }}
-                        >
-                          <Box 
-                            sx={{ 
-                              width: 40, 
-                              height: 40, 
-                              borderRadius: 2,
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'center', 
-                              bgcolor: '#4f46e5', 
-                              mr: 2,
-                              flexShrink: 0
-                            }}
-                          >
-                            <BarChartIcon sx={{ color: 'white' }} />
-                          </Box>
-                          <Box>
-                            <Typography variant="subtitle1" fontWeight="600" color="#1f2937">
-                              Detailed Analytics
-                            </Typography>
-                            <Typography variant="body2" color="#6b7280">
-                              Get comprehensive financial projections
-                            </Typography>
-                          </Box>
-                        </Box>
+                        {/* Removed the two feature boxes for brevity */}
                       </Box>
                     </Box>
                     
-                    {/* Right side image/graphic element - Reduced logo size */}
-                    <Box 
+                    {/* Right side image/graphic element */}                    <Box 
                       sx={{ 
                         flex: '1',
                         position: 'relative',
-                        display: { xs: 'none', md: 'block' },
-                        alignSelf: 'stretch'
+                        display: { xs: 'none', md: 'flex' }, 
+                        alignSelf: 'stretch',
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        minHeight: '200px' 
                       }}
                     >
                       <Box
                         sx={{
-                          // Restore background gradient and clipPath
                           position: 'absolute',
                           top: 0,
                           right: 0,
                           bottom: 0,
                           left: 0,
-                          background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.8) 0%, rgba(99, 102, 241, 0.8) 100%)',
-                          clipPath: 'polygon(10% 0, 100% 0, 100% 100%, 0% 100%)', 
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
+                          // Combine bolder gradient and stripe pattern
+                          background: `
+                            repeating-linear-gradient(45deg, rgba(255,255,255,0.08), rgba(255,255,255,0.08) 5px, transparent 5px, transparent 10px),
+                            linear-gradient(135deg, rgba(79, 70, 229, 0.8) 0%, rgba(99, 102, 241, 0.8) 100%)
+                          `, 
+                          clipPath: 'polygon(10% 0, 100% 0, 100% 100%, 0% 100%)',
                           overflow: 'hidden'
-                         }}
-                      >
-                        {/* Diagonal lines background (can keep or remove) */}
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            width: '140%',
-                            height: '140%',
-                            opacity: 0.08,
-                            background: 'repeating-linear-gradient(45deg, #ffffff, #ffffff 10px, transparent 10px, transparent 20px)'
-                          }}
-                        />
-                        
-                        <Box sx={{ position: 'relative', zIndex: 1, p: 3, color: 'white', textAlign: 'center' }}>
-                          {/* Reduced logo size */}
-                          <img src={process.env.PUBLIC_URL + '/logo-optimized.png'} alt="CashflowCrunch Logo" style={{ height: '120px', width: '120px', marginBottom: '12px' }} /> 
-                          <Typography variant="h6" fontWeight="bold" gutterBottom>
-                            Start Your Search
-                          </Typography>
-                          <Typography variant="body2" sx={{ maxWidth: '200px', mx: 'auto' }}>
-                            Enter a location below to find opportunities
-                          </Typography>
-                        </Box>
+                        }}
+                      /> {/* Changed to JSX comment */}
+                      
+                      {/* Content stays relative on top */}
+                      <Box sx={{ position: 'relative', zIndex: 1, p: 2, textAlign: 'center' }}>
+                        <img src={process.env.PUBLIC_URL + '/logo-optimized.png'} alt="CashflowCrunch Logo" style={{ height: '120px', width: '120px', marginBottom: '8px' }} /> 
+                        <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ color: 'white' }}> {/* Changed color to white */}
+                          Start Crunching! {/* Changed text */}
+                        </Typography>
                       </Box>
                     </Box>
                   </Box>
@@ -1226,10 +1170,10 @@ function App() {
             </Typography>
             
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Interest Rate: {settings.interestRate}%</Typography>
+                  <Typography variant="body2" gutterBottom>Interest Rate: {interestRate}%</Typography>
               <Slider
-                value={settings.interestRate}
-                    onChange={(e, newValue) => settings.interestRate = newValue as number}
+                value={interestRate}
+                    onChange={(e, newValue) => setInterestRate(newValue as number)}
                     aria-labelledby="interest-rate-slider"
                 valueLabelDisplay="auto"
                     step={0.1}
@@ -1240,10 +1184,10 @@ function App() {
             </Box>
             
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Loan Term: {settings.loanTerm} years</Typography>
+                  <Typography variant="body2" gutterBottom>Loan Term: {loanTerm} years</Typography>
               <Slider
-                value={settings.loanTerm}
-                    onChange={(e, newValue) => settings.loanTerm = newValue as number}
+                value={loanTerm}
+                    onChange={(e, newValue) => setLoanTerm(newValue as number)}
                     aria-labelledby="loan-term-slider"
                 valueLabelDisplay="auto"
                     step={1}
@@ -1254,10 +1198,10 @@ function App() {
             </Box>
             
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Down Payment: {settings.downPaymentPercent}%</Typography>
+                  <Typography variant="body2" gutterBottom>Down Payment: {downPaymentPercent}%</Typography>
               <Slider
-                value={settings.downPaymentPercent}
-                    onChange={(e, newValue) => settings.downPaymentPercent = newValue as number}
+                value={downPaymentPercent}
+                    onChange={(e, newValue) => setDownPaymentPercent(newValue as number)}
                     aria-labelledby="down-payment-slider"
                 valueLabelDisplay="auto"
                     step={1}
@@ -1271,12 +1215,12 @@ function App() {
                <Box sx={{ mb: 2 }}>
                  <Typography variant="body2" gutterBottom>
                    <Tooltip title="Initial rehab costs needed before renting. This amount is added to your total investment when calculating ROI." arrow>
-                     <span>Initial Rehab: {formatCurrency(settings.rehabAmount)}</span>
+                     <span>Initial Rehab: {formatCurrency(rehabAmount)}</span>
                    </Tooltip>
                  </Typography>
                  <Slider 
-                   value={settings.rehabAmount} 
-                   onChange={(e, value) => settings.rehabAmount = value as number} 
+                   value={rehabAmount} 
+                   onChange={(e, value) => setRehabAmount(value as number)} 
                    min={0} 
                    max={100000} // Increased max to 100k
                    step={500} 
@@ -1288,10 +1232,10 @@ function App() {
                {/* --- End Initial Rehab Slider --- */}
             
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Property Tax & Insurance: {settings.taxInsurancePercent}%</Typography>
+                  <Typography variant="body2" gutterBottom>Property Tax & Insurance: {taxInsurancePercent}%</Typography>
               <Slider
-                value={settings.taxInsurancePercent}
-                    onChange={(e, value) => settings.taxInsurancePercent = value as number}
+                value={taxInsurancePercent}
+                    onChange={(e, value) => setTaxInsurancePercent(value as number)}
                     min={0}
                     max={5}
                 step={0.1}
@@ -1302,10 +1246,10 @@ function App() {
             </Box>
             
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Vacancy: {settings.vacancyPercent}%</Typography>
+                  <Typography variant="body2" gutterBottom>Vacancy: {vacancyPercent}%</Typography>
               <Slider
-                value={settings.vacancyPercent}
-                    onChange={(e, value) => settings.vacancyPercent = value as number}
+                value={vacancyPercent}
+                    onChange={(e, value) => setVacancyPercent(value as number)}
                 min={0}
                 max={10}
                 step={1}
@@ -1316,10 +1260,10 @@ function App() {
             </Box>
             
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>CapEx: {settings.capexPercent}%</Typography>
+                  <Typography variant="body2" gutterBottom>CapEx: {capexPercent}%</Typography>
               <Slider
-                value={settings.capexPercent}
-                    onChange={(e, value) => settings.capexPercent = value as number}
+                value={capexPercent}
+                    onChange={(e, value) => setCapexPercent(value as number)}
                 min={0}
                 max={10}
                 step={1}
@@ -1330,10 +1274,10 @@ function App() {
             </Box>
                 
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Property Management: {settings.propertyManagementPercent}%</Typography>
+                  <Typography variant="body2" gutterBottom>Property Management: {propertyManagementPercent}%</Typography>
                   <Slider
-                    value={settings.propertyManagementPercent}
-                    onChange={(e, value) => settings.propertyManagementPercent = value as number}
+                    value={propertyManagementPercent}
+                    onChange={(e, value) => setPropertyManagementPercent(value as number)}
                     min={0}
                     max={20}
                     step={1}
@@ -1419,14 +1363,14 @@ function App() {
                       
                       // Bundle current settings for the scoring function
                       const currentSettings: CashflowSettings = {
-                        interestRate: settings.interestRate,
-                        loanTerm: settings.loanTerm,
-                        downPaymentPercent: settings.downPaymentPercent,
-                        taxInsurancePercent: settings.taxInsurancePercent,
-                        vacancyPercent: settings.vacancyPercent,
-                        capexPercent: settings.capexPercent,
-                        propertyManagementPercent: settings.propertyManagementPercent,
-                        rehabAmount: settings.rehabAmount,
+                        interestRate,
+                        loanTerm,
+                        downPaymentPercent,
+                        taxInsurancePercent,
+                        vacancyPercent,
+                        capexPercent,
+                        propertyManagementPercent,
+                        rehabAmount,
                       };
 
                       // Calculate the crunch score using potentially overridden price/rent
@@ -1440,10 +1384,10 @@ function App() {
                   calculateCashflow={calculateCashflow}
                   formatCurrency={formatCurrency}
                   formatPercent={formatPercent}
-                  vacancyPercent={settings.vacancyPercent}
-                  capexPercent={settings.capexPercent}
-                        downPaymentPercent={settings.downPaymentPercent}
-                        propertyManagementPercent={settings.propertyManagementPercent}
+                  vacancyPercent={vacancyPercent}
+                  capexPercent={capexPercent}
+                        downPaymentPercent={downPaymentPercent}
+                        propertyManagementPercent={propertyManagementPercent}
                         handleRentEstimateChange={handleRentEstimateChange} // Pass down rent handler
                         handlePriceOverrideChange={handlePriceOverrideChange} // Pass down price handler
                         crunchScore={score} 
@@ -1799,25 +1743,48 @@ function App() {
                   </div>
                 </Paper>
               </Modal>
-    </Container>
-          </>
+            </Container>
+          </> // Close the fragment for the root route element
         } />
         
-        {/* Property Details Route */}
+        {/* Property Details Route - Ensure correct props are passed */}
         <Route 
           path="/property/:propertyId" 
-          element={ 
+          element={
             <PropertyDetailsPage 
-              properties={displayedProperties} 
-              // Pass the calculateCashflow function defined in App.tsx 
-              // (it now uses context settings via its own dependencies)
-              calculateCashflow={calculateCashflow} 
-              formatCurrency={formatCurrency} 
-              formatPercent={formatPercent}
-              // Pass the current context settings as defaultSettings
-              defaultSettings={settings} 
-            /> 
-          } 
+              properties={displayedProperties} // Pass the list of properties
+              calculateCashflow={(property, settings) => { // Pass the specific cashflow calc function
+                  // ... (inner calculateCashflowWithSettings and helper) ...
+                  const calculateCashflowWithSettings = (property: Property, settings: CashflowSettings) => {
+                    const monthlyMortgage = calculateMortgageWithSettings(property.price, settings);
+                    const monthlyTaxInsurance = property.price * (settings.taxInsurancePercent / 100) / 12;
+                    const monthlyVacancy = property.rent_estimate * (settings.vacancyPercent / 100);
+                    const monthlyCapex = property.rent_estimate * (settings.capexPercent / 100);
+                    const monthlyPropertyManagement = property.rent_estimate * (settings.propertyManagementPercent / 100);
+                    const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
+                    const monthlyCashflow = property.rent_estimate - totalMonthlyExpenses;
+                    const annualCashflow = monthlyCashflow * 12;
+                    const initialInvestment = (property.price * (settings.downPaymentPercent / 100)) + (property.price * 0.03) + settings.rehabAmount;
+                    const cashOnCashReturn = initialInvestment > 0 ? (annualCashflow / initialInvestment) * 100 : 0;
+                    return { monthlyMortgage, monthlyTaxInsurance, monthlyVacancy, monthlyCapex, monthlyPropertyManagement, totalMonthlyExpenses, monthlyCashflow, annualCashflow, cashOnCashReturn };
+                  };
+                  function calculateMortgageWithSettings(price: number, settings: CashflowSettings): number {
+                    const downPayment = price * (settings.downPaymentPercent / 100);
+                    const loanAmount = price - downPayment;
+                    const monthlyRate = settings.interestRate / 100 / 12;
+                    const payments = settings.loanTerm * 12;
+                    if (monthlyRate === 0) return loanAmount / payments;
+                    const x = Math.pow(1 + monthlyRate, payments);
+                    return loanAmount * (monthlyRate * x) / (x - 1);
+                  }
+                  const propertyForCashflow = { ...property, rent_source: property.rent_source ?? "calculated" };
+                  return calculateCashflowWithSettings(propertyForCashflow, settings);
+              }}
+              formatCurrency={formatCurrency} // Pass formatCurrency
+              formatPercent={formatPercent}   // Pass formatPercent
+              defaultSettings={defaultSettings} // Pass defaultSettings
+            />
+          }
         />
         
         {/* Bookmarks Route */}
@@ -1825,7 +1792,7 @@ function App() {
           path="/bookmarks" 
           element={<BookmarksPage />} 
         />
-      </Routes>
+      </Routes> {/* Remove comment here */}
     </div>
   );
 }
