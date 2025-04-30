@@ -13,8 +13,7 @@ import {
   HomeWork as HomeWorkIcon,
   ContentCopy as ContentCopyIcon,
   Email as EmailIcon,
-  Close as CloseIcon,
-  Share as ShareIcon
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { Property, Cashflow } from '../types'; // Assuming types.ts is in ../
 
@@ -115,9 +114,8 @@ const PropertyCard: React.FC<PropertyCardProps> = ({
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [copySuccess, setCopySuccess] = useState('');
   
-  // Deep dive modal state (Kept for Deep Dive button, but modal content removed for brevity)
-  // Consider moving the Deep Dive modal content to PropertyDetailsPage if not needed here
-  const [isDeepDiveOpen, setIsDeepDiveOpen] = useState(false);
+  // Navigation
+  const navigate = useNavigate();
 
   // Initialize display rent when property data or override changes
   useEffect(() => {
@@ -201,23 +199,16 @@ const PropertyCard: React.FC<PropertyCardProps> = ({
   const rentCastAddress = encodeURIComponent(property.address);
   const rentCastUrl = `https://app.rentcast.io/app?address=${rentCastAddress}`;
   
-  const handleOpenShareModal = () => setIsShareModalOpen(true);
   const handleCloseShareModal = () => {
     setIsShareModalOpen(false);
     setCopySuccess('');
   };
 
-  const navigate = useNavigate();
-  
   const handleOpenDeepDive = (e: React.MouseEvent) => {
     e.preventDefault();
     navigate(`/property/${property.property_id}`);
   };
   
-  const handleCloseDeepDive = () => {
-    setIsDeepDiveOpen(false);
-  };
-
   // Generate summary using the potentially modified price and rent
   const generatePropertySummary = () => {
     const priceValue = currentPrice; // Already determined above
@@ -232,7 +223,7 @@ RENT ESTIMATE: ${formatCurrency(rentValue)} ${customRentEstimate !== null ? '(Ed
 CRUNCH SCORE: ${crunchScore} (Based on displayed values)
 RENT-TO-PRICE RATIO: ${formatPercent(ratio * 100)}
 
-�� PROPERTY DETAILS:
+📊 PROPERTY DETAILS:
 • ${property.bedrooms} beds, ${property.bathrooms} baths
 • ${property.sqft.toLocaleString()} sq. ft.
 ${property.days_on_market !== null ? `• Days on market: ${property.days_on_market}` : ''}
@@ -287,7 +278,18 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
   
   return (
     <Card className="property-card">
-      <a href="#" onClick={handleOpenDeepDive} className="property-image-container">
+      <button 
+        onClick={handleOpenDeepDive} 
+        className="property-image-container"
+        style={{ 
+          background: 'none', 
+          border: 'none', 
+          padding: 0, 
+          cursor: 'pointer',
+          width: '100%', 
+          textAlign: 'left'
+        }}
+      >
         <LazyImage
           src={property.thumbnail}
           alt={property.address}
@@ -300,7 +302,7 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
              </Tooltip>
            }
         </div>
-      </a>
+      </button>
       
       <CardContent className="property-details">
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
@@ -346,11 +348,22 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
         </Typography>
         </Box>
         
-        <a href="#" onClick={handleOpenDeepDive} className="property-address">
+        <button 
+          onClick={handleOpenDeepDive} 
+          className="property-address"
+          style={{ 
+            background: 'none', 
+            border: 'none', 
+            padding: 0, 
+            cursor: 'pointer',
+            textAlign: 'left',
+            width: '100%'
+          }}
+        >
           <Typography variant="body2" color="text.secondary">
             {property.address}
           </Typography>
-        </a>
+        </button>
         
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <div>
@@ -499,13 +512,23 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
             <a href={rentCastUrl} target="_blank" rel="noopener noreferrer" className="quick-link">
               <BarChartIcon sx={{ fontSize: 16, mr: 0.5, color: '#6366F1' }} /> RentCast
             </a>
-            <a 
-              href="#" 
+            <button 
               onClick={handleOpenDeepDive} 
               className="quick-link"
+              style={{ 
+                background: 'none', 
+                border: 'none', 
+                padding: '4px 8px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                color: 'inherit',
+                fontFamily: 'inherit',
+                fontSize: 'inherit'
+              }}
             >
               <HomeWorkIcon sx={{ fontSize: 16, mr: 0.5, color: '#4F46E5' }} /> Deep Dive
-            </a>
+            </button>
           </div>
         </div>
       </div>
@@ -595,9 +618,6 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
           </Paper>
         </Paper>
       </Modal>
-
-      {/* Removed Deep Dive Modal Content - assumes it's handled by navigation */}
-      
     </Card>
   );
 };

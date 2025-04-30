@@ -1,29 +1,20 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { HashRouter, Routes, Route, Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import {
   Typography, Container, TextField, Button, Box, CircularProgress, 
-  Paper, InputAdornment, IconButton, Alert,
-  Slider, Card, CardContent, Accordion, AccordionSummary, AccordionDetails, Skeleton, Divider, Fab, Modal, Select, MenuItem, FormControl, InputLabel, Tooltip, useTheme, useMediaQuery,
-  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Menu, Snackbar // Restore imports
+  Paper, IconButton, Alert,
+  Slider, Modal, Select, MenuItem, FormControl, InputLabel, Tooltip,
+  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Menu, Snackbar
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import HomeIcon from '@mui/icons-material/Home';
 import BarChartIcon from '@mui/icons-material/BarChart';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import EditIcon from '@mui/icons-material/Edit';
-import HomeWorkIcon from '@mui/icons-material/HomeWork';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import EmailIcon from '@mui/icons-material/Email';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import TuneIcon from '@mui/icons-material/Tune';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import CloseIcon from '@mui/icons-material/Close';
-import ShareIcon from '@mui/icons-material/Share';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
-import SaveAltIcon from '@mui/icons-material/SaveAlt'; // Restore import
-import HistoryIcon from '@mui/icons-material/History'; // Restore import
-import DeleteIcon from '@mui/icons-material/Delete'; // Restore import
+import DeleteIcon from '@mui/icons-material/Delete';
 import './App.css';
 import { searchProperties, getTotalPropertiesCount, registerForPropertyUpdates, searchPropertyByAddress } from './api/propertyApi';
 import PropertyDetailsPage from './pages/PropertyDetailsPage';
@@ -35,6 +26,8 @@ import Drawer from '@mui/material/Drawer';
 import PropertyCard from './components/PropertyCard';
 // Import the scoring function
 import { calculateCrunchScore } from './utils/scoring';
+// Import the context hook
+import { useSettings } from './context/SettingsContext';
 
 // Define possible sort keys
 type SortableKey = keyof Pick<Property, 'price' | 'rent_estimate' | 'bedrooms' | 'bathrooms' | 'sqft' | 'days_on_market'> | 'ratio' | 'cashflow' | 'crunchScore'; // Add crunchScore
@@ -51,12 +44,15 @@ interface SavedSearch {
 }
 
 function App() {
+  // Get settings from context
+  const { settings } = useSettings();
+
   // --- Define state variables ---
   const [location, setLocation] = useState('');
   const [minPrice, setMinPrice] = useState<string | number>('');
   const [maxPrice, setMaxPrice] = useState<string | number>('');
-  const [minBeds, setMinBeds] = useState<string>('0'); // Restore state
-  const [minBaths, setMinBaths] = useState<string>('0'); // Restore state
+  const [minBeds, setMinBeds] = useState<string>('0');
+  const [minBaths, setMinBaths] = useState<string>('0');
   const [displayedProperties, setDisplayedProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(false);
   const [isProcessingBackground, setIsProcessingBackground] = useState(false);
@@ -75,16 +71,6 @@ function App() {
   // New state for marketing intro panel - always show
   const [showMarketingIntro] = useState(true);
   
-  // Mortgage calculator state
-  const [interestRate, setInterestRate] = useState(7.5);
-  const [loanTerm, setLoanTerm] = useState(30);
-  const [downPaymentPercent, setDownPaymentPercent] = useState(20);
-  const [taxInsurancePercent, setTaxInsurancePercent] = useState(3);
-  const [vacancyPercent, setVacancyPercent] = useState(8);
-  const [capexPercent, setCapexPercent] = useState(5);
-  const [propertyManagementPercent, setPropertyManagementPercent] = useState(0);
-  const [rehabAmount, setRehabAmount] = useState(0); // New state for initial rehab costs
-
   // --- State for Saved Searches ---
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -215,162 +201,94 @@ function App() {
 
   // Function to handle search button click
   const handleSearch = async () => {
-    console.log('Starting search...');
-    currentSearchId.current += 1;
-    const searchId = currentSearchId.current;
-
-    setSearchPerformed(true);
+    // Reset state
     setError(null);
-    setDisplayedProperties([]); // Clear previous results immediately
-    setLoading(true);
-    setInitialLoading(true); // Indicate initial fetch is starting
+    
+    // Validate input: If no text, return
+    if (!location.trim()) {
+      setError("Please enter a search location");
+      return;
+    }
+    
+    // Show loading state
     setIsProcessingBackground(false);
-    setTotalProperties(0); // Reset total properties for new search
-
-    // --- Check if location looks like a specific address (simple heuristic) ---
-    const isSpecificAddressSearch = /\d/.test(location) && /[a-zA-Z]/.test(location);
-    console.log('Is specific address search:', isSpecificAddressSearch);
+    setLoading(true);
+    setDisplayedProperties([]);
+    setSearchPerformed(true);
+    setTotalProperties(0); // Reset total properties
+    
+    // Create unique search ID
+    const searchId = currentSearchId.current + 1;
+    currentSearchId.current = searchId;
 
     try {
-      // --- Handle Specific Address Search ---
-      if (isSpecificAddressSearch) {
-        console.log(`Searching for specific address: ${location}`);
-        const singleProperty = await searchPropertyByAddress(location);
-        if (searchId === currentSearchId.current) { // Check if this is still the latest request
-          if (singleProperty) {
-            setDisplayedProperties([singleProperty]);
-            setTotalProperties(1);
-            setError(null);
-            console.log('Specific address found:', singleProperty);
-          } else {
-            setError(`Could not find details for the address: "${location}". Please check the address or try a broader location search.`);
-            setDisplayedProperties([]);
-            setTotalProperties(0);
-            console.log('Specific address not found or failed to fetch details.');
-          }
-          setLoading(false);
-          setInitialLoading(false);
-          setIsProcessingBackground(false);
-          // Scroll to results/error
-          setTimeout(() => {
-            const resultsElement = document.querySelector('.property-grid, .MuiAlert-root');
-            if (resultsElement) {
-              resultsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              window.scrollBy(0, -50);
-            }
-          }, 300);
-        }
-        return; // Exit handleSearch early for specific address
-      }
-
-      // --- Handle General Location Search (Existing Logic) ---
-      console.log(`Searching for general location: ${location}`);
-      // --- Prepare Filters & Prices (Relaxed Validation) ---
+      // --- Prepare Filters & Prices --- 
       let minP: number | null = null;
       let maxP: number | null = null;
-      // Prepare Bed/Bath Filters
       let minBd: number | null = null;
-      // let maxBd: number | null = null; // maxBd removed
       let minBa: number | null = null;
-      // let maxBa: number | null = null; // maxBa removed
 
       // Parse Min Price
-      const parsedMin = typeof minPrice === 'number' ? minPrice : parseFloat(String(minPrice));
+      const parsedMin = typeof minPrice === 'number' ? minPrice : parseFloat(String(minPrice).replace(/[^\d.]/g, ''));
       if (!isNaN(parsedMin) && parsedMin >= 0) {
           minP = parsedMin;
           console.log('Applying Min price filter:', minP);
-      } else {
-          console.log('No valid Min price filter applied.');
       }
       
       // Parse Max Price
-      const parsedMax = typeof maxPrice === 'number' ? maxPrice : parseFloat(String(maxPrice));
+      const parsedMax = typeof maxPrice === 'number' ? maxPrice : parseFloat(String(maxPrice).replace(/[^\d.]/g, ''));
       if (!isNaN(parsedMax) && parsedMax > 0) {
           maxP = parsedMax;
           console.log('Applying Max price filter:', maxP);
-      } else {
-          console.log('No valid Max price filter applied.');
       }
       
-      // Parse Bed Filters - Only Min needed
+      // Parse Bed Filters
       const parsedMinBeds = parseInt(minBeds, 10);
       if (!isNaN(parsedMinBeds) && parsedMinBeds >= 0) {
         minBd = parsedMinBeds;
-        console.log('Applying Min Beds filter:', minBd);
       }
 
-      // Parse Bath Filters - Only Min needed (allow float)
+      // Parse Bath Filters
       const parsedMinBaths = parseFloat(minBaths);
       if (!isNaN(parsedMinBaths) && parsedMinBaths >= 0) {
         minBa = parsedMinBaths;
-        console.log('Applying Min Baths filter:', minBa);
       }
 
-      // --- REMOVED max >= min check for price --- 
-      // Note: If API doesn't support min > max, it might return no results or error.
-      
-      // Define other filters if needed (currently none active)
-      const propertyType = 'Houses'; // Example
-      const minRatio = null; // Example
+      const propertyType = 'Houses'; // Or make this configurable
 
-      // Get total properties first to determine page count
-      console.log('Fetching total property count...');
-      // Pass prices, min beds, min baths directly
+      // Get total properties first, passing the filters
+      console.log('Fetching total property count with filters...');
       const totalCount = await getTotalPropertiesCount(location, minP, maxP, minBd, minBa, propertyType);
+      
+      if (searchId !== currentSearchId.current) return; // Check if search changed
       setTotalProperties(totalCount);
-      console.log('Total properties found:', totalCount);
+      console.log('Total properties found with filters:', totalCount);
 
       if (totalCount === 0) {
         setLoading(false);
-        setInitialLoading(false);
-        // Scroll to results area
-        setTimeout(() => {
-          const resultsElement = document.querySelector('.property-grid') || document.querySelector('.loading-container');
-          if (resultsElement) {
-            console.log('[App] Scrolling to results area');
-            resultsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            // Add a smaller offset to avoid cutting off the first results
-            window.scrollBy(0, -50);
-          } else {
-            console.warn('[App] Results element not found for scrolling');
-          }
-        }, 300); // Increase timeout to ensure elements are rendered
-        return; // Exit early if no properties match
+        return;
       }
 
-      const totalPages = Math.ceil(totalCount / 42); // Zillow API limit (approx)
-
-      // Function to fetch and process a single page
+      const totalPages = Math.ceil(totalCount / 42); // Assuming API limit
+      
+      // Function to fetch and process a single page, passing filters
       const fetchAndProcessPage = async (page: number) => {
         if (searchId !== currentSearchId.current) return; // Abort if new search started
         try {
-          console.log(`Fetching page ${page + 1}/${totalPages}`);
-          // Pass prices, min beds, min baths directly
-          const results = await searchProperties(location, page, minP, maxP, minBd, minBa, propertyType, minRatio);
+          console.log(`Fetching page ${page + 1}/${totalPages} with filters...`);
+          // Pass the parsed filters (minP, maxP, minBd, minBa) to searchProperties
+          const results = await searchProperties(location, page, minP, maxP, minBd, minBa, propertyType, null);
+          
           if (searchId === currentSearchId.current && results.allProperties.length > 0) {
-            // Append basic property data for immediate display
             setDisplayedProperties(prev => {
-              // --- Add Logging for Duplicate Check --- 
-              const newProps = results.allProperties.filter(np => {
-                const isDuplicate = prev.some(p => p.property_id === np.property_id);
-                if (isDuplicate) {
-                    console.warn(`[handleSearch] Duplicate property ID detected, filtering out: ${np.property_id} - ${np.address}`);
-                }
-                return !isDuplicate;
-              });
-              if (newProps.length < results.allProperties.length) {
-                   console.log(`[handleSearch] Filtered ${results.allProperties.length - newProps.length} duplicates based on ID from page results.`);
-              }
-              // --- End Logging --- 
+              const existingIds = new Set(prev.map(p => p.property_id));
+              const newProps = results.allProperties.filter(np => !existingIds.has(np.property_id));
               return [...prev, ...newProps];
             });
-            // Indicate background processing has started (if not already)
             if (!isProcessingBackground) setIsProcessingBackground(true); 
           }
-          console.log(`Completed search for page ${page + 1}`);
-        } catch (pageError) {
-          console.error(`Error fetching page ${page + 1}:`, pageError);
-          // Potentially set an error state for this specific page or retry
+        } catch (error) {
+          console.error(`Error fetching page ${page + 1}:`, error);
         }
       };
 
@@ -379,45 +297,19 @@ function App() {
       const pagePromises = Array.from({ length: totalPages }, (_, i) => fetchAndProcessPage(i));
       await Promise.all(pagePromises);
 
-      console.log('All page fetches initiated.');
-      setInitialLoading(false); // Initial loading complete, background processing continues
-      
-      // Scroll to results area when initial data loads
-      setTimeout(() => {
-        const resultsElement = document.querySelector('.property-grid') || document.querySelector('.loading-container');
-        if (resultsElement) {
-          console.log('[App] Scrolling to results area');
-          resultsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          // Add a smaller offset to avoid cutting off the first results
-          window.scrollBy(0, -50);
-        } else {
-          console.warn('[App] Results element not found for scrolling');
-        }
-      }, 300); // Increase timeout to ensure elements are rendered
-      
-    } catch (err: any) {
-      console.error('Search failed:', err);
-      if (searchId === currentSearchId.current) { // Only update state if it's the latest search
-        setError(err.message || 'Failed to fetch properties. Please check the location and try again.');
+      console.log('All page fetches initiated or completed.');
+      // setLoading(false); // Keep loading until background processing finishes (handled by handlePropertyUpdate)
+
+    } catch (error) {
+      console.error("Error during search", error);
+      if (searchId === currentSearchId.current) { // Only set error if it's for the current search
+        setError("Failed to search properties. Please try again later.");
         setLoading(false);
-      setInitialLoading(false);
       setIsProcessingBackground(false);
-      // Scroll to error message
-      setTimeout(() => {
-        const errorElement = document.querySelector('.MuiAlert-root');
-        if (errorElement) {
-          console.log('[App] Scrolling to error message');
-          errorElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          // Add a smaller offset for the error message
-          window.scrollBy(0, -50);
-        } else {
-          console.warn('[App] Error element not found for scrolling');
-        }
-      }, 300); // Increase timeout to ensure elements are rendered
       }
-    }
+    } 
+    // Removed final setLoading(false) here - it's handled when updates complete
   };
-  // --- End handleSearch ---
 
   // --- Saved Search Handlers ---
   const handleOpenSaveDialog = () => {
@@ -453,7 +345,7 @@ function App() {
         updatedSearches = [...savedSearches];
         updatedSearches[existingIndex] = newSave;
         setSnackbarMessage(`Search '${newSave.name}' updated.`);
-    } else {
+        } else {
         updatedSearches = [...savedSearches, newSave];
         setSnackbarMessage(`Search '${newSave.name}' saved.`);
     }
@@ -507,40 +399,35 @@ function App() {
 
   // --- Mortgage Calculation and Cashflow ---
   // Function to calculate mortgage payment
-  const calculateMortgage = (price: number): number => {
-    const downPayment = price * (downPaymentPercent / 100);
+  const calculateMortgage = useCallback((price: number): number => {
+    const downPayment = price * (settings.downPaymentPercent / 100);
     const loanAmount = price - downPayment;
-    const monthlyRate = interestRate / 100 / 12;
-    const payments = loanTerm * 12;
+    const monthlyRate = settings.interestRate / 100 / 12;
+    const payments = settings.loanTerm * 12;
     
     if (monthlyRate === 0) return loanAmount / payments;
     
     const x = Math.pow(1 + monthlyRate, payments);
     return loanAmount * (monthlyRate * x) / (x - 1);
-  };
+  // Add settings dependencies
+  }, [settings.downPaymentPercent, settings.interestRate, settings.loanTerm]);
   
   // Function to calculate cashflow
-  // Ensure this uses the imported Property and Cashflow types
   const calculateCashflow = useCallback((property: Property): Cashflow => {
-    const monthlyMortgage = calculateMortgage(property.price);
-    const monthlyTaxInsurance = property.price * (taxInsurancePercent / 100) / 12;
-    // Ensure rent_estimate is treated as a number
-    const rentEstimate = property.rent_estimate ?? 0; 
-    const monthlyVacancy = rentEstimate * (vacancyPercent / 100);
-    const monthlyCapex = rentEstimate * (capexPercent / 100);
-    const monthlyPropertyManagement = rentEstimate * (propertyManagementPercent / 100);
-    
+    const propertyPrice = overridePrices[property.property_id] ?? property.price;
+    const rentEstimate = property.rent_estimate;
+    const monthlyMortgage = calculateMortgage(propertyPrice);
+    const annualTaxInsurance = propertyPrice * (settings.taxInsurancePercent / 100);
+    const monthlyTaxInsurance = annualTaxInsurance / 12;
+    const monthlyVacancy = rentEstimate * (settings.vacancyPercent / 100);
+    const monthlyCapex = rentEstimate * (settings.capexPercent / 100);
+    const monthlyPropertyManagement = rentEstimate * (settings.propertyManagementPercent / 100);
     const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
     const monthlyCashflow = rentEstimate - totalMonthlyExpenses;
     const annualCashflow = monthlyCashflow * 12;
-    
-    // Down payment amount plus closing costs (estimated at 3%)
-    const initialInvestment = (property.price * (downPaymentPercent / 100)) + (property.price * 0.03);
-    // Add rehab amount to initial investment 
-    const totalInvestment = initialInvestment + rehabAmount;
-    
-    // Handle division by zero if totalInvestment is 0 or less
-    const cashOnCashReturn = totalInvestment > 0 ? annualCashflow / totalInvestment : 0;
+    const downPaymentAmount = propertyPrice * (settings.downPaymentPercent / 100);
+    const totalInitialInvestment = downPaymentAmount + settings.rehabAmount;
+    const cashOnCashReturn = totalInitialInvestment > 0 ? (annualCashflow / totalInitialInvestment) * 100 : 0;
     
     return {
       monthlyMortgage,
@@ -553,8 +440,8 @@ function App() {
       annualCashflow,
       cashOnCashReturn
     };
-    // Add dependencies based on state variables used inside
-  }, [interestRate, loanTerm, downPaymentPercent, taxInsurancePercent, vacancyPercent, capexPercent, propertyManagementPercent, rehabAmount]); 
+  // Update settings dependencies
+  }, [settings.taxInsurancePercent, settings.vacancyPercent, settings.capexPercent, settings.propertyManagementPercent, settings.downPaymentPercent, settings.rehabAmount, overridePrices, calculateMortgage]);
   
   // Helper function to format percentage
   const formatPercent = (percent: number): string => {
@@ -563,18 +450,88 @@ function App() {
   
   // Default settings for PropertyDetailsPage
   const defaultSettings: CashflowSettings = {
-    interestRate,
-    loanTerm,
-    downPaymentPercent,
-    taxInsurancePercent,
-    vacancyPercent,
-    capexPercent,
-    propertyManagementPercent,
-    rehabAmount
+    interestRate: settings.interestRate,
+    loanTerm: settings.loanTerm,
+    downPaymentPercent: settings.downPaymentPercent,
+    taxInsurancePercent: settings.taxInsurancePercent,
+    vacancyPercent: settings.vacancyPercent,
+    capexPercent: settings.capexPercent,
+    propertyManagementPercent: settings.propertyManagementPercent,
+    rehabAmount: settings.rehabAmount
   };
 
+  // --- Sorting Logic ---
+  // Helper function for sorting
+  const sortProperties = useCallback((
+    properties: Property[], 
+    key: SortableKey | null, 
+    direction: 'asc' | 'desc', 
+    calculateCashflowFn: (p: Property) => Cashflow, 
+    priceOverrides: Record<string, number>,
+    settings: CashflowSettings // Add settings parameter
+  ): Property[] => {
+      if (!key) return properties;
+
+      const sorted = [...properties].sort((a, b) => {
+          let valA: number | string | null | undefined = null;
+          let valB: number | string | null | undefined = null;
+          
+          const priceA = priceOverrides[a.property_id] !== undefined ? priceOverrides[a.property_id] : a.price;
+          const priceB = priceOverrides[b.property_id] !== undefined ? priceOverrides[b.property_id] : b.price;
+          const propertyAForCalc = { ...a, price: priceA };
+          const propertyBForCalc = { ...b, price: priceB };
+
+          if (key === 'ratio') {
+            valA = priceA > 0 ? a.rent_estimate / priceA : 0;
+            valB = priceB > 0 ? b.rent_estimate / priceB : 0;
+          } else if (key === 'cashflow') {
+              const cashflowA = calculateCashflowFn(propertyAForCalc);
+              const cashflowB = calculateCashflowFn(propertyBForCalc);
+              valA = cashflowA.monthlyCashflow;
+              valB = cashflowB.monthlyCashflow;
+          } else if (key === 'crunchScore') {
+              // Use the full calculateCrunchScore utility function
+              const cashflowA = calculateCashflowFn(propertyAForCalc);
+              const cashflowB = calculateCashflowFn(propertyBForCalc);
+              // Pass the provided settings object
+              valA = calculateCrunchScore(propertyAForCalc, settings, cashflowA);
+              valB = calculateCrunchScore(propertyBForCalc, settings, cashflowB);
+          } else if (key === 'price') {
+              valA = priceA;
+              valB = priceB;
+          } else {
+              valA = a[key as keyof Property]; // Use original property data for other keys
+              valB = b[key as keyof Property];
+          }
+          
+          // Handle null/undefined
+          if (valA === null || valA === undefined) valA = 0;
+          if (valB === null || valB === undefined) valB = 0;
+          
+          // Sort logic with explicit type checks and casting
+          if (typeof valA === 'string' && typeof valB === 'string') {
+              return direction === 'asc' 
+                ? (valA as string).localeCompare(valB as string) 
+                : (valB as string).localeCompare(valA as string);
+          } else {
+              const numA = Number(valA);
+              const numB = Number(valB);
+              
+              if (isNaN(numA) || isNaN(numB)) {
+                  const safeA = isNaN(numA) ? 0 : numA;
+                  const safeB = isNaN(numB) ? 0 : numB;
+                  return direction === 'asc' ? safeA - safeB : safeB - safeA;
+              }
+              
+              return direction === 'asc' ? numA - numB : numB - numA;
+          }
+      });
+      
+      return sorted;
+  // Update settings dependency
+  }, [calculateCrunchScore, calculateCashflow]); 
+
   // --- Add useEffect for handling property updates ---
-  // Memoize the update handler callback
   const handlePropertyUpdate = useCallback((updatedProperty: Property) => {
     console.log('[handlePropertyUpdate] Called for property:', updatedProperty?.address);
     if (!updatedProperty || !updatedProperty.property_id) {
@@ -602,10 +559,10 @@ function App() {
            console.log(`[handlePropertyUpdate] Adding new property: ${updatedProperty.property_id}`);
         const newPropertyList = [...prevProperties, updatedProperty];
         
-          // Sort based on current config
+          // Sort based on current config, passing current settings
           if (sortConfig.key) {
-            // Pass overridePrices to the sortProperties function here as well
-            return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, calculateCashflow, overridePrices);
+            // Get settings directly from context here
+            return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, calculateCashflow, overridePrices, settings);
           } else {
             return newPropertyList;
           }
@@ -633,7 +590,7 @@ function App() {
        return currentProperties; 
     });
 
-  }, [sortConfig, totalProperties, calculateCashflow, searchPerformed, initialLoading, overridePrices]); // Add missing dependencies
+  }, [sortConfig, totalProperties, calculateCashflow, searchPerformed, overridePrices, sortProperties, settings]); // Removed initialLoading, added settings
 
   // UseEffect to register for updates when component mounts
   useEffect(() => {
@@ -647,87 +604,20 @@ function App() {
   }, [handlePropertyUpdate]);
 
   // --- Sorting Logic ---
-  const handleSort = (key: SortableKey) => {
-    setSortConfig(prev => ({
-      key: key,
-      // If sorting by the same key, toggle direction, otherwise default to ascending (or descending for price/ratio/cashflow/crunchScore initially)
-      direction: prev.key === key 
-                 ? (prev.direction === 'asc' ? 'desc' : 'asc')
-                 : ('price ratio cashflow crunchScore'.includes(key) ? 'desc' : 'asc') // Sensible defaults - added crunchScore here
+  const handleSort = useCallback((key: SortableKey) => {
+    setSortConfig(prevConfig => ({ 
+      key, 
+      direction: prevConfig.key === key 
+        ? (prevConfig.direction === 'asc' ? 'desc' : 'asc')
+        : 'desc' // Default to descending order when changing keys
     }));
-  };
-
-  // Helper function for sorting (moved outside useMemo for clarity if complex)
-  const sortProperties = (
-    properties: Property[], 
-    key: SortableKey | null, 
-    direction: 'asc' | 'desc', 
-    calculateCashflowFn: (p: Property) => Cashflow, 
-    priceOverrides: Record<string, number> // Add priceOverrides parameter
-  ): Property[] => {
-      if (!key) return properties;
-
-      const sorted = [...properties].sort((a, b) => {
-          let valA: number | string | null | undefined = null;
-          let valB: number | string | null | undefined = null;
-          
-          // Determine the effective price for property A and B
-          const priceA = priceOverrides[a.property_id] !== undefined ? priceOverrides[a.property_id] : a.price;
-          const priceB = priceOverrides[b.property_id] !== undefined ? priceOverrides[b.property_id] : b.price;
-
-          if (key === 'ratio') {
-            // Calculate ratio using the effective price
-            valA = priceA > 0 ? a.rent_estimate / priceA : 0;
-            valB = priceB > 0 ? b.rent_estimate / priceB : 0;
-          } else if (key === 'cashflow') {
-              // Recalculate cashflow for sorting using the effective price
-              const cashflowA = calculateCashflowFn({ ...a, price: priceA });
-              const cashflowB = calculateCashflowFn({ ...b, price: priceB });
-              valA = cashflowA.monthlyCashflow;
-              valB = cashflowB.monthlyCashflow;
-          } else if (key === 'crunchScore') {
-              // Recalculate cashflow and score for sorting using the effective price
-              // Need access to settings here, maybe pass settings into sortProperties?
-              // For simplicity, let's assume defaultSettings are acceptable for sorting comparison
-              // OR, this implies sorting by score might become less accurate if assumptions differ wildly
-              // Let's recalculate based on the effective price and *default* settings for now.
-              // A more complex solution would pass current settings state down.
-               const tempSettings: CashflowSettings = defaultSettings; // Use default settings from App state
-               const cashflowA = calculateCashflowFn({ ...a, price: priceA });
-               const cashflowB = calculateCashflowFn({ ...b, price: priceB });
-               const scoreA = calculateCrunchScore({ ...a, price: priceA }, tempSettings, cashflowA);
-               const scoreB = calculateCrunchScore({ ...b, price: priceB }, tempSettings, cashflowB);
-               valA = scoreA;
-               valB = scoreB;
-          } else if (key === 'price') {
-            // IMPORTANT: Sort by ORIGINAL price unless explicitly changed
-            valA = a.price;
-            valB = b.price;
-          } else {
-              // Other keys sort based on original property data
-              valA = a[key as keyof Property];
-              valB = b[key as keyof Property];
-          }
-
-          // Handle nulls or undefined by treating them as lowest/highest based on direction
-          const lowValue = direction === 'asc' ? -Infinity : Infinity;
-          const highValue = direction === 'asc' ? Infinity : -Infinity;
-
-          valA = valA === null || valA === undefined ? lowValue : valA;
-          valB = valB === null || valB === undefined ? lowValue : valB;
-
-          // Comparison
-          if (valA < valB) return direction === 'asc' ? -1 : 1;
-          if (valA > valB) return direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-      return sorted;
-  };
+  }, []);
 
   const sortedProperties = useMemo(() => {
-      // Pass overridePrices to the sort function
-      return sortProperties(displayedProperties, sortConfig.key, sortConfig.direction, calculateCashflow, overridePrices);
-  }, [displayedProperties, sortConfig, calculateCashflow, overridePrices]); // Add overridePrices dependency
+      // Pass overridePrices and current settings (from context) to the sort function
+      return sortProperties(displayedProperties, sortConfig.key, sortConfig.direction, calculateCashflow, overridePrices, settings);
+  // Update dependencies for useMemo
+  }, [displayedProperties, sortConfig, calculateCashflow, overridePrices, sortProperties, settings]); 
 
   // --- Rent Estimate Handling ---
   const handleRentEstimateChange = useCallback((propertyId: string, newRentString: string) => {
@@ -768,17 +658,12 @@ function App() {
 
   // Effect to show/hide scroll-to-top button
   useEffect(() => {
-    const checkScrollTop = () => {
-      // Simplified logic: Show button if scrolled down more than 400px
-      if (window.pageYOffset > 400) {
-        // You'll need state to control the button's visibility
-        // Example: setShowScrollButton(true);
-      } else {
-        // Example: setShowScrollButton(false);
-      }
+    const handleScroll = () => {
+      // Code to handle scroll if needed
     };
-    window.addEventListener('scroll', checkScrollTop);
-    return () => window.removeEventListener('scroll', checkScrollTop);
+    
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   // Function to toggle the assumptions drawer
@@ -858,12 +743,12 @@ function App() {
                 <Paper 
                   elevation={3} 
                   sx={{ 
-                    mb: 4, 
+                    mb: 4, // Keep bottom margin to separate from search
                     borderRadius: 3,
                     overflow: 'hidden',
                     position: 'relative',
                     background: '#ffffff',
-                    boxShadow: '0 10px 30px rgba(79, 70, 229, 0.15)'
+                    boxShadow: '0 6px 20px rgba(79, 70, 229, 0.1)' // Slightly softer shadow
                   }}
                 >
                   {/* Colored stripe at the top */}
@@ -882,22 +767,22 @@ function App() {
                       alignItems: 'center'
                     }}
                   >
-                    {/* Left side content */}
+                    {/* Left side content - Reduced padding */}
                     <Box 
                       sx={{ 
-                        p: 4, 
+                        p: { xs: 2, sm: 3 }, // Reduced padding 
                         flex: '1.5',
                         position: 'relative',
                         zIndex: 1
                       }}
                     >
                       <Typography 
-                        variant="h3" 
+                        variant="h4" // Slightly smaller heading
                         fontWeight="bold" 
                         sx={{ 
-                          mb: 2, 
+                          mb: 1.5, // Reduced margin
                           color: '#1f2937',
-                          fontSize: { xs: '1.75rem', sm: '2.25rem', md: '2.5rem' }
+                          fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' } // Adjust font sizes
                         }}
                       >
                         Find Your Ideal
@@ -915,30 +800,30 @@ function App() {
                       <Typography 
                         variant="body1" 
                         sx={{ 
-                          mb: 3, 
+                          mb: 2, // Reduced margin
                           color: '#4b5563',
-                          lineHeight: 1.6,
+                          lineHeight: 1.5, // Slightly tighter line height
                           maxWidth: '500px'
                         }}
                       >
-                        CashflowCrunch helps you discover and analyze potential real estate investments in seconds. 
-                        Get detailed cash flow analysis, long-term equity projections, and returns on investment 
-                        for properties in any location.
+                        Discover and analyze potential real estate investments. Get cash flow analysis, 
+                        projections, and returns for properties anywhere.
                       </Typography>
                       
+                      {/* Feature boxes - Reduced padding and margins */}
                       <Box 
                         sx={{ 
                           display: 'flex', 
                           flexDirection: { xs: 'column', sm: 'row' },
-                          gap: 2,
-                          mt: 3
+                          gap: 1.5, // Reduced gap
+                          mt: 2 // Reduced top margin
                         }}
                       >
                         <Box 
                           sx={{ 
                             display: 'flex', 
                             alignItems: 'flex-start', 
-                            p: 2,
+                            p: 1.5, // Reduced padding
                             borderRadius: 2,
                             background: 'rgba(79, 70, 229, 0.05)',
                             border: '1px solid rgba(79, 70, 229, 0.1)'
@@ -964,7 +849,7 @@ function App() {
                               Find Properties Fast
                             </Typography>
                             <Typography variant="body2" color="#6b7280">
-                              Discover properties with high cash flow potential in minutes
+                              Discover properties with high cash flow potential
                             </Typography>
                           </Box>
                         </Box>
@@ -973,7 +858,7 @@ function App() {
                           sx={{ 
                             display: 'flex', 
                             alignItems: 'flex-start', 
-                            p: 2,
+                            p: 1.5, // Reduced padding
                             borderRadius: 2,
                             background: 'rgba(79, 70, 229, 0.05)',
                             border: '1px solid rgba(79, 70, 229, 0.1)'
@@ -999,14 +884,14 @@ function App() {
                               Detailed Analytics
                             </Typography>
                             <Typography variant="body2" color="#6b7280">
-                              Get comprehensive financial projections for each property
+                              Get comprehensive financial projections
                             </Typography>
                           </Box>
                         </Box>
                       </Box>
                     </Box>
                     
-                    {/* Right side image/graphic element */}
+                    {/* Right side image/graphic element - Reduced logo size */}
                     <Box 
                       sx={{ 
                         flex: '1',
@@ -1017,38 +902,39 @@ function App() {
                     >
                       <Box
                         sx={{
+                          // Restore background gradient and clipPath
                           position: 'absolute',
                           top: 0,
                           right: 0,
                           bottom: 0,
                           left: 0,
                           background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.8) 0%, rgba(99, 102, 241, 0.8) 100%)',
-                          clipPath: 'polygon(10% 0, 100% 0, 100% 100%, 0% 100%)',
+                          clipPath: 'polygon(10% 0, 100% 0, 100% 100%, 0% 100%)', 
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           overflow: 'hidden'
-                        }}
+                         }}
                       >
+                        {/* Diagonal lines background (can keep or remove) */}
                         <Box
                           sx={{
                             position: 'absolute',
                             width: '140%',
                             height: '140%',
-                            opacity: 0.08, // Reduced opacity from 0.15
+                            opacity: 0.08,
                             background: 'repeating-linear-gradient(45deg, #ffffff, #ffffff 10px, transparent 10px, transparent 20px)'
                           }}
                         />
                         
-                        <Box sx={{ position: 'relative', zIndex: 1, p: 4, color: 'white', textAlign: 'center' }}>
-                          {/* Replace HomeWorkIcon and text with img tag */}
-                          <img src={process.env.PUBLIC_URL + '/logo-optimized.png'} alt="CashflowCrunch Logo" style={{ height: '200px', width: '200px', marginBottom: '16px' }} /> {/* Use optimized logo */}
-                          {/* Uncomment the text below */}
-                          <Typography variant="h5" fontWeight="bold" gutterBottom>
+                        <Box sx={{ position: 'relative', zIndex: 1, p: 3, color: 'white', textAlign: 'center' }}>
+                          {/* Reduced logo size */}
+                          <img src={process.env.PUBLIC_URL + '/logo-optimized.png'} alt="CashflowCrunch Logo" style={{ height: '120px', width: '120px', marginBottom: '12px' }} /> 
+                          <Typography variant="h6" fontWeight="bold" gutterBottom>
                             Start Your Search
                           </Typography>
-                          <Typography variant="body2" sx={{ maxWidth: '250px', mx: 'auto' }}>
-                            Enter a location below to find investment opportunities
+                          <Typography variant="body2" sx={{ maxWidth: '200px', mx: 'auto' }}>
+                            Enter a location below to find opportunities
                           </Typography>
                         </Box>
                       </Box>
@@ -1340,10 +1226,10 @@ function App() {
             </Typography>
             
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Interest Rate: {interestRate}%</Typography>
+                  <Typography variant="body2" gutterBottom>Interest Rate: {settings.interestRate}%</Typography>
               <Slider
-                value={interestRate}
-                    onChange={(e, newValue) => setInterestRate(newValue as number)}
+                value={settings.interestRate}
+                    onChange={(e, newValue) => settings.interestRate = newValue as number}
                     aria-labelledby="interest-rate-slider"
                 valueLabelDisplay="auto"
                     step={0.1}
@@ -1354,10 +1240,10 @@ function App() {
             </Box>
             
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Loan Term: {loanTerm} years</Typography>
+                  <Typography variant="body2" gutterBottom>Loan Term: {settings.loanTerm} years</Typography>
               <Slider
-                value={loanTerm}
-                    onChange={(e, newValue) => setLoanTerm(newValue as number)}
+                value={settings.loanTerm}
+                    onChange={(e, newValue) => settings.loanTerm = newValue as number}
                     aria-labelledby="loan-term-slider"
                 valueLabelDisplay="auto"
                     step={1}
@@ -1368,10 +1254,10 @@ function App() {
             </Box>
             
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Down Payment: {downPaymentPercent}%</Typography>
+                  <Typography variant="body2" gutterBottom>Down Payment: {settings.downPaymentPercent}%</Typography>
               <Slider
-                value={downPaymentPercent}
-                    onChange={(e, newValue) => setDownPaymentPercent(newValue as number)}
+                value={settings.downPaymentPercent}
+                    onChange={(e, newValue) => settings.downPaymentPercent = newValue as number}
                     aria-labelledby="down-payment-slider"
                 valueLabelDisplay="auto"
                     step={1}
@@ -1385,12 +1271,12 @@ function App() {
                <Box sx={{ mb: 2 }}>
                  <Typography variant="body2" gutterBottom>
                    <Tooltip title="Initial rehab costs needed before renting. This amount is added to your total investment when calculating ROI." arrow>
-                     <span>Initial Rehab: {formatCurrency(rehabAmount)}</span>
+                     <span>Initial Rehab: {formatCurrency(settings.rehabAmount)}</span>
                    </Tooltip>
                  </Typography>
                  <Slider 
-                   value={rehabAmount} 
-                   onChange={(e, value) => setRehabAmount(value as number)} 
+                   value={settings.rehabAmount} 
+                   onChange={(e, value) => settings.rehabAmount = value as number} 
                    min={0} 
                    max={100000} // Increased max to 100k
                    step={500} 
@@ -1402,10 +1288,10 @@ function App() {
                {/* --- End Initial Rehab Slider --- */}
             
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Property Tax & Insurance: {taxInsurancePercent}%</Typography>
+                  <Typography variant="body2" gutterBottom>Property Tax & Insurance: {settings.taxInsurancePercent}%</Typography>
               <Slider
-                value={taxInsurancePercent}
-                    onChange={(e, value) => setTaxInsurancePercent(value as number)}
+                value={settings.taxInsurancePercent}
+                    onChange={(e, value) => settings.taxInsurancePercent = value as number}
                     min={0}
                     max={5}
                 step={0.1}
@@ -1416,10 +1302,10 @@ function App() {
             </Box>
             
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Vacancy: {vacancyPercent}%</Typography>
+                  <Typography variant="body2" gutterBottom>Vacancy: {settings.vacancyPercent}%</Typography>
               <Slider
-                value={vacancyPercent}
-                    onChange={(e, value) => setVacancyPercent(value as number)}
+                value={settings.vacancyPercent}
+                    onChange={(e, value) => settings.vacancyPercent = value as number}
                 min={0}
                 max={10}
                 step={1}
@@ -1430,10 +1316,10 @@ function App() {
             </Box>
             
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>CapEx: {capexPercent}%</Typography>
+                  <Typography variant="body2" gutterBottom>CapEx: {settings.capexPercent}%</Typography>
               <Slider
-                value={capexPercent}
-                    onChange={(e, value) => setCapexPercent(value as number)}
+                value={settings.capexPercent}
+                    onChange={(e, value) => settings.capexPercent = value as number}
                 min={0}
                 max={10}
                 step={1}
@@ -1444,10 +1330,10 @@ function App() {
             </Box>
                 
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>Property Management: {propertyManagementPercent}%</Typography>
+                  <Typography variant="body2" gutterBottom>Property Management: {settings.propertyManagementPercent}%</Typography>
                   <Slider
-                    value={propertyManagementPercent}
-                    onChange={(e, value) => setPropertyManagementPercent(value as number)}
+                    value={settings.propertyManagementPercent}
+                    onChange={(e, value) => settings.propertyManagementPercent = value as number}
                     min={0}
                     max={20}
                     step={1}
@@ -1533,14 +1419,14 @@ function App() {
                       
                       // Bundle current settings for the scoring function
                       const currentSettings: CashflowSettings = {
-                        interestRate,
-                        loanTerm,
-                        downPaymentPercent,
-                        taxInsurancePercent,
-                        vacancyPercent,
-                        capexPercent,
-                        propertyManagementPercent,
-                        rehabAmount,
+                        interestRate: settings.interestRate,
+                        loanTerm: settings.loanTerm,
+                        downPaymentPercent: settings.downPaymentPercent,
+                        taxInsurancePercent: settings.taxInsurancePercent,
+                        vacancyPercent: settings.vacancyPercent,
+                        capexPercent: settings.capexPercent,
+                        propertyManagementPercent: settings.propertyManagementPercent,
+                        rehabAmount: settings.rehabAmount,
                       };
 
                       // Calculate the crunch score using potentially overridden price/rent
@@ -1554,10 +1440,10 @@ function App() {
                   calculateCashflow={calculateCashflow}
                   formatCurrency={formatCurrency}
                   formatPercent={formatPercent}
-                  vacancyPercent={vacancyPercent}
-                  capexPercent={capexPercent}
-                        downPaymentPercent={downPaymentPercent}
-                        propertyManagementPercent={propertyManagementPercent}
+                  vacancyPercent={settings.vacancyPercent}
+                  capexPercent={settings.capexPercent}
+                        downPaymentPercent={settings.downPaymentPercent}
+                        propertyManagementPercent={settings.propertyManagementPercent}
                         handleRentEstimateChange={handleRentEstimateChange} // Pass down rent handler
                         handlePriceOverrideChange={handlePriceOverrideChange} // Pass down price handler
                         crunchScore={score} 
@@ -1920,65 +1806,17 @@ function App() {
         {/* Property Details Route */}
         <Route 
           path="/property/:propertyId" 
-          element={
+          element={ 
             <PropertyDetailsPage 
-              properties={displayedProperties}
-              calculateCashflow={(property, settings) => {
-                // Create a function that uses the settings passed in instead of the global state
-                const calculateCashflowWithSettings = (property: Property, settings: CashflowSettings) => {
-                  const monthlyMortgage = calculateMortgageWithSettings(property.price, settings);
-                  const monthlyTaxInsurance = property.price * (settings.taxInsurancePercent / 100) / 12;
-                  const monthlyVacancy = property.rent_estimate * (settings.vacancyPercent / 100);
-                  const monthlyCapex = property.rent_estimate * (settings.capexPercent / 100);
-                  const monthlyPropertyManagement = property.rent_estimate * (settings.propertyManagementPercent / 100);
-                  
-                  const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
-                  const monthlyCashflow = property.rent_estimate - totalMonthlyExpenses;
-                  const annualCashflow = monthlyCashflow * 12;
-                  
-                  // Down payment plus closing costs
-                  const initialInvestment = (property.price * (settings.downPaymentPercent / 100)) + (property.price * 0.03);
-                  // Add rehab amount to initial investment
-                  const totalInvestment = initialInvestment + settings.rehabAmount;
-                  
-                  const cashOnCashReturn = annualCashflow / totalInvestment;
-                  
-                  return {
-                    monthlyMortgage,
-                    monthlyTaxInsurance,
-                    monthlyVacancy,
-                    monthlyCapex,
-                    monthlyPropertyManagement,
-                    totalMonthlyExpenses,
-                    monthlyCashflow,
-                    annualCashflow,
-                    cashOnCashReturn
-                  };
-                };
-                
-                // Helper function to calculate mortgage with specific settings
-                function calculateMortgageWithSettings(price: number, settings: CashflowSettings): number {
-                  const downPayment = price * (settings.downPaymentPercent / 100);
-                  const loanAmount = price - downPayment;
-                  const monthlyRate = settings.interestRate / 100 / 12;
-                  const payments = settings.loanTerm * 12;
-                  
-                  if (monthlyRate === 0) return loanAmount / payments;
-                  
-                  const x = Math.pow(1 + monthlyRate, payments);
-                  return loanAmount * (monthlyRate * x) / (x - 1);
-                }
-                
-                const propertyForCashflow = {
-                  ...property,
-                  rent_source: property.rent_source ?? "calculated", // Default to 'calculated' if undefined
-                };
-                return calculateCashflowWithSettings(propertyForCashflow, settings);
-              }}
-              formatCurrency={formatCurrency}
+              properties={displayedProperties} 
+              // Pass the calculateCashflow function defined in App.tsx 
+              // (it now uses context settings via its own dependencies)
+              calculateCashflow={calculateCashflow} 
+              formatCurrency={formatCurrency} 
               formatPercent={formatPercent}
-              defaultSettings={defaultSettings}
-            />
+              // Pass the current context settings as defaultSettings
+              defaultSettings={settings} 
+            /> 
           } 
         />
         
