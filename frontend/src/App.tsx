@@ -106,6 +106,9 @@ function App() {
 
   // Ref for tracking search requests
   const currentSearchId = useRef<number>(0);
+  
+  // --- State for Price Overrides ---
+  const [overridePrices, setOverridePrices] = useState<Record<string, number>>({});
 
   // --- Load Saved Searches from LocalStorage ---
   useEffect(() => {
@@ -130,7 +133,6 @@ function App() {
     }
   }, [savedSearches]);
   // --- End LocalStorage Handling ---
-
 
   // --- Helper function to format currency (Wrap in useCallback) ---
   const formatCurrency = useCallback((amount: number): string => {
@@ -192,6 +194,24 @@ function App() {
     // Show raw number (or empty) on focus
     setDisplayMaxPrice(maxPrice === '' ? '' : String(maxPrice)); 
   };
+
+  // --- Handle Price Override Change --- 
+  const handlePriceOverrideChange = useCallback((propertyId: string, newPriceString: string) => {
+    const newPrice = parseFloat(newPriceString.replace(/[^\d.]/g, '')); // Clean and parse
+
+    if (isNaN(newPrice) || newPrice <= 0) {
+      console.warn(`[handlePriceOverrideChange] Invalid price value entered: ${newPriceString}. Removing override if exists.`);
+      // Remove override if invalid price is entered
+      setOverridePrices(prev => {
+        const { [propertyId]: _, ...rest } = prev;
+        return rest;
+      });
+      return;
+    }
+
+    console.log(`[handlePriceOverrideChange] Updating overridden price for ${propertyId} to ${newPrice}`);
+    setOverridePrices(prev => ({ ...prev, [propertyId]: newPrice }));
+  }, []); // No dependencies needed, it only uses its arguments and setOverridePrices
 
   // Function to handle search button click
   const handleSearch = async () => {
@@ -584,7 +604,8 @@ function App() {
         
           // Sort based on current config
           if (sortConfig.key) {
-            return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, calculateCashflow);
+            // Pass overridePrices to the sortProperties function here as well
+            return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, calculateCashflow, overridePrices);
           } else {
             return newPropertyList;
           }
@@ -612,7 +633,7 @@ function App() {
        return currentProperties; 
     });
 
-  }, [sortConfig, totalProperties, calculateCashflow, searchPerformed, initialLoading]); // Add missing dependencies
+  }, [sortConfig, totalProperties, calculateCashflow, searchPerformed, initialLoading, overridePrices]); // Add missing dependencies
 
   // UseEffect to register for updates when component mounts
   useEffect(() => {
@@ -637,20 +658,53 @@ function App() {
   };
 
   // Helper function for sorting (moved outside useMemo for clarity if complex)
-  const sortProperties = (properties: Property[], key: SortableKey | null, direction: 'asc' | 'desc', calculateCashflowFn: (p: Property) => Cashflow): Property[] => {
+  const sortProperties = (
+    properties: Property[], 
+    key: SortableKey | null, 
+    direction: 'asc' | 'desc', 
+    calculateCashflowFn: (p: Property) => Cashflow, 
+    priceOverrides: Record<string, number> // Add priceOverrides parameter
+  ): Property[] => {
       if (!key) return properties;
 
       const sorted = [...properties].sort((a, b) => {
           let valA: number | string | null | undefined = null;
           let valB: number | string | null | undefined = null;
+          
+          // Determine the effective price for property A and B
+          const priceA = priceOverrides[a.property_id] !== undefined ? priceOverrides[a.property_id] : a.price;
+          const priceB = priceOverrides[b.property_id] !== undefined ? priceOverrides[b.property_id] : b.price;
 
           if (key === 'ratio') {
-          valA = a.price > 0 ? a.rent_estimate / a.price : 0;
-          valB = b.price > 0 ? b.rent_estimate / b.price : 0;
+            // Calculate ratio using the effective price
+            valA = priceA > 0 ? a.rent_estimate / priceA : 0;
+            valB = priceB > 0 ? b.rent_estimate / priceB : 0;
           } else if (key === 'cashflow') {
-              valA = calculateCashflowFn(a).monthlyCashflow;
-              valB = calculateCashflowFn(b).monthlyCashflow;
-        } else {
+              // Recalculate cashflow for sorting using the effective price
+              const cashflowA = calculateCashflowFn({ ...a, price: priceA });
+              const cashflowB = calculateCashflowFn({ ...b, price: priceB });
+              valA = cashflowA.monthlyCashflow;
+              valB = cashflowB.monthlyCashflow;
+          } else if (key === 'crunchScore') {
+              // Recalculate cashflow and score for sorting using the effective price
+              // Need access to settings here, maybe pass settings into sortProperties?
+              // For simplicity, let's assume defaultSettings are acceptable for sorting comparison
+              // OR, this implies sorting by score might become less accurate if assumptions differ wildly
+              // Let's recalculate based on the effective price and *default* settings for now.
+              // A more complex solution would pass current settings state down.
+               const tempSettings: CashflowSettings = defaultSettings; // Use default settings from App state
+               const cashflowA = calculateCashflowFn({ ...a, price: priceA });
+               const cashflowB = calculateCashflowFn({ ...b, price: priceB });
+               const scoreA = calculateCrunchScore({ ...a, price: priceA }, tempSettings, cashflowA);
+               const scoreB = calculateCrunchScore({ ...b, price: priceB }, tempSettings, cashflowB);
+               valA = scoreA;
+               valB = scoreB;
+          } else if (key === 'price') {
+            // IMPORTANT: Sort by ORIGINAL price unless explicitly changed
+            valA = a.price;
+            valB = b.price;
+          } else {
+              // Other keys sort based on original property data
               valA = a[key as keyof Property];
               valB = b[key as keyof Property];
           }
@@ -671,8 +725,9 @@ function App() {
   };
 
   const sortedProperties = useMemo(() => {
-      return sortProperties(displayedProperties, sortConfig.key, sortConfig.direction, calculateCashflow);
-  }, [displayedProperties, sortConfig, calculateCashflow]); // Removed sortProperties dependency as it's defined outside
+      // Pass overridePrices to the sort function
+      return sortProperties(displayedProperties, sortConfig.key, sortConfig.direction, calculateCashflow, overridePrices);
+  }, [displayedProperties, sortConfig, calculateCashflow, overridePrices]); // Add overridePrices dependency
 
   // --- Rent Estimate Handling ---
   const handleRentEstimateChange = useCallback((propertyId: string, newRentString: string) => {
@@ -1463,8 +1518,18 @@ function App() {
                 
                   <div className="property-grid">
                     {sortedProperties.map((property) => {
-                      // Calculate cashflow using current assumptions from state
-                      const cashflow = calculateCashflow(property);
+                      // Calculate cashflow using current assumptions and potentially overridden price/rent
+                      const overridePrice = overridePrices[property.property_id];
+                      const propertyForCalculations = {
+                        ...property,
+                        price: overridePrice !== undefined ? overridePrice : property.price,
+                        // Ensure rent estimate is also correctly handled if it was overridden on the card
+                        // Note: PropertyCard currently manages customRent internally.
+                        // If App needs to know card-level rent edits, PropertyCard needs to call handleRentEstimateChange.
+                        // For now, we assume calculateCashflow passed down handles internal rent override.
+                        rent_estimate: property.rent_estimate // Use the rent currently in displayedProperties
+                      };
+                      const cashflow = calculateCashflow(propertyForCalculations);
                       
                       // Bundle current settings for the scoring function
                       const currentSettings: CashflowSettings = {
@@ -1478,22 +1543,24 @@ function App() {
                         rehabAmount,
                       };
 
-                      // Calculate the crunch score
-                      const score = calculateCrunchScore(property, currentSettings, cashflow);
+                      // Calculate the crunch score using potentially overridden price/rent
+                      const score = calculateCrunchScore(propertyForCalculations, currentSettings, cashflow);
                       
                       return (
                       <PropertyCard
                         key={property.property_id}
-                        property={property}
-                          calculateCashflow={calculateCashflow} // Pass down the memoized calculateCashflow
+                        property={property} // Pass original property for reference
+                        overridePrice={overridePrice} // Pass down the specific override price for this card
+                  calculateCashflow={calculateCashflow}
                   formatCurrency={formatCurrency}
                   formatPercent={formatPercent}
-                          vacancyPercent={vacancyPercent} // Still needed for display in share summary
-                          capexPercent={capexPercent}     // Still needed for display in share summary
-                          downPaymentPercent={downPaymentPercent} // Still needed for display
-                          propertyManagementPercent={propertyManagementPercent} // Still needed for display
-                        handleRentEstimateChange={handleRentEstimateChange}
-                          crunchScore={score} // Pass the calculated score
+                  vacancyPercent={vacancyPercent}
+                  capexPercent={capexPercent}
+                        downPaymentPercent={downPaymentPercent}
+                        propertyManagementPercent={propertyManagementPercent}
+                        handleRentEstimateChange={handleRentEstimateChange} // Pass down rent handler
+                        handlePriceOverrideChange={handlePriceOverrideChange} // Pass down price handler
+                        crunchScore={score} 
                       />
                       );
                     })}

@@ -777,5 +777,5 @@ export const searchPropertyByAddress = async (address: string): Promise<Property
         // Rethrow or handle specific errors as needed
         // For example, if the extended search fails, we can't proceed
         return null; // Return null if any step fails
-    }
+  }
 };
