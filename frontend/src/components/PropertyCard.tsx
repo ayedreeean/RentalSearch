@@ -83,7 +83,6 @@ interface PropertyCardProps {
   downPaymentPercent: number;
   propertyManagementPercent: number;
   handleRentEstimateChange: (propertyId: string, newRentString: string) => void;
-  handlePriceOverrideChange: (propertyId: string, newPriceString: string) => void; // Add handler prop
   crunchScore: number;
 }
 
@@ -98,17 +97,12 @@ const PropertyCard: React.FC<PropertyCardProps> = ({
   downPaymentPercent,
   propertyManagementPercent,
   handleRentEstimateChange,
-  handlePriceOverrideChange, // Destructure handler
   crunchScore // Destructure crunchScore
 }) => {
   // --- State for editable rent estimate --- 
   const [displayRent, setDisplayRent] = useState<string>('');
   const [isRentEditing, setIsRentEditing] = useState(false);
   const [customRentEstimate, setCustomRentEstimate] = useState<number | null>(null);
-  
-  // --- State for editable price --- 
-  const [displayPrice, setDisplayPrice] = useState<string>('');
-  const [isPriceEditing, setIsPriceEditing] = useState(false);
   
   // Share modal state
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -122,12 +116,6 @@ const PropertyCard: React.FC<PropertyCardProps> = ({
     const rentToDisplay = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
     setDisplayRent(formatCurrency(rentToDisplay));
   }, [property.rent_estimate, customRentEstimate, formatCurrency]);
-
-  // Initialize display price when property data or override changes
-  useEffect(() => {
-    const priceToDisplay = overridePrice !== undefined ? overridePrice : property.price;
-    setDisplayPrice(formatCurrency(priceToDisplay));
-  }, [property.price, overridePrice, formatCurrency]);
 
   // Handlers for rent input
   const handleRentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,45 +145,18 @@ const PropertyCard: React.FC<PropertyCardProps> = ({
     setDisplayRent(String(currentRent)); 
   };
 
-  // Handlers for price input
-  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDisplayPrice(e.target.value);
-  };
-
-  const handlePriceBlur = () => {
-    setIsPriceEditing(false);
-    const currentPrice = overridePrice !== undefined ? overridePrice : property.price;
-    const newPrice = parseFloat(displayPrice.replace(/[^\d.]/g, ''));
-
-    if (!isNaN(newPrice) && newPrice > 0 && newPrice !== currentPrice) {
-      // Call parent handler to update state in App.tsx
-      handlePriceOverrideChange(property.property_id, String(newPrice));
-      // The useEffect for displayPrice will update the formatting
-    } else {
-      // Revert to formatted current price if input is invalid or unchanged
-      setDisplayPrice(formatCurrency(currentPrice));
-    }
-  };
-
-  const handlePriceFocus = () => {
-    setIsPriceEditing(true);
-    // Show raw number when editing
-    const currentPrice = overridePrice !== undefined ? overridePrice : property.price;
-    setDisplayPrice(String(currentPrice)); 
-  };
-
-  // Create a modified property object for cashflow calculations *within this card*
+  // Use overridePrice if available, otherwise property.price
   const currentPrice = overridePrice !== undefined ? overridePrice : property.price;
+  
+  // Calculate cashflow and other derived values based on currentPrice
   const propertyForCashflow = {
     ...property,
     price: currentPrice,
     rent_estimate: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
     rent_source: property.rent_source ?? "calculated",
   };
-
   const cashflow = calculateCashflow(propertyForCashflow);
   const downPaymentAmount = currentPrice * (downPaymentPercent / 100);
-  
   const rentCastAddress = encodeURIComponent(property.address);
   const rentCastUrl = `https://app.rentcast.io/app?address=${rentCastAddress}`;
   
@@ -281,14 +242,7 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
       <button 
         onClick={handleOpenDeepDive} 
         className="property-image-container"
-        style={{ 
-          background: 'none', 
-          border: 'none', 
-          padding: 0, 
-          cursor: 'pointer',
-          width: '100%', 
-          textAlign: 'left'
-        }}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%', textAlign: 'left' }}
       >
         <LazyImage
           src={property.thumbnail}
@@ -306,34 +260,13 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
       
       <CardContent className="property-details">
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-          <Typography variant="h6" component="div" className="price-ratio-container" gutterBottom>
-            <TextField
-                variant="standard"
-                size="small"
-                value={isPriceEditing ? displayPrice : formatCurrency(currentPrice)}
-                onChange={handlePriceChange}
-                onFocus={handlePriceFocus}
-                onBlur={handlePriceBlur}
-                InputProps={{
-                  disableUnderline: !isPriceEditing,
-                  sx: { fontSize: '1.1rem', fontWeight: 500 }
-                }}
-                sx={{
-                  maxWidth: '130px',
-                  verticalAlign: 'bottom',
-                  '& .MuiInputBase-input': { textAlign: 'left', paddingBottom: '2px' },
-                  cursor: 'pointer',
-                  ...(isPriceEditing
-                    ? { '& .MuiInputBase-root': { borderBottom: '1px solid rgba(0, 0, 0, 0.42)' } }
-                    : { })
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-              />
-            <EditIcon sx={{ fontSize: 16, ml: -4, mb: 0.5, color: '#6b7280', opacity: 0.7, cursor: 'pointer' }} />
+          <Typography variant="h6" component="div" className="price-ratio-container" sx={{ display: 'flex', alignItems: 'center', gap: 1 }} gutterBottom>
+            <span style={{ fontSize: '1.1rem', fontWeight: 500 }}>{formatCurrency(currentPrice)}</span>
+            {overridePrice !== undefined && 
+             <Tooltip title="Price has been manually overridden" arrow placement="top">
+               <span style={{ fontSize: '0.7em', verticalAlign: 'super', color: '#ffc107' }}>*</span>
+             </Tooltip>
+            }
             
             <Tooltip title={crunchScoreTooltip} arrow>
               <span className={`crunch-score-chip ${crunchScoreClass}`}>
@@ -345,7 +278,7 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
                 {property.days_on_market} days
               </span>
             )}
-        </Typography>
+          </Typography>
         </Box>
         
         <button 
@@ -443,7 +376,6 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
                          }
                      }}
                    />
-                   <EditIcon sx={{ fontSize: 14, ml: 0.5, color: '#6b7280', opacity: 0.7, cursor: 'pointer' }} />
                 </Box>
               </div>
 

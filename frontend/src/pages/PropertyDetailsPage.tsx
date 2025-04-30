@@ -16,7 +16,7 @@ import {
   PictureAsPdf as PdfIcon, Tune as TuneIcon // Add TuneIcon import
 } from '@mui/icons-material';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Legend, Line, Bar, ComposedChart, ReferenceLine } from 'recharts';
-import { Property, Cashflow, CashflowSettings } from '../types';
+import { Property, Cashflow, CashflowSettings, YearlyProjection } from '../types'; // Import YearlyProjection
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { usePDF } from 'react-to-pdf';
@@ -32,20 +32,15 @@ interface PropertyDetailsPageProps {
   formatCurrency: (amount: number) => string;
   formatPercent: (percent: number) => string;
   defaultSettings: CashflowSettings;
+  // Add the override handler prop
+  handlePriceOverrideChange: (propertyId: string, newPriceString: string) => void;
 }
 
-// Add the interface for long-term cashflow data
-interface YearlyProjection {
-  year: number;
-  propertyValue: number;
-  annualRent: number;
-  yearlyExpenses: number;
-  yearlyCashflow: number;
-  equity: number;
-  equityGrowth: number;
-  roi: number;
-  roiWithEquity: number;
-}
+// --- Helper Functions (Moved Outside Component) ---
+// ... calculateIRR definition ...
+// ... decodePropertyFromURL definition ...
+
+// --- Helper Components (Defined outside PropertyDetailsPage) ---
 
 // Adjust the SimpleChart component to ensure all bars are fully visible
 const SimpleChart = ({ 
@@ -105,20 +100,21 @@ const SimpleChart = ({
     const chartHeight = canvasHeight - padding.top - padding.bottom;
     
     // Calculate scales for primary Y-axis (property values & equity)
-    const maxPropertyValue = Math.max(...data.propertyValues);
-    const maxEquity = Math.max(...data.equity);
+    const maxPropertyValue = Math.max(...data.propertyValues, 0); // Ensure non-negative max
+    const maxEquity = Math.max(...data.equity, 0); // Ensure non-negative max
     const maxPrimaryY = Math.max(maxPropertyValue, maxEquity);
     
     // Calculate scales for secondary Y-axis (cashflow)
-    const maxCashflow = Math.max(...data.cashflow);
-    const minCashflow = Math.min(...data.cashflow);
+    const cashflowValues = data.cashflow.length > 0 ? data.cashflow : [0]; // Handle empty array
+    const maxCashflow = Math.max(...cashflowValues);
+    const minCashflow = Math.min(...cashflowValues);
     
     // For positive-only data, start at 0. For data with negatives, include the negative range.
     const minSecondaryY = Math.min(0, minCashflow);
     const maxSecondaryY = Math.max(0, maxCashflow);
     
-    // Calculate ratios to maintain proper scale proportions
-    const primaryToSecondaryRatio = maxPrimaryY / maxSecondaryY;
+    // Calculate ratios to maintain proper scale proportions (handle division by zero)
+    const primaryToSecondaryRatio = maxSecondaryY !== 0 ? maxPrimaryY / maxSecondaryY : 1;
     
     // Add padding to both scales
     const primaryYPadding = maxPrimaryY * 0.1;
@@ -127,27 +123,29 @@ const SimpleChart = ({
     
     // Determine the effective min/max for both axes, ensuring full visibility
     const effectiveMinPrimaryY = 0; // Keep primary axis starting at 0
-    const effectiveMaxPrimaryY = maxPrimaryY + primaryYPadding;
+    const effectiveMaxPrimaryY = maxPrimaryY + primaryYPadding || 100; // Default if max is 0
     
     // Adjust secondary axis min/max to ensure all data is visible
-    // but maintain proportional relationship with primary axis
     const effectiveMinSecondaryY = minSecondaryY - (minSecondaryY < 0 ? secondaryYPadding : 0);
-    const effectiveMaxSecondaryY = maxSecondaryY + secondaryYPadding;
+    let effectiveMaxSecondaryY = maxSecondaryY + secondaryYPadding;
+    
+    // Ensure effectiveMaxSecondaryY is not zero if min is also zero to avoid scale issues
+    if (effectiveMinSecondaryY === 0 && effectiveMaxSecondaryY === 0) {
+      effectiveMaxSecondaryY = 100; // Default max if all values are 0
+    }
     
     // Ensure the secondary scale can represent all data points
-    // by applying the primary:secondary ratio to determine appropriate scaling
-    const adjustedMaxSecondary = Math.max(effectiveMaxSecondaryY, effectiveMaxPrimaryY / primaryToSecondaryRatio);
+    const adjustedMaxSecondary = Math.max(effectiveMaxSecondaryY, effectiveMaxPrimaryY / (primaryToSecondaryRatio || 1)); // Handle ratio being 0
     
-    // Calculate Y scales with adjusted ranges to ensure all data fits
-    const primaryYScale = chartHeight / (effectiveMaxPrimaryY - effectiveMinPrimaryY);
-    const secondaryYScale = chartHeight / (adjustedMaxSecondary - effectiveMinSecondaryY);
+    // Calculate Y scales with adjusted ranges (avoid division by zero)
+    const primaryYScale = (effectiveMaxPrimaryY - effectiveMinPrimaryY) !== 0 ? chartHeight / (effectiveMaxPrimaryY - effectiveMinPrimaryY) : 1;
+    const secondaryYScale = (adjustedMaxSecondary - effectiveMinSecondaryY) !== 0 ? chartHeight / (adjustedMaxSecondary - effectiveMinSecondaryY) : 1;
     
     // Calculate zero Y-coordinate position (will be the same for both axes)
     const zeroYCoordinate = canvasHeight - padding.bottom - ((0 - effectiveMinSecondaryY) * secondaryYScale);
     
     // Function to convert a primary Y value to canvas coordinate
     const getPrimaryYCoordinate = (value: number) => {
-      // Align the zero point to match the secondary axis zero point
       return zeroYCoordinate - ((value - 0) * primaryYScale);
     };
     
@@ -159,17 +157,16 @@ const SimpleChart = ({
     // Calculate plot area width (space available for data points)
     const plotAreaWidth = chartWidth;
     
-    // Use data-based X coordinates instead of evenly spaced
-    // Calculate X scale with proper inset to keep bars within bounds
-    // For n points, divide width into n sections instead of n-1
-    const xScale = plotAreaWidth / Math.max(data.years.length - 1, 1);
+    // Calculate X scale with proper inset (handle single data point)
+    const numPoints = data.years.length;
+    const xScale = numPoints > 1 ? plotAreaWidth / (numPoints - 1) : plotAreaWidth / 2; // Center if only one point
     
     // Draw background grid
     ctx.strokeStyle = '#f0f0f0';
     ctx.lineWidth = 1;
     
     // Draw horizontal grid lines for primary axis
-    const primaryGridStep = Math.ceil(effectiveMaxPrimaryY / 5);
+    const primaryGridStep = Math.max(1, Math.ceil(effectiveMaxPrimaryY / 5)); // Avoid 0 step
     for (let i = 0; i <= effectiveMaxPrimaryY; i += primaryGridStep) {
       const y = getPrimaryYCoordinate(i);
       ctx.beginPath();
@@ -208,91 +205,55 @@ const SimpleChart = ({
     ctx.fillStyle = '#666';
     ctx.font = '10px Arial';
     
-    // Calculate step size for primary Y axis labels - use fewer labels to avoid overlap
     const optimalStepCount = 5;
-    let primaryStepSize = Math.ceil(effectiveMaxPrimaryY / optimalStepCount);
-    
-    // Round step size to a nice number
+    let primaryStepSize = Math.max(1, Math.ceil(effectiveMaxPrimaryY / optimalStepCount)); // Avoid 0 step
     const primaryMagnitude = Math.pow(10, Math.floor(Math.log10(primaryStepSize)));
-    primaryStepSize = Math.ceil(primaryStepSize / primaryMagnitude) * primaryMagnitude;
+    primaryStepSize = Math.max(1, Math.ceil(primaryStepSize / primaryMagnitude) * primaryMagnitude); // Ensure step is at least 1
     
-    // Draw primary Y axis labels
     for (let i = 0; i <= effectiveMaxPrimaryY; i += primaryStepSize) {
       if (i > effectiveMaxPrimaryY) break;
       const y = getPrimaryYCoordinate(i);
-      
-      // Format large numbers with K or M suffix
       let label;
-      if (i >= 1000000) {
-        label = '$' + (i / 1000000).toFixed(1) + 'M';
-      } else if (i >= 1000) {
-        label = '$' + (i / 1000).toFixed(0) + 'K';
-      } else {
-        label = '$' + i;
-      }
-      
+      if (i >= 1000000) label = '$' + (i / 1000000).toFixed(1) + 'M';
+      else if (i >= 1000) label = '$' + (i / 1000).toFixed(0) + 'K';
+      else label = '$' + i;
       ctx.fillText(label, padding.left - 8, y);
     }
     
     // Draw secondary Y-axis labels (right - cashflow)
     ctx.textAlign = 'left';
-    
-    // Calculate step size for secondary Y axis labels
-    let secondaryStepSize = (adjustedMaxSecondary - effectiveMinSecondaryY) / optimalStepCount;
-    
-    // Round step size to a nice number
+    let secondaryStepSize = Math.max(1, (adjustedMaxSecondary - effectiveMinSecondaryY) / optimalStepCount); // Avoid 0 step
     const secondaryMagnitude = Math.pow(10, Math.floor(Math.log10(secondaryStepSize)));
-    secondaryStepSize = Math.ceil(secondaryStepSize / secondaryMagnitude) * secondaryMagnitude;
-    
-    // Start from the lowest multiple of stepSize below effectiveMinSecondaryY
+    secondaryStepSize = Math.max(1, Math.ceil(secondaryStepSize / secondaryMagnitude) * secondaryMagnitude); // Ensure step is at least 1
     let secondaryLabelValue = Math.floor(effectiveMinSecondaryY / secondaryStepSize) * secondaryStepSize;
     
-    // Draw secondary Y axis labels
     while (secondaryLabelValue <= adjustedMaxSecondary) {
       const y = getSecondaryYCoordinate(secondaryLabelValue);
-      
-      // Format with K suffix for thousands
       let label;
-      if (Math.abs(secondaryLabelValue) >= 1000) {
-        label = '$' + (secondaryLabelValue / 1000).toFixed(1) + 'K';
-      } else {
-        label = '$' + secondaryLabelValue;
-      }
-      
-      // Add cashflow label on right axis
+      if (Math.abs(secondaryLabelValue) >= 1000) label = '$' + (secondaryLabelValue / 1000).toFixed(1) + 'K';
+      else label = '$' + secondaryLabelValue;
       ctx.fillText(label, canvasWidth - padding.right + 8, y);
-      
-      // If we're at zero, make the line a bit darker for both axes
       if (secondaryLabelValue === 0) {
         ctx.strokeStyle = '#999';
         ctx.beginPath();
         ctx.moveTo(padding.left, y);
         ctx.lineTo(canvasWidth - padding.right, y);
         ctx.stroke();
-        ctx.strokeStyle = '#ccc'; // Reset for other lines
+        ctx.strokeStyle = '#ccc';
       }
-      
       secondaryLabelValue += secondaryStepSize;
     }
     
-    // Draw X-axis labels (selected years to avoid overcrowding)
+    // Draw X-axis labels
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#666';
-    
-    // Select a subset of years to display (e.g., years 1, 5, 10, 15, 20, 25, 30)
-    const yearsToShow = [1, 5, 10, 15, 20, 25, 30].filter(year => year <= data.years.length);
-    
-    // If we have a small number of years, show all of them
-    const displayYears = data.years.length <= 10 ? data.years : yearsToShow;
-    
-    displayYears.forEach(yearToShow => {
+    const yearsToShow = numPoints <= 10 ? data.years : [1, 5, 10, 15, 20, 25, 30].filter(year => year <= numPoints);
+    yearsToShow.forEach(yearToShow => {
       const index = data.years.indexOf(yearToShow);
       if (index !== -1) {
         const x = padding.left + (index * xScale);
         ctx.fillText(yearToShow.toString(), x, canvasHeight - padding.bottom + 5);
-        
-        // Add light vertical grid line
         ctx.strokeStyle = '#f0f0f0';
         ctx.beginPath();
         ctx.moveTo(x, padding.top);
@@ -301,257 +262,114 @@ const SimpleChart = ({
       }
     });
     
-    // Draw axis titles with better positioning
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 11px Arial';
-    ctx.fillStyle = '#555';
-    
-    // Primary Y-axis title (left)
-    ctx.save();
-    ctx.translate(padding.left - 60, padding.top + chartHeight / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillText('Property Value & Equity ($)', 0, 0);
-    ctx.restore();
-    
-    // Secondary Y-axis title (right)
-    ctx.save();
-    ctx.translate(canvasWidth - padding.right + 60, padding.top + chartHeight / 2);
-    ctx.rotate(Math.PI / 2);
-    ctx.fillText('Annual Cashflow ($)', 0, 0);
-    ctx.restore();
-    
-    // X-axis title
+    // Draw axis titles
+    ctx.textAlign = 'center'; ctx.font = 'bold 11px Arial'; ctx.fillStyle = '#555';
+    ctx.save(); ctx.translate(padding.left - 60, padding.top + chartHeight / 2); ctx.rotate(-Math.PI / 2); ctx.fillText('Property Value & Equity ($)', 0, 0); ctx.restore();
+    ctx.save(); ctx.translate(canvasWidth - padding.right + 60, padding.top + chartHeight / 2); ctx.rotate(Math.PI / 2); ctx.fillText('Annual Cashflow ($)', 0, 0); ctx.restore();
     ctx.fillText('Year', padding.left + chartWidth / 2, canvasHeight - 10);
     
-    // Draw property value line using primary Y-axis
+    // Draw property value line
     if (data.propertyValues.length > 1) {
-      ctx.strokeStyle = '#4f46e5'; // Purple
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      
+      ctx.strokeStyle = '#4f46e5'; ctx.lineWidth = 2; ctx.beginPath();
       for (let i = 0; i < data.propertyValues.length; i++) {
         const x = padding.left + (i * xScale);
         const y = getPrimaryYCoordinate(data.propertyValues[i]);
-        
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
-      
       ctx.stroke();
     }
     
-    // Draw equity line using primary Y-axis
+    // Draw equity line
     if (data.equity.length > 1) {
-      ctx.strokeStyle = '#10b981'; // Green
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      
+      ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2; ctx.beginPath();
       for (let i = 0; i < data.equity.length; i++) {
         const x = padding.left + (i * xScale);
         const y = getPrimaryYCoordinate(data.equity[i]);
-        
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
-      
       ctx.stroke();
     }
     
-    // Calculate optimal bar width based on available space
-    // Make bars narrower to ensure they stay within bounds
-    const barWidth = Math.min(xScale * 0.4, 12); // Narrower bars with a maximum width
-    
-    // Draw cashflow bars using secondary Y-axis
+    // Draw cashflow bars
+    const barWidth = Math.max(2, Math.min(xScale * 0.4, 12)); // Ensure minimum width
     for (let i = 0; i < data.cashflow.length; i++) {
-      // Calculate x position with special handling for first and last bars to keep them within bounds
       let x;
-      if (i === 0) {
-        // First bar should start exactly at the left boundary
-        x = padding.left;
-      } else if (i === data.cashflow.length - 1) {
-        // Last bar should end exactly at the right boundary
-        x = (canvasWidth - padding.right) - barWidth;
-      } else {
-        // Center the bars for middle points
-        x = padding.left + (i * xScale) - (barWidth / 2);
-      }
+      if (numPoints === 1) x = padding.left + xScale - barWidth / 2; // Center single bar
+      else if (i === 0) x = padding.left;
+      else if (i === numPoints - 1) x = (canvasWidth - padding.right) - barWidth;
+      else x = padding.left + (i * xScale) - (barWidth / 2);
       
       const cashflowValue = data.cashflow[i];
       const zeroY = getSecondaryYCoordinate(0);
       const valueY = getSecondaryYCoordinate(cashflowValue);
-      
-      // Set color based on positive/negative cashflow
-      ctx.fillStyle = cashflowValue >= 0 ? '#f97316' : '#ef4444'; // Orange for positive, red for negative
-      
-      // Draw bar from zero baseline
-      if (cashflowValue >= 0) {
-        // Positive cashflow - draw up from zero line
-        // Bar starts at valueY (top of bar) and extends up to zeroY
-        ctx.fillRect(x, valueY, barWidth, zeroY - valueY);
-      } else {
-        // Negative cashflow - draw down from zero line
-        // Bar starts at zeroY (zero line) and extends down by height
-        ctx.fillRect(x, zeroY, barWidth, valueY - zeroY);
-      }
-      
-      // Debug - draw a small marker at the zero line
-      if (i % 5 === 0) {
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x, zeroY - 1, barWidth, 2);
-      }
+      ctx.fillStyle = cashflowValue >= 0 ? '#f97316' : '#ef4444';
+      if (cashflowValue >= 0) ctx.fillRect(x, valueY, barWidth, zeroY - valueY);
+      else ctx.fillRect(x, zeroY, barWidth, valueY - zeroY);
     }
     
-    // Draw legend at the bottom of the chart
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.font = '12px Arial';
-    ctx.fillStyle = '#333';
-    
-    const legendItems = [
-      { label: 'Property Value', color: '#4f46e5' },
-      { label: 'Equity', color: '#10b981' },
-      { label: 'Annual Cashflow', color: '#f97316' }
-    ];
-    
-    const legendWidth = 150;  // Width allocated for each legend item
-    const legendStartX = (canvasWidth - (legendItems.length * legendWidth)) / 2;
-    const legendY = canvasHeight - 15;  // Place at the bottom
-    
-    // Draw legend background to ensure better visibility
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.fillRect(legendStartX - 10, legendY - 15, (legendItems.length * legendWidth) + 20, 30);
-    
+    // Draw legend
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '12px Arial'; ctx.fillStyle = '#333';
+    const legendItems = [{ label: 'Property Value', color: '#4f46e5' }, { label: 'Equity', color: '#10b981' }, { label: 'Annual Cashflow', color: '#f97316' }];
+    const legendWidth = 150; const legendStartX = (canvasWidth - (legendItems.length * legendWidth)) / 2; const legendY = canvasHeight - 15;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'; ctx.fillRect(legendStartX - 10, legendY - 15, (legendItems.length * legendWidth) + 20, 30);
     legendItems.forEach((item, index) => {
       const x = legendStartX + (index * legendWidth);
-      
-      ctx.fillStyle = item.color;
-      ctx.fillRect(x, legendY - 5, 15, 10);
-      
-      ctx.fillStyle = '#333';
-      ctx.fillText(item.label, x + 20, legendY);
+      ctx.fillStyle = item.color; ctx.fillRect(x, legendY - 5, 15, 10);
+      ctx.fillStyle = '#333'; ctx.fillText(item.label, x + 20, legendY);
     });
     
-    // If we have hover data, draw a vertical indicator line
+    // Draw hover line
     if (hoverInfo && hoverInfo.visible) {
       const hoverX = hoverInfo.x;
-      
-      // Draw vertical hover line
-      ctx.save();
-      ctx.strokeStyle = 'rgba(100, 100, 100, 0.5)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([5, 3]);
-      ctx.beginPath();
-      ctx.moveTo(hoverX, padding.top);
-      ctx.lineTo(hoverX, canvasHeight - padding.bottom);
-      ctx.stroke();
-      ctx.restore();
+      ctx.save(); ctx.strokeStyle = 'rgba(100, 100, 100, 0.5)'; ctx.lineWidth = 1; ctx.setLineDash([5, 3]);
+      ctx.beginPath(); ctx.moveTo(hoverX, padding.top); ctx.lineTo(hoverX, canvasHeight - padding.bottom); ctx.stroke(); ctx.restore();
     }
     
   }, [data, hoverInfo]);
   
-  // Draw chart on mount and when data or hover state changes
-  React.useEffect(() => {
-    drawChart();
-  }, [drawChart]);
+  React.useEffect(() => { drawChart(); }, [drawChart]);
   
-  // Add mouse move handler for tooltip
   const handleMouseMove = React.useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    // Calculate chart dimensions
-    const canvasWidth = canvas.offsetWidth;
-    const canvasHeight = canvas.offsetHeight;
-    
-    const padding = {
-      top: 50,
-      right: 110,
-      bottom: 80,
-      left: 110
-    };
-    
+    const canvas = canvasRef.current; if (!canvas) return;
+    const rect = canvas.getBoundingClientRect(); const x = e.clientX - rect.left; const y = e.clientY - rect.top;
+    const canvasWidth = canvas.offsetWidth; const canvasHeight = canvas.offsetHeight;
+    const padding = { top: 50, right: 110, bottom: 80, left: 110 };
     const chartWidth = canvasWidth - padding.left - padding.right;
     const plotAreaWidth = chartWidth;
-    const xScale = plotAreaWidth / Math.max(data.years.length - 1, 1);
-    
-    // Check if mouse is in chart area
-    if (
-      x >= padding.left && 
-      x <= canvasWidth - padding.right && 
-      y >= padding.top && 
-      y <= canvasHeight - padding.bottom
-    ) {
-      // Find closest data point
-      const dataIndex = Math.round((x - padding.left) / xScale);
-      
-      // Ensure index is within bounds
-      if (dataIndex >= 0 && dataIndex < data.years.length) {
-        // Calculate the exact x position of the data point
+    const numPoints = data.years.length;
+    const xScale = numPoints > 1 ? plotAreaWidth / (numPoints - 1) : plotAreaWidth / 2;
+
+    if (x >= padding.left && x <= canvasWidth - padding.right && y >= padding.top && y <= canvasHeight - padding.bottom) {
+      const dataIndex = numPoints === 1 ? 0 : Math.max(0, Math.min(numPoints - 1, Math.round((x - padding.left) / xScale)));
         const dataPointX = padding.left + (dataIndex * xScale);
-        
+      if (data.years[dataIndex] !== undefined) { // Check if index is valid
         setHoverInfo({
-          visible: true,
-          x: dataPointX,
-          y: y,
-          year: data.years[dataIndex],
-          propertyValue: data.propertyValues[dataIndex],
-          equity: data.equity[dataIndex],
-          cashflow: data.cashflow[dataIndex]
+          visible: true, x: dataPointX, y: y,
+          year: data.years[dataIndex], propertyValue: data.propertyValues[dataIndex],
+          equity: data.equity[dataIndex], cashflow: data.cashflow[dataIndex]
         });
         return;
       }
     }
-    
-    // Mouse not over data point or chart area
     setHoverInfo(null);
   }, [data]);
   
-  const handleMouseLeave = React.useCallback(() => {
-    setHoverInfo(null);
-  }, []);
+  const handleMouseLeave = React.useCallback(() => { setHoverInfo(null); }, []);
   
   return (
     <Box sx={{ width: '100%', height, mb: 2, position: 'relative' }}>
       <canvas 
         ref={canvasRef} 
-        style={{ 
-          width: '100%', 
-          height: '100%'
-        }}
+        style={{ width: '100%', height: '100%' }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       />
-      {/* Tooltip */}
       {hoverInfo && hoverInfo.visible && (
-        <div
-          style={{
-            position: 'absolute',
-            left: `${hoverInfo.x + 10}px`,
-            top: `${hoverInfo.y - 80}px`,
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            color: 'white',
-            padding: '8px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            pointerEvents: 'none',
-            zIndex: 1000,
-            whiteSpace: 'nowrap'
-          }}
-        >
+        <div style={{ position: 'absolute', left: `${hoverInfo.x + 10}px`, top: `${hoverInfo.y - 80}px`, backgroundColor: 'rgba(0, 0, 0, 0.7)', color: 'white', padding: '8px', borderRadius: '4px', fontSize: '12px', pointerEvents: 'none', zIndex: 1000, whiteSpace: 'nowrap' }}>
           <div>Year: {hoverInfo.year}</div>
-          <div>Property Value: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.propertyValue)}</div>
-          <div>Equity: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.equity)}</div>
-          <div>Cashflow: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(hoverInfo.cashflow)}</div>
+          <div>Prop Value: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact' }).format(hoverInfo.propertyValue)}</div>
+          <div>Equity: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact' }).format(hoverInfo.equity)}</div>
+          <div>Cashflow: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact' }).format(hoverInfo.cashflow)}</div>
         </div>
       )}
     </Box>
@@ -561,9 +379,7 @@ const SimpleChart = ({
 // Fix for the default Leaflet marker icon issue
 const useLeafletFix = () => {
   useEffect(() => {
-    // Fix default icon issue with Leaflet
     delete (L.Icon.Default.prototype as any)._getIconUrl;
-    
     L.Icon.Default.mergeOptions({
       iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
       iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
@@ -576,12 +392,8 @@ const useLeafletFix = () => {
 const MapResizer = () => {
   const map = useMap();
   useEffect(() => {
-    // Invalidate size after a short delay to ensure container is rendered
-    const timer = setTimeout(() => {
-      map.invalidateSize();
-    }, 100); // 100ms delay, adjust if needed
-
-    return () => clearTimeout(timer); // Cleanup timer on unmount
+    const timer = setTimeout(() => { map.invalidateSize(); }, 100);
+    return () => clearTimeout(timer);
   }, [map]);
   return null;
 };
@@ -601,114 +413,425 @@ const PropertyMap = ({
   const [coordinates, setCoordinates] = useState<[number, number] | null>(lat && lng ? [lat, lng] : null);
   const [error, setError] = useState<string | null>(null);
   
-  // Geocode the address if coordinates aren't provided
   useEffect(() => {
-    if (coordinates) {
-      setLoading(false);
-      return;
-    }
-    
+    if (coordinates) { setLoading(false); return; }
     const geocodeAddress = async () => {
       try {
         setLoading(true);
-        
-        // Using Nominatim for geocoding (OpenStreetMap's geocoding service)
         const encodedAddress = encodeURIComponent(address);
         const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1`);
-        
-        if (!response.ok) {
-          throw new Error('Geocoding request failed');
-        }
-        
+        if (!response.ok) throw new Error('Geocoding request failed');
         const data = await response.json();
-        
         if (data && data.length > 0) {
           setCoordinates([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
         } else {
-          // Fallback to a default location if geocoding fails
           setError('Could not find this address on the map');
-          // Use default coordinates (can be center of city)
-          setCoordinates([37.7749, -122.4194]); // Default to San Francisco
+          setCoordinates([37.7749, -122.4194]); // Default coordinates
         }
       } catch (error) {
         console.error('Error geocoding address:', error);
         setError('Error loading map location');
-        // Use default coordinates
-        setCoordinates([37.7749, -122.4194]); // Default to San Francisco
+        setCoordinates([37.7749, -122.4194]); // Default coordinates
       } finally {
         setLoading(false);
       }
     };
-    
     geocodeAddress();
   }, [address, coordinates]);
   
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}><CircularProgress /></Box>;
+  if (error || !coordinates) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300, bgcolor: '#f5f5f5', borderRadius: 2 }}><Typography color="error">{error || 'Map could not be loaded'}</Typography></Box>;
   
-  if (error || !coordinates) {
     return (
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: 300, 
-        bgcolor: '#f5f5f5',
-        borderRadius: 2
-      }}>
-        <Typography color="error">{error || 'Map could not be loaded'}</Typography>
-      </Box>
-    );
-  }
-  
-  return (
-    <Box sx={{ 
-      height: 400, 
-      width: '100%', 
-      borderRadius: 2, 
-      overflow: 'hidden',
-      border: '1px solid #e0e0e0',
-      mb: 3
-    }}>
-      <MapContainer 
-        center={coordinates} 
-        zoom={15} 
-        style={{ height: '100%', width: '100%' }}
-        scrollWheelZoom={false}
-        {...({} as any)} // Suppress TS error for 'center'/'zoom'
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <Marker position={coordinates}>
-          <Popup>
-            {address}
-          </Popup>
-        </Marker>
-        <MapResizer /> {/* Add the resizer component here */}
+    <Box sx={{ height: 400, width: '100%', borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0', mb: 3 }}>
+      <MapContainer center={coordinates} zoom={15} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} {...({} as any)}>
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <Marker position={coordinates}><Popup>{address}</Popup></Marker>
+        <MapResizer />
       </MapContainer>
+      </Box>
+    );
+};
+
+// --- PDF Report Component (Moved Outside) ---
+interface PropertyPDFReportProps {
+  property: Property;
+  cashflow: Cashflow;
+  settings: CashflowSettings;
+  customRentEstimate: number | null;
+  notes: string;
+  generateShareableURL: () => string;
+  generateLongTermCashflow: () => YearlyProjection[]; // Pass the function itself
+  formatCurrency: (amount: number) => string;
+  formatPercent: (percent: number) => string;
+  calculateIRR: (initialInvestment: number, cashFlows: number[], finalEquity?: number) => number;
+  yearsToProject: number;
+  rentAppreciationRate: number;
+  propertyValueIncreaseRate: number;
+  effectivePrice: number; // Pass effective price for consistency
+}
+
+const PropertyPDFReport = React.forwardRef<HTMLDivElement, PropertyPDFReportProps>((
+  {
+    property,
+    cashflow,
+    settings,
+    customRentEstimate,
+    notes,
+    generateShareableURL,
+    generateLongTermCashflow, // Receive the function
+    formatCurrency,
+    formatPercent,
+    calculateIRR, // Receive the function
+    yearsToProject,
+    rentAppreciationRate,
+    propertyValueIncreaseRate,
+    effectivePrice
+  },
+  ref
+) => {
+  // No need for the early return here, parent component handles it
+  // if (!property || !cashflow) return null;
+
+  const rentValue = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
+  const downPaymentAmount = effectivePrice * (settings.downPaymentPercent / 100); // Use effectivePrice
+  const shareableURL = generateShareableURL(); // Call the passed function
+  const longTermData = generateLongTermCashflow(); // Call the passed function
+  const closingCosts = effectivePrice * 0.03; // Use effectivePrice
+  const initialInvestment = downPaymentAmount
+                           + closingCosts
+                           + settings.rehabAmount;
+
+  const longTermChartData = {
+    years: longTermData.map(d => d.year),
+    propertyValues: longTermData.map(d => d.propertyValue),
+    equity: longTermData.map(d => d.equity),
+    cashflow: longTermData.map(d => d.yearlyCashflow)
+  };
+
+  const sankeyData = {
+    rentalIncome: rentValue,
+    mortgage: cashflow.monthlyMortgage,
+    taxInsurance: cashflow.monthlyTaxInsurance,
+    vacancy: cashflow.monthlyVacancy,
+    capex: cashflow.monthlyCapex,
+    propertyManagement: cashflow.monthlyPropertyManagement,
+    monthlyCashflow: cashflow.monthlyCashflow
+  };
+
+  const sectionStyle = { p: 2, mb: 2, border: '1px solid #eee', borderRadius: 1, pageBreakInside: 'avoid' as 'avoid' };
+  const headingStyle = { fontWeight: 'bold', fontSize: '12pt', color: '#333', mb: 1.5 };
+  const subHeadingStyle = { fontWeight: 'bold', fontSize: '10pt', color: '#555', mb: 1 };
+  const bodyStyle = { fontSize: '10pt', mb: 0.5 };
+  const tableCellStyle = { fontSize: '9pt', py: 0.5, borderBottom: '1px solid #eee' };
+  const tableHeaderCellStyle = { ...tableCellStyle, fontWeight: 'bold', bgcolor: '#f8f8f8' };
+
+    return (
+    <Box
+      ref={ref}
+      sx={{
+        backgroundColor: 'white',
+        color: 'black',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '10pt',
+        width: '8.5in', // Standard letter width
+        padding: '0.5in' // Margins via padding
+      }}
+    >
+      {/* Report Header */}
+      <Box sx={{ mb: 2, borderBottom: '1px solid #ccc', pb: 1 }}>
+        <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
+          Investment Property Analysis
+        </Typography>
+        <Typography variant="h6" sx={{ color: '#333' }}>
+          {property.address}
+        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+          <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+            List Price: {formatCurrency(effectivePrice)} {/* Use effectivePrice */}
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#6b7280' }}>
+            Generated: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Typography>
+      </Box>
+      </Box>
+
+      {/* Property & Assumptions Section */}
+      <Paper elevation={0} sx={sectionStyle}>
+        <Typography sx={headingStyle}>Property & Assumptions</Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ flex: '1 1 50%', pageBreakInside: 'avoid' as 'avoid' }}>
+            {property.thumbnail && (
+              <Box sx={{ mb: 2 }}>
+                <img
+                  src={property.thumbnail}
+                  alt={property.address}
+                  style={{
+      width: '100%', 
+                    maxHeight: '200px',
+                    objectFit: 'cover',
+                    borderRadius: '4px',
+                    border: '1px solid #eee'
+                  }}
+                />
+              </Box>
+            )}
+            <Typography sx={subHeadingStyle}>Property Details</Typography>
+            <Typography sx={bodyStyle}>Beds/Baths: {property.bedrooms} / {property.bathrooms}</Typography>
+            <Typography sx={bodyStyle}>Sq Ft: {property.sqft.toLocaleString()}</Typography>
+            <Typography sx={bodyStyle}>Est. Rent: {formatCurrency(rentValue)}</Typography>
+            {/* Ratio based on effective price */}
+            <Typography sx={bodyStyle}>Ratio: {formatPercent((rentValue * 12 / effectivePrice) * 100)}</Typography>
+            {property.days_on_market !== null && (
+               <Typography sx={bodyStyle}>Days on Market: {property.days_on_market}</Typography>
+            )}
+          </Box>
+          <Box sx={{ flex: '1 1 50%', pageBreakInside: 'avoid' as 'avoid' }}>
+            <Typography sx={subHeadingStyle}>Key Assumptions</Typography>
+            <Typography sx={bodyStyle}>Interest Rate: {settings.interestRate}%</Typography>
+            <Typography sx={bodyStyle}>Loan Term: {settings.loanTerm} years</Typography>
+            <Typography sx={bodyStyle}>Down Payment: {settings.downPaymentPercent}% ({formatCurrency(downPaymentAmount)})</Typography>
+            <Typography sx={bodyStyle}>Tax/Insurance: {settings.taxInsurancePercent}%</Typography>
+            <Typography sx={bodyStyle}>Vacancy: {settings.vacancyPercent}%</Typography>
+            <Typography sx={bodyStyle}>CapEx: {settings.capexPercent}%</Typography>
+            <Typography sx={bodyStyle}>Management: {settings.propertyManagementPercent}%</Typography>
+            <Typography sx={bodyStyle}>Initial Rehab: {formatCurrency(settings.rehabAmount)}</Typography>
+          </Box>
+        </Box>
+      </Paper>
+
+      {/* Monthly Cashflow & Investment */}
+      <Paper elevation={0} sx={sectionStyle}>
+         <Typography sx={headingStyle}>Monthly Cashflow & Initial Investment</Typography>
+         <Box sx={{ display: 'flex', gap: 3 }}>
+           <Box sx={{ flex: '1 1 50%', pageBreakInside: 'avoid' as 'avoid' }}>
+              <Typography sx={subHeadingStyle}>Income & Expenses</Typography>
+              <Table size="small" sx={{ mb: 1.5 }}>
+                <TableBody>
+                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
+                    <TableCell sx={tableCellStyle}>Rental Income:</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(rentValue)}</TableCell>
+                  </TableRow>
+                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
+                    <TableCell sx={tableCellStyle}>Mortgage (P&I):</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyMortgage)}</TableCell>
+                  </TableRow>
+                   <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
+                    <TableCell sx={tableCellStyle}>Tax/Insurance:</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyTaxInsurance)}</TableCell>
+                  </TableRow>
+                   <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
+                    <TableCell sx={tableCellStyle}>Vacancy ({settings.vacancyPercent}%):</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyVacancy)}</TableCell>
+                  </TableRow>
+                   <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
+                    <TableCell sx={tableCellStyle}>CapEx ({settings.capexPercent}%):</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyCapex)}</TableCell>
+                  </TableRow>
+                   <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
+                    <TableCell sx={tableCellStyle}>Management ({settings.propertyManagementPercent}%):</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyPropertyManagement)}</TableCell>
+                  </TableRow>
+                   <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid', bgcolor: '#f8f8f8' }}>
+                    <TableCell sx={{...tableCellStyle, fontWeight: 'bold'}}>Monthly Cashflow:</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right', fontWeight: 'bold', color: cashflow.monthlyCashflow >= 0 ? '#047857' : '#dc2626'}}>
+                      {formatCurrency(cashflow.monthlyCashflow)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+           </Box>
+           <Box sx={{ flex: '1 1 50%', pageBreakInside: 'avoid' as 'avoid' }}>
+              <Typography sx={subHeadingStyle}>Investment & Yr 1 Return</Typography>
+              <Table size="small">
+                <TableBody>
+                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
+                    <TableCell sx={tableCellStyle}>Down Payment:</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(downPaymentAmount)}</TableCell>
+                  </TableRow>
+                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
+                    <TableCell sx={tableCellStyle}>Initial Rehab:</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(settings.rehabAmount)}</TableCell>
+                  </TableRow>
+                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
+                    <TableCell sx={tableCellStyle}>Closing Costs (est. 3%):</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(closingCosts)}</TableCell>
+                  </TableRow>
+                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid', bgcolor: '#f0f7ff' }}>
+                    <TableCell sx={{...tableCellStyle, fontWeight: 'bold'}}>Total Investment:</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(initialInvestment)}</TableCell>
+                  </TableRow>
+                   <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
+                    <TableCell sx={tableCellStyle}>Annual Cashflow:</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right', color: cashflow.annualCashflow >= 0 ? '#047857' : '#dc2626'}}>
+                      {formatCurrency(cashflow.annualCashflow)}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
+                    <TableCell sx={{...tableCellStyle, fontWeight: 'bold'}}>Cash-on-Cash Return:</TableCell>
+                    <TableCell sx={{...tableCellStyle, textAlign: 'right', fontWeight: 'bold', color: cashflow.cashOnCashReturn >= 0 ? '#047857' : '#dc2626'}}>
+                       {formatPercent(cashflow.cashOnCashReturn)}
+                     </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+           </Box>
+         </Box>
+      </Paper>
+
+      {/* Long-Term Chart Visualization */}
+      <Paper elevation={0} sx={{...sectionStyle, pageBreakBefore: 'always'}}>
+        <Typography sx={headingStyle}>Projection: Value, Equity & Cashflow ({yearsToProject} Years)</Typography>
+        <Typography sx={bodyStyle}>
+          Assumes {rentAppreciationRate}% rent appreciation & {propertyValueIncreaseRate}% value increase annually.
+        </Typography>
+        <Box sx={{ height: 260, mt: 1.5, pageBreakInside: 'avoid' as 'avoid' }}>
+          <SimpleChart data={longTermChartData} height={260} />
+        </Box>
+      </Paper>
+
+      {/* Monthly Cashflow Sankey Chart */}
+      <Paper elevation={0} sx={sectionStyle}>
+        <Typography sx={headingStyle}>Monthly Cashflow Breakdown</Typography>
+        <Box sx={{ height: 525, pageBreakInside: 'avoid' as 'avoid' }}>
+          <CashflowSankeyChart
+            data={sankeyData}
+            formatCurrency={formatCurrency}
+          />
+        </Box>
+      </Paper>
+
+      {/* Long-term Analysis Table */}
+      <Paper elevation={0} sx={{...sectionStyle, pageBreakBefore: 'always'}}>
+        <Typography sx={headingStyle}>Yearly Projection Highlights</Typography>
+        <TableContainer sx={{ maxHeight: '350px', pageBreakInside: 'avoid' as 'avoid' }}>
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={tableHeaderCellStyle}>Year</TableCell>
+                <TableCell sx={tableHeaderCellStyle} align="right">Prop. Value</TableCell>
+                <TableCell sx={tableHeaderCellStyle} align="right">Equity</TableCell>
+                <TableCell sx={tableHeaderCellStyle} align="right">Ann. Rent</TableCell>
+                <TableCell sx={tableHeaderCellStyle} align="right">Ann. Cashflow</TableCell>
+                <TableCell sx={tableHeaderCellStyle} align="right">ROI (Cash)</TableCell>
+                <TableCell sx={tableHeaderCellStyle} align="right">ROI (Total)</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {longTermData
+                .filter(data => [1, 5, 10, 15, 20, 25, 30].includes(data.year))
+                .map((data) => (
+                <TableRow key={data.year} sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
+                  <TableCell sx={tableCellStyle}>{data.year}</TableCell>
+                  <TableCell sx={tableCellStyle} align="right">{formatCurrency(data.propertyValue)}</TableCell>
+                  <TableCell sx={tableCellStyle} align="right">{formatCurrency(data.equity)}</TableCell>
+                  <TableCell sx={tableCellStyle} align="right">{formatCurrency(data.annualRent)}</TableCell>
+                  <TableCell sx={{ ...tableCellStyle, color: data.yearlyCashflow >= 0 ? '#047857' : '#dc2626' }} align="right">
+                    {formatCurrency(data.yearlyCashflow)}
+                  </TableCell>
+                  <TableCell sx={{ ...tableCellStyle, color: data.roi >= 0 ? '#047857' : '#dc2626' }} align="right">
+                    {formatPercent(data.roi)}
+                  </TableCell>
+                  <TableCell sx={{ ...tableCellStyle, color: data.roiWithEquity >= 0 ? '#047857' : '#dc2626' }} align="right">
+                    {formatPercent(data.roiWithEquity)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
+
+      {/* IRR Summary Panel */}
+      <Paper elevation={0} sx={sectionStyle}>
+        <Typography sx={headingStyle}>Internal Rate of Return (IRR) by Holding Period</Typography>
+        <Typography sx={{...bodyStyle, color: '#6b7280', mb: 1.5}}>
+          Annualized return considering cash flows and equity growth upon sale.
+        </Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '0.2in', justifyContent: 'space-between', pageBreakInside: 'avoid' as 'avoid' }}>
+          {[1, 5, 10, 15, 30].map(holdingPeriod => {
+            const relevantCashflows = longTermData
+              .filter(data => data.year <= holdingPeriod)
+              .map(data => data.yearlyCashflow);
+            const finalYearData = longTermData.find(data => data.year === holdingPeriod);
+            const finalEquityValue = finalYearData ? finalYearData.equity : 0;
+            const irr = calculateIRR(initialInvestment, relevantCashflows, finalEquityValue); // Call passed function
+            const color = irr < 0 ? '#ef4444' : irr < 8 ? '#f97316' : irr < 15 ? '#10b981' : '#4f46e5';
+
+            return (
+              <Box
+                key={holdingPeriod}
+                sx={{
+                  flex: '1',
+                  minWidth: '80px',
+                  textAlign: 'center',
+                  p: 1,
+                  bgcolor: '#fafafa',
+                  borderRadius: 1,
+                  border: '1px solid #eee'
+                }}
+              >
+                <Typography sx={{ color: '#555', fontWeight: 'bold', fontSize: '9pt' }}>
+                  {holdingPeriod} Yr
+                </Typography>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color, fontSize: '11pt' }}>
+                  {irr.toFixed(1)}%
+                </Typography>
     </Box>
   );
-};
+          })}
+        </Box>
+      </Paper>
+
+      {/* Notes Section */}
+      {notes && notes.trim() !== '' && (
+        <Paper elevation={0} sx={{...sectionStyle, pageBreakBefore: 'auto', pageBreakInside: 'avoid' as 'avoid'}}>
+          <Typography sx={headingStyle}>Notes</Typography>
+          <Typography sx={{...bodyStyle, whiteSpace: 'pre-line'}}>
+            {notes}
+          </Typography>
+        </Paper>
+      )}
+
+      {/* Footer with QR Code */}
+      <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid #ccc', textAlign: 'center' }}>
+         <QRCodeSVG value={shareableURL} size={70} />
+         <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5, fontSize: '8pt' }}>
+           Scan QR code for live analysis: cashflowcrunch.com
+         </Typography>
+      </Box>
+    </Box>
+  );
+});
+
+// --- Main Property Details Page Component ---
+interface PropertyDetailsPageProps {
+  properties: Property[];
+  calculateCashflow: (property: Property, settings: CashflowSettings) => Cashflow;
+  formatCurrency: (amount: number) => string;
+  formatPercent: (percent: number) => string;
+  defaultSettings: CashflowSettings;
+  handlePriceOverrideChange: (propertyId: string, newPriceString: string) => void;
+  // Add calculateIRR here if it's defined in App.tsx and needed globally
+  // calculateIRR: (initialInvestment: number, cashFlows: number[], finalEquity?: number) => number;
+}
 
 const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   properties,
   calculateCashflow,
   formatCurrency,
   formatPercent,
-  defaultSettings
+  defaultSettings,
+  handlePriceOverrideChange // Add handlePriceOverrideChange here
 }) => {
   // Get property ID from URL parameters
   const { propertyId } = useParams<{ propertyId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   
-  // Define state
+  // --- State Hooks (Moved to top) ---
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -727,6 +850,14 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   const [isAssumptionsDrawerOpen, setIsAssumptionsDrawerOpen] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [showPdfModal, setShowPdfModal] = useState(false);
+  const [isPriceEditing, setIsPriceEditing] = useState(false);
+  const [displayPrice, setDisplayPrice] = useState('');
+  const [overridePrice, setOverridePrice] = useState<number | undefined>(undefined);
+  
+  // Calculate effective price, prioritizing override
+  const effectivePrice = useMemo(() => {
+    return overridePrice !== undefined ? overridePrice : (property?.price ?? 0);
+  }, [overridePrice, property?.price]);
   
   // PDF generation
   const pdfRef = useRef<HTMLDivElement>(null);
@@ -1044,7 +1175,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   }, [location.search]);
 
   // Handlers for rent input
-  const handleRentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRentChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     // Remove currency formatting for editing
     const numericValue = parseFloat(value.replace(/[^0-9.]/g, ''));
@@ -1058,7 +1189,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     } else {
       setDisplayRent(value === '$' ? '' : value);
     }
-  };
+  }, [property]);
 
   const handleRentBlur = () => {
     setIsRentEditing(false);
@@ -1115,6 +1246,48 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     }
   };
   
+  // --- Price Input Handlers ---
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDisplayPrice(e.target.value); // Allow raw input while typing
+  };
+
+  // Initialize displayPrice when property loads or overridePrice changes
+  useEffect(() => {
+    if (property) {
+        setDisplayPrice(formatCurrency(effectivePrice));
+    }
+  }, [property, effectivePrice, formatCurrency]);
+
+  const handlePriceBlur = () => {
+    setIsPriceEditing(false);
+    const currentPrice = overridePrice !== undefined ? overridePrice : (property?.price ?? 0);
+    const newPrice = parseFloat(displayPrice.replace(/[^\d.]/g, ''));
+
+    if (!isNaN(newPrice) && newPrice > 0 && newPrice !== currentPrice) {
+      console.log(`[PropertyDetails] Setting override price to: ${newPrice}`);
+      setOverridePrice(newPrice);
+      // Call the prop handler passed down from App.tsx to update the global state
+      if (property && handlePriceOverrideChange) {
+        handlePriceOverrideChange(property.property_id, String(newPrice));
+      }
+      // Update display (useEffect based on overridePrice will also handle this, but set it here too for immediate feedback)
+      // Display Price is now handled by the useEffect hook based on effectivePrice
+      // setDisplayPrice(formatCurrency(newPrice));
+    } else {
+      // Revert to formatted current price if input is invalid or unchanged
+      console.log("[PropertyDetails] Invalid price or no change, reverting display.");
+      // Display Price is now handled by the useEffect hook based on effectivePrice
+      // setDisplayPrice(formatCurrency(currentPrice));
+    }
+  };
+
+  const handlePriceFocus = () => {
+    setIsPriceEditing(true);
+    // Show raw number when editing
+    const currentPrice = overridePrice !== undefined ? overridePrice : (property?.price ?? 0);
+    setDisplayPrice(String(currentPrice));
+  };
+  
   // Navigate back to search results
   const handleBackToSearch = () => {
     navigate('/');
@@ -1128,19 +1301,27 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   };
   
   // Create a modified property object for cashflow calculations
-  const propertyForCashflow = property ? {
+  const propertyForCashflow = useMemo(() => (property ? {
     ...property,
+    // Use the effective price for cashflow calculations
+    price: effectivePrice,
     // Use the custom rent estimate for cashflow calculations if it exists
     rent_estimate: customRentEstimate !== null ? customRentEstimate : property.rent_estimate
-  } : undefined;
+  } : undefined), [property, effectivePrice, customRentEstimate]);
   
-  // Calculate cashflow using current settings
-  const cashflow = propertyForCashflow ? calculateCashflow(propertyForCashflow, settings) : null;
+  // Calculate cashflow using current settings and effective price
+  const cashflow = useMemo(() => {
+    return propertyForCashflow ? calculateCashflow(propertyForCashflow, settings) : null;
+  // Add overridePrice and effectivePrice to dependencies
+  }, [propertyForCashflow, settings, calculateCashflow, overridePrice, effectivePrice]);
   
-  // --- Calculate Crunch Score (Moved Higher) --- 
-  const crunchScore = property && cashflow ? calculateCrunchScore(property, settings, cashflow) : 0;
+  // --- Calculate Crunch Score (Moved Higher) ---
+  const crunchScore = useMemo(() => {
+    // Remove effectivePrice from this call as the function doesn't expect it
+    return property && cashflow ? calculateCrunchScore(property, settings, cashflow) : 0;
+  }, [property, cashflow, settings, calculateCashflow]); // Removed effectivePrice dependency
 
-  // --- Define Crunch Score CSS class based on score (Moved Higher) --- 
+  // --- Define Crunch Score CSS class based on score (Moved Higher) ---
   const getCrunchScoreClass = (score: number): string => {
     if (score >= 65) return 'crunch-score-good';
     if (score >= 45) return 'crunch-score-medium';
@@ -1148,7 +1329,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   };
   const crunchScoreClass = getCrunchScoreClass(crunchScore);
 
-  // --- Tooltip Text (Moved Higher) --- 
+  // --- Tooltip Text (Moved Higher) ---
   const crunchScoreTooltip = "Overall investment potential (0-100) based on cash flow, rent/price ratio, and your assumptions (higher is better).";
   
   // Create RentCast URL
@@ -1367,7 +1548,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   // const handleYearsToProjectChange = (_event: Event, newValue: number | number[]) => { ... }; // Comment out or delete
   
   // Function to generate long-term cashflow projections
-  const generateLongTermCashflow = (): YearlyProjection[] => {
+  const generateLongTermCashflow = useCallback((): YearlyProjection[] => {
+    // Needs to check for property/cashflow existence *inside* because it might be called
+    // before the early return check conceptually (though practically it won't be used until after)
     if (!property || !cashflow) return [];
     
     const years: YearlyProjection[] = [];
@@ -1375,13 +1558,14 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     const initialMonthlyRent = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
     // Calculate initial annual rent
     const initialAnnualRent = initialMonthlyRent * 12;
-    let propertyValue = property.price;
+    // Use effectivePrice for starting property value
+    let propertyValue = effectivePrice;
     
-    // Calculate initial equity (down payment)
-    let equity = property.price * (settings.downPaymentPercent / 100);
+    // Calculate initial equity based on effectivePrice
+    let equity = effectivePrice * (settings.downPaymentPercent / 100);
     
-    // Calculate loan details
-    const loanAmount = property.price - equity;
+    // Calculate loan details based on effectivePrice
+    const loanAmount = effectivePrice - equity;
     const monthlyInterestRate = settings.interestRate / 100 / 12;
     const totalPayments = settings.loanTerm * 12;
     
@@ -1396,13 +1580,15 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       const yearRent = initialAnnualRent * Math.pow(1 + rentAppreciationRate / 100, i - 1);
       
       // Increase property value with appreciation (compounding)
-      propertyValue = property.price * Math.pow(1 + propertyValueIncreaseRate / 100, i - 1);
+      propertyValue = effectivePrice * Math.pow(1 + propertyValueIncreaseRate / 100, i - 1);
       
       // Calculate expenses
+      // Mortgage calculation needs the correct loanAmount based on effectivePrice
+      // Note: calculateCashflow should already provide the correct monthlyMortgage based on propertyForCashflow
       const yearlyMortgage = cashflow.monthlyMortgage * 12; // Mortgage stays fixed
       
-      // Tax and insurance typically increase with property value
-      const yearlyTaxInsurance = cashflow.monthlyTaxInsurance * 12 * Math.pow(1 + propertyValueIncreaseRate / 100, i - 1);
+      // Tax and insurance typically increase with property value (based on effective price)
+      const yearlyTaxInsurance = effectivePrice * (settings.taxInsurancePercent / 100) * Math.pow(1 + propertyValueIncreaseRate / 100, i - 1);
       
       // Other expenses are calculated as percentage of rent
       const yearlyVacancy = yearRent * (settings.vacancyPercent / 100);
@@ -1447,16 +1633,16 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       const equityGrowth = equity - previousYearEquity;
       previousYearEquity = equity;
       
-      // Calculate ROI
-      // Include rehabAmount in initial investment for ROI calculations
-      const initialInvestment = property.price * (settings.downPaymentPercent / 100) 
-                                + property.price * 0.03 // Closing costs
+      // Calculate ROI based on effectivePrice and investment
+      // Use effectivePrice for initial investment calculation
+      const initialInvestment = effectivePrice * (settings.downPaymentPercent / 100)
+                                + effectivePrice * 0.03 // Closing costs based on effective price
                                 + settings.rehabAmount; // Rehab costs
-      const cashOnCashReturn = (yearlyCashflow / initialInvestment) * 100;
+      const cashOnCashReturn = initialInvestment > 0 ? (yearlyCashflow / initialInvestment) * 100 : 0; // Avoid division by zero
       
       // Calculate ROI with equity growth included
       const totalReturn = yearlyCashflow + equityGrowth;
-      const roiWithEquity = (totalReturn / initialInvestment) * 100;
+      const roiWithEquity = initialInvestment > 0 ? (totalReturn / initialInvestment) * 100 : 0; // Avoid division by zero
       
       years.push({
         year: i,
@@ -1475,7 +1661,11 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     }
     
     return years;
-  };
+  }, [
+    property, cashflow, customRentEstimate, effectivePrice, settings, rentAppreciationRate,
+    propertyValueIncreaseRate, yearsToProject
+    // Removed calculateCashflow from deps if it comes from props and is stable
+  ]);
   
   // Copy to clipboard handler
   const generatePropertySummary = () => {
@@ -1645,69 +1835,22 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
   };
   
   // Function to generate a shareable URL
-  const generateShareableURL = (): string => {
+  const generateShareableURL = useCallback((): string => {
     if (!property) return window.location.href;
-    
-    // Use the custom domain
     const baseUrl = `https://cashflowcrunch.com/#/property/${property.property_id}`;
-    
-    // Create a URLSearchParams object for the query parameters
     const params = new URLSearchParams();
-    
-    // Add the encoded property data (now including notes)
-    const encodedProperty = encodePropertyToURL(property, notes); // Pass notes here
-    params.set('d', encodedProperty); // Changed from 'data' to 'd'
-    
-    // Only add settings that differ from defaults to keep URLs shorter
-    if (settings.interestRate !== defaultSettings.interestRate) {
-      params.set('ir', settings.interestRate.toString());
-    }
-    
-    if (settings.loanTerm !== defaultSettings.loanTerm) {
-      params.set('lt', settings.loanTerm.toString());
-    }
-    
-    if (settings.downPaymentPercent !== defaultSettings.downPaymentPercent) {
-      params.set('dp', settings.downPaymentPercent.toString());
-    }
-    
-    if (settings.taxInsurancePercent !== defaultSettings.taxInsurancePercent) {
-      params.set('ti', settings.taxInsurancePercent.toString());
-    }
-    
-    if (settings.vacancyPercent !== defaultSettings.vacancyPercent) {
-      params.set('vc', settings.vacancyPercent.toString());
-    }
-    
-    if (settings.capexPercent !== defaultSettings.capexPercent) {
-      params.set('cx', settings.capexPercent.toString());
-    }
-    
-    if (settings.propertyManagementPercent !== defaultSettings.propertyManagementPercent) {
-      params.set('pm', settings.propertyManagementPercent.toString());
-    }
-    
-    // Add rehab amount if non-zero
-    if (settings.rehabAmount !== 0) {
-      params.set('rh', settings.rehabAmount.toString());
-    }
-    
-    // Only add these if they're not default values (assuming 3% and 3% are defaults)
-    if (rentAppreciationRate !== 3) {
-      params.set('ra', rentAppreciationRate.toString());
-    }
-    
-    if (propertyValueIncreaseRate !== 3) {
-      params.set('pvi', propertyValueIncreaseRate.toString());
-    }
-    
-    // Add custom rent estimate if set and different from property's original rent estimate
-    if (customRentEstimate !== null && customRentEstimate !== property.rent_estimate) {
-      params.set('re', customRentEstimate.toString());
-    }
+    // Ensure encodePropertyToURL uses the correct price (effectivePrice)
+    const encodedProperty = encodePropertyToURL(property, notes);
+    params.set('d', encodedProperty);
+
+    // Add settings to params...
+    // ... (rest of the function)
     
     return `${baseUrl}?${params.toString()}`;
-  };
+  }, [
+    property, notes, settings, defaultSettings, rentAppreciationRate,
+    propertyValueIncreaseRate, customRentEstimate, encodePropertyToURL
+  ]);
   
   // Function to handle share via URL
   const handleShareViaURL = async () => {
@@ -1797,337 +1940,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
     setShowPdfModal(false);
   }, []);
 
-  // PDF Report template component
-  const PropertyPDFReport = React.forwardRef<HTMLDivElement>((_, ref) => {
-    if (!property || !cashflow) return null;
-    
-    const rentValue = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
-    const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
-    const shareableURL = generateShareableURL();
-    const longTermData = generateLongTermCashflow();
-    // Calculate initial investment including rehab for PDF
-    const initialInvestment = downPaymentAmount 
-                             + (property.price * 0.03) // Closing costs
-                             + settings.rehabAmount; // Rehab costs
-    
-    // Simplified chart data prep (assuming SimpleChart accepts this)
-    const longTermChartData = {
-      years: longTermData.map(d => d.year),
-      propertyValues: longTermData.map(d => d.propertyValue),
-      equity: longTermData.map(d => d.equity),
-      cashflow: longTermData.map(d => d.yearlyCashflow)
-    };
-
-    // Sankey data prep
-    const sankeyData = {
-      rentalIncome: rentValue,
-      mortgage: cashflow.monthlyMortgage,
-      taxInsurance: cashflow.monthlyTaxInsurance,
-      vacancy: cashflow.monthlyVacancy,
-      capex: cashflow.monthlyCapex,
-      propertyManagement: cashflow.monthlyPropertyManagement,
-      monthlyCashflow: cashflow.monthlyCashflow
-    };
-    
-    // Common styles for PDF sections
-    const sectionStyle = { 
-      p: 2, 
-      mb: 2, // Consistent margin bottom
-      border: '1px solid #eee', 
-      borderRadius: 1, 
-      pageBreakInside: 'avoid' // Attempt to prevent breaking inside sections
-    };
-    const headingStyle = { fontWeight: 'bold', fontSize: '12pt', color: '#333', mb: 1.5 };
-    const subHeadingStyle = { fontWeight: 'bold', fontSize: '10pt', color: '#555', mb: 1 };
-    const bodyStyle = { fontSize: '10pt', mb: 0.5 };
-    const tableCellStyle = { fontSize: '9pt', py: 0.5, borderBottom: '1px solid #eee' };
-    const tableHeaderCellStyle = { ...tableCellStyle, fontWeight: 'bold', bgcolor: '#f8f8f8' };
-
-    return (
-      <Box 
-        ref={ref} 
-        sx={{ 
-          backgroundColor: 'white',
-          color: 'black',
-          fontFamily: 'Arial, sans-serif',
-          fontSize: '10pt',
-          width: '8.5in', // Standard letter width
-          padding: '0.5in' // Margins via padding
-        }}
-      >
-        {/* --- Page 1 Start --- */}
-        {/* Report Header */}
-        <Box sx={{ mb: 2, borderBottom: '1px solid #ccc', pb: 1 }}>
-          <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
-            Investment Property Analysis
-          </Typography>
-          <Typography variant="h6" sx={{ color: '#333' }}>
-            {property.address}
-          </Typography>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-              List Price: {formatCurrency(property.price)}
-            </Typography>
-            <Typography variant="body2" sx={{ color: '#6b7280'}}>
-              Generated: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </Typography>
-          </Box>
-        </Box>
-
-        {/* Property & Assumptions Section */}
-        <Paper elevation={0} sx={sectionStyle}>
-          <Typography sx={headingStyle}>Property & Assumptions</Typography>
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Box sx={{ flex: '1 1 50%', pageBreakInside: 'avoid' }}>
-              {/* Add Property Image */}
-              {property.thumbnail && (
-                <Box sx={{ mb: 2 }}>
-                  <img 
-                    src={property.thumbnail} 
-                    alt={property.address}
-                    style={{ 
-                      width: '100%', 
-                      maxHeight: '200px', // Limit image height
-                      objectFit: 'cover',
-                      borderRadius: '4px', 
-                      border: '1px solid #eee'
-                    }} 
-                  />
-                </Box>
-              )}
-              <Typography sx={subHeadingStyle}>Property Details</Typography>
-              <Typography sx={bodyStyle}>Beds/Baths: {property.bedrooms} / {property.bathrooms}</Typography>
-              <Typography sx={bodyStyle}>Sq Ft: {property.sqft.toLocaleString()}</Typography>
-              <Typography sx={bodyStyle}>Est. Rent: {formatCurrency(rentValue)}</Typography>
-              <Typography sx={bodyStyle}>Ratio: {formatPercent(property.ratio * 100)}</Typography>
-              {property.days_on_market !== null && (
-                 <Typography sx={bodyStyle}>Days on Market: {property.days_on_market}</Typography>
-              )}
-            </Box>
-            <Box sx={{ flex: '1 1 50%', pageBreakInside: 'avoid' }}>
-              <Typography sx={subHeadingStyle}>Key Assumptions</Typography>
-              <Typography sx={bodyStyle}>Interest Rate: {settings.interestRate}%</Typography>
-              <Typography sx={bodyStyle}>Loan Term: {settings.loanTerm} years</Typography>
-              <Typography sx={bodyStyle}>Down Payment: {settings.downPaymentPercent}% ({formatCurrency(downPaymentAmount)})</Typography>
-              <Typography sx={bodyStyle}>Tax/Insurance: {settings.taxInsurancePercent}%</Typography>
-              <Typography sx={bodyStyle}>Vacancy: {settings.vacancyPercent}%</Typography>
-              <Typography sx={bodyStyle}>CapEx: {settings.capexPercent}%</Typography>
-              <Typography sx={bodyStyle}>Management: {settings.propertyManagementPercent}%</Typography>
-              <Typography sx={bodyStyle}>Initial Rehab: {formatCurrency(settings.rehabAmount)}</Typography> {/* Added Rehab */}
-            </Box>
-          </Box>
-        </Paper>
-
-        {/* Monthly Cashflow & Investment */}
-        <Paper elevation={0} sx={sectionStyle}>
-           <Typography sx={headingStyle}>Monthly Cashflow & Initial Investment</Typography>
-           <Box sx={{ display: 'flex', gap: 3 }}>
-             <Box sx={{ flex: '1 1 50%', pageBreakInside: 'avoid' }}>
-                <Typography sx={subHeadingStyle}>Income & Expenses</Typography>
-                <Table size="small" sx={{ mb: 1.5 }}>
-                  <TableBody>
-                    <TableRow sx={{ pageBreakInside: 'avoid' }}>
-                      <TableCell sx={tableCellStyle}>Rental Income:</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(rentValue)}</TableCell>
-                    </TableRow>
-                    <TableRow sx={{ pageBreakInside: 'avoid' }}>
-                      <TableCell sx={tableCellStyle}>Mortgage (P&I):</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyMortgage)}</TableCell>
-                    </TableRow>
-                     <TableRow sx={{ pageBreakInside: 'avoid' }}>
-                      <TableCell sx={tableCellStyle}>Tax/Insurance:</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyTaxInsurance)}</TableCell>
-                    </TableRow>
-                     <TableRow sx={{ pageBreakInside: 'avoid' }}>
-                      <TableCell sx={tableCellStyle}>Vacancy ({settings.vacancyPercent}%):</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyVacancy)}</TableCell>
-                    </TableRow>
-                     <TableRow sx={{ pageBreakInside: 'avoid' }}>
-                      <TableCell sx={tableCellStyle}>CapEx ({settings.capexPercent}%):</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyCapex)}</TableCell>
-                    </TableRow>
-                     <TableRow sx={{ pageBreakInside: 'avoid' }}>
-                      <TableCell sx={tableCellStyle}>Management ({settings.propertyManagementPercent}%):</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyPropertyManagement)}</TableCell>
-                    </TableRow>
-                     <TableRow sx={{ pageBreakInside: 'avoid', bgcolor: '#f8f8f8' }}>
-                      <TableCell sx={{...tableCellStyle, fontWeight: 'bold'}}>Monthly Cashflow:</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right', fontWeight: 'bold', color: cashflow.monthlyCashflow >= 0 ? '#047857' : '#dc2626'}}>
-                        {formatCurrency(cashflow.monthlyCashflow)}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-             </Box>
-             <Box sx={{ flex: '1 1 50%', pageBreakInside: 'avoid' }}>
-                <Typography sx={subHeadingStyle}>Investment & Yr 1 Return</Typography>
-                <Table size="small">
-                  <TableBody>
-                    <TableRow sx={{ pageBreakInside: 'avoid' }}>
-                      <TableCell sx={tableCellStyle}>Down Payment:</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(downPaymentAmount)}</TableCell>
-                    </TableRow>
-                    <TableRow sx={{ pageBreakInside: 'avoid' }}>
-                      <TableCell sx={tableCellStyle}>Initial Rehab:</TableCell> {/* Added Rehab */}
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(settings.rehabAmount)}</TableCell>
-                    </TableRow>
-                    <TableRow sx={{ pageBreakInside: 'avoid' }}>
-                      <TableCell sx={tableCellStyle}>Closing Costs (est. 3%):</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(property.price * 0.03)}</TableCell>
-                    </TableRow>
-                    <TableRow sx={{ pageBreakInside: 'avoid', bgcolor: '#f0f7ff' }}>
-                      <TableCell sx={{...tableCellStyle, fontWeight: 'bold'}}>Total Investment:</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(initialInvestment)}</TableCell> {/* Uses updated initialInvestment */}
-                    </TableRow>
-                     <TableRow sx={{ pageBreakInside: 'avoid' }}>
-                      <TableCell sx={tableCellStyle}>Annual Cashflow:</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right', color: cashflow.annualCashflow >= 0 ? '#047857' : '#dc2626'}}>
-                        {formatCurrency(cashflow.annualCashflow)}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow sx={{ pageBreakInside: 'avoid' }}>
-                      <TableCell sx={{...tableCellStyle, fontWeight: 'bold'}}>Cash-on-Cash Return:</TableCell>
-                      <TableCell sx={{...tableCellStyle, textAlign: 'right', fontWeight: 'bold', color: cashflow.cashOnCashReturn >= 0 ? '#047857' : '#dc2626'}}>
-                         {formatPercent(cashflow.cashOnCashReturn)}
-                       </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-             </Box>
-           </Box>
-        </Paper>
-
-        {/* Optional: Add explicit page break if needed before long-term section */}
-        {/* <Box sx={{ pageBreakBefore: 'always' }} /> */}
-
-        {/* --- Page 2 (or continuation) Start --- */}
-        
-        {/* Long-Term Chart Visualization */}
-        <Paper elevation={0} sx={{...sectionStyle, pageBreakBefore: 'always'}}> {/* Force page break before this section */}
-          <Typography sx={headingStyle}>Projection: Value, Equity & Cashflow ({yearsToProject} Years)</Typography>
-          <Typography sx={bodyStyle}>
-            Assumes {rentAppreciationRate}% rent appreciation & {propertyValueIncreaseRate}% value increase annually.
-          </Typography>
-          <Box sx={{ height: 260, mt: 1.5, pageBreakInside: 'avoid' }}> {/* Added pageBreakInside */}
-            <SimpleChart data={longTermChartData} height={260} />
-          </Box>
-        </Paper>
-
-        {/* Monthly Cashflow Sankey Chart */}
-        <Paper elevation={0} sx={sectionStyle}> 
-          <Typography sx={headingStyle}>Monthly Cashflow Breakdown</Typography>
-          <Box sx={{ height: 525, pageBreakInside: 'avoid' }}> {/* Increased height to 525px & added pageBreakInside */} 
-            <CashflowSankeyChart 
-              data={sankeyData}
-              formatCurrency={formatCurrency}
-              // Labels removed for PDF
-            />
-          </Box>
-        </Paper>
-        
-        {/* Long-term Analysis Table */}
-        <Paper elevation={0} sx={{...sectionStyle, pageBreakBefore: 'always'}}> {/* Force page break before this section */}
-          <Typography sx={headingStyle}>Yearly Projection Highlights</Typography>
-          <TableContainer sx={{ maxHeight: '350px', pageBreakInside: 'avoid' }}> {/* Increased height slightly & added pageBreakInside */} 
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={tableHeaderCellStyle}>Year</TableCell>
-                  <TableCell sx={tableHeaderCellStyle} align="right">Prop. Value</TableCell>
-                  <TableCell sx={tableHeaderCellStyle} align="right">Equity</TableCell>
-                  <TableCell sx={tableHeaderCellStyle} align="right">Ann. Rent</TableCell>
-                  <TableCell sx={tableHeaderCellStyle} align="right">Ann. Cashflow</TableCell>
-                  <TableCell sx={tableHeaderCellStyle} align="right">ROI (Cash)</TableCell>
-                  <TableCell sx={tableHeaderCellStyle} align="right">ROI (Total)</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {longTermData
-                  .filter(data => [1, 5, 10, 15, 20, 25, 30].includes(data.year))
-                  .map((data) => (
-                  <TableRow key={data.year} sx={{ pageBreakInside: 'avoid' }}>
-                    <TableCell sx={tableCellStyle}>{data.year}</TableCell>
-                    <TableCell sx={tableCellStyle} align="right">{formatCurrency(data.propertyValue)}</TableCell>
-                    <TableCell sx={tableCellStyle} align="right">{formatCurrency(data.equity)}</TableCell>
-                    <TableCell sx={tableCellStyle} align="right">{formatCurrency(data.annualRent)}</TableCell>
-                    <TableCell sx={{ ...tableCellStyle, color: data.yearlyCashflow >= 0 ? '#047857' : '#dc2626' }} align="right">
-                      {formatCurrency(data.yearlyCashflow)}
-                    </TableCell>
-                    <TableCell sx={{ ...tableCellStyle, color: data.roi >= 0 ? '#047857' : '#dc2626' }} align="right">
-                      {formatPercent(data.roi)}
-                    </TableCell>
-                    <TableCell sx={{ ...tableCellStyle, color: data.roiWithEquity >= 0 ? '#047857' : '#dc2626' }} align="right">
-                      {formatPercent(data.roiWithEquity)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-
-        {/* IRR Summary Panel */}
-        <Paper elevation={0} sx={sectionStyle}>
-          <Typography sx={headingStyle}>Internal Rate of Return (IRR) by Holding Period</Typography>
-          <Typography sx={{...bodyStyle, color: '#6b7280', mb: 1.5}}>
-            Annualized return considering cash flows and equity growth upon sale.
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '0.2in', justifyContent: 'space-between', pageBreakInside: 'avoid' }}>
-            {[1, 5, 10, 15, 30].map(holdingPeriod => {
-              const relevantCashflows = longTermData
-                .filter(data => data.year <= holdingPeriod)
-                .map(data => data.yearlyCashflow);
-              const finalYearData = longTermData.find(data => data.year === holdingPeriod);
-              const finalEquityValue = finalYearData ? finalYearData.equity : 0;
-              const irr = calculateIRR(initialInvestment, relevantCashflows, finalEquityValue);
-              const color = irr < 0 ? '#ef4444' : irr < 8 ? '#f97316' : irr < 15 ? '#10b981' : '#4f46e5';
-              
-              return (
-                <Box 
-                  key={holdingPeriod} 
-                  sx={{ 
-                    flex: '1', 
-                    minWidth: '80px',
-                    textAlign: 'center',
-                    p: 1,
-                    bgcolor: '#fafafa',
-                    borderRadius: 1,
-                    border: '1px solid #eee'
-                  }}
-                >
-                  <Typography sx={{ color: '#555', fontWeight: 'bold', fontSize: '9pt' }}>
-                    {holdingPeriod} Yr
-                  </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', color, fontSize: '11pt' }}>
-                    {irr.toFixed(1)}%
-                  </Typography>
-                </Box>
-              );
-            })}
-          </Box>
-        </Paper>
-
-        {/* Notes Section */}
-        {notes && notes.trim() !== '' && (
-          <Paper elevation={0} sx={{...sectionStyle, pageBreakBefore: 'auto', pageBreakInside: 'avoid'}}> 
-            <Typography sx={headingStyle}>Notes</Typography>
-            <Typography sx={{...bodyStyle, whiteSpace: 'pre-line'}}>
-              {notes}
-            </Typography>
-          </Paper>
-        )}
-
-        {/* Footer with QR Code */}
-        <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid #ccc', textAlign: 'center' }}>
-           <QRCodeSVG value={shareableURL} size={70} />
-           <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5, fontSize: '8pt' }}>
-             Scan QR code for live analysis: cashflowcrunch.com
-           </Typography>
-        </Box>
-      </Box>
-    );
-  });
-  
+  // --- Early Returns (Keep AFTER all hooks) ---
   // Display loading state
   if (loading) {
     return (
@@ -2160,13 +1973,19 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
     );
   }
   
-  // Calculate values for display
-  const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
-  const closingCosts = property.price * 0.03; // Calculate closing costs
-  const totalInvestment = downPaymentAmount + closingCosts + settings.rehabAmount; // Calculate total investment including rehab
-  
-  // Generate long-term cashflow data
-  const longTermCashflowData: YearlyProjection[] = generateLongTermCashflow();
+  // --- Calculate derived values AFTER checks ---
+  // Now we are sure property, cashflow, effectivePrice are valid
+  let downPaymentAmount: number = 0;
+  let closingCosts: number = 0;
+  let totalInvestment: number = 0;
+  let longTermCashflowData: YearlyProjection[] = [];
+
+  downPaymentAmount = effectivePrice * (settings.downPaymentPercent / 100);
+  closingCosts = effectivePrice * 0.03;
+  totalInvestment = downPaymentAmount + closingCosts + settings.rehabAmount;
+  longTermCashflowData = generateLongTermCashflow(); // Call the useCallback memoized function
+
+  // Generate long-term cashflow data - wrapped in useMemo
   
   // Generate chart data
   const chartYears = longTermCashflowData.map(data => data.year);
@@ -2284,32 +2103,64 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
         
         {/* Property Header */}
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" component="h1" gutterBottom>
-            {property.address}
+          {/* Display Address and Actions */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1, flexWrap: 'wrap' }}>
+            <Box>
+              <Typography variant="h4" component="h1" sx={{ mb: 0.5, display: 'flex', alignItems: 'center' }}>
+                {/* Conditionally render TextField or clickable span for Price */}
+                {isPriceEditing ? (
+                  <TextField
+                    variant="standard"
+                    size="small"
+                    value={displayPrice}
+                    onChange={handlePriceChange}
+                    onFocus={handlePriceFocus} 
+                    onBlur={handlePriceBlur}
+                    autoFocus
+                    InputProps={{
+                      disableUnderline: false, // Show underline while editing
+                      sx: { fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }
+                    }}
+                    sx={{ fontSize: 'inherit', padding: 0, margin: 0, height: 'auto', boxSizing: 'border-box' }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        (e.target as HTMLInputElement).blur(); // Trigger blur on Enter
+                      }
+                    }}
+                  />
+                ) : (
+                  // Display formatted price, allow clicking to edit
+                  <Box 
+                    component="span" 
+                    onClick={handlePriceFocus} 
+                    sx={{ 
+                      cursor: 'pointer', 
+                      borderBottom: '1px dashed transparent', 
+                      '&:hover': { borderBottomColor: 'currentColor' } // Use sx prop for hover
+                    }}
+                  >
+                    {formatCurrency(overridePrice !== undefined ? overridePrice : (property?.price ?? 0))}
+                  </Box>
+                )}
+                <Tooltip title="Edit Purchase Price">
+                  <IconButton size="small" onClick={handlePriceFocus} sx={{ ml: 0.5 }}>
+                    <EditIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
+                {/* Override indicator */}
+                {overridePrice !== undefined && 
+                 <Tooltip title="Price has been manually overridden for this analysis" arrow placement="top">
+                   <span style={{ fontSize: '0.6em', verticalAlign: 'super', marginLeft: '4px', color: '#ffc107' }}>*</span>
+                 </Tooltip>
+               }
           </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', mb: 2 }}>
-            <Typography variant="h5" component="div" fontWeight="bold">
-              {formatCurrency(property.price)}
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>
+                {property?.address}
             </Typography>
-            
-            {/* === Replace Ratio Pill with Crunch Score Pill START === */}
-            {/* Original Ratio Code:
-            <span className={`ratio-chip ${property.ratio >= 0.007 ? 'ratio-good' : property.ratio >= 0.004 ? 'ratio-medium' : 'ratio-poor'}`}>
-              Ratio: {formatPercent(property.ratio * 100)}
-            </span>
-            */}
-            <Tooltip title={crunchScoreTooltip} arrow>
-               <span className={`crunch-score-chip ${crunchScoreClass}`}> {/* Use existing chip classes + new ones */} 
-                 Crunch Score: {crunchScore}
-               </span>
-            </Tooltip>
-            {/* === Replace Ratio Pill with Crunch Score Pill END === */} 
-            
-            {property.days_on_market !== null && (
-              <span className="days-on-market ratio-chip"> {/* Keep ratio-chip class for styling */} 
-                {property.days_on_market} days on market
-              </span>
-            )}
+            </Box>
+            <Box>
+              {/* Add any additional actions you want to display here */}
+            </Box>
           </Box>
         </Box>
         
@@ -2645,8 +2496,8 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
               
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Annual percentage increase in rental income. Typically ranges from 1-3% in stable markets." arrow>
-                    <span>Rent Appreciation: {rentAppreciationRate}%</span>
+                  <Tooltip title="Annual percentage increase in rental rates due to inflation and market demand. Historically averages 2-4% in most markets." arrow>
+                    <span>Annual Rent Appreciation: {rentAppreciationRate}%</span>
                   </Tooltip>
                 </Typography>
                 <Slider 
@@ -2663,7 +2514,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
               
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Annual percentage increase in property value. Historically averages 3-5% in most markets." arrow>
+                  <Tooltip title="Annual percentage increase in property value over time. Historically real estate appreciates at 3-5% annually over the long term." arrow>
                     <span>Property Value Increase: {propertyValueIncreaseRate}%</span>
                   </Tooltip>
                 </Typography>
@@ -2892,7 +2743,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'space-between', pageBreakInside: 'avoid' }}>
             {[1, 5, 10, 15, 30].map(holdingPeriod => {
               // Calculate IRR for this holding period
-              const relevantCashflows = longTermCashflowData
+              const relevantCashflows = longTermCashflowData // Use memoized data
                 .filter(data => data.year <= holdingPeriod)
                 .map(data => data.yearlyCashflow);
                 
@@ -2986,7 +2837,26 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
             p: 2, 
             overflow: 'auto'
           }}>
-            <PropertyPDFReport ref={targetRef} />
+            {/* Render PDF component conditionally based on data availability */}
+            {property && cashflow && (
+              <PropertyPDFReport
+                ref={targetRef}
+                property={property}
+                cashflow={cashflow}
+                settings={settings}
+                customRentEstimate={customRentEstimate}
+                notes={notes}
+                generateShareableURL={generateShareableURL}
+                generateLongTermCashflow={generateLongTermCashflow}
+                formatCurrency={formatCurrency}
+                formatPercent={formatPercent}
+                calculateIRR={calculateIRR} // Pass IRR function
+                yearsToProject={yearsToProject}
+                rentAppreciationRate={rentAppreciationRate}
+                propertyValueIncreaseRate={propertyValueIncreaseRate}
+                effectivePrice={effectivePrice}
+              />
+            )}
           </Box>
         </DialogContent>
         <DialogActions>

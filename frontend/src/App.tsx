@@ -844,17 +844,17 @@ function App() {
                         }}
                       >
                         {/* Removed the two feature boxes for brevity */}
-                      </Box>
-                    </Box>
-                    
+                          </Box>
+                        </Box>
+                        
                     {/* Right side image/graphic element */}                    <Box 
-                      sx={{ 
+                          sx={{ 
                         flex: '1',
                         position: 'relative',
                         display: { xs: 'none', md: 'flex' }, 
                         alignSelf: 'stretch',
-                        alignItems: 'center', 
-                        justifyContent: 'center',
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
                         minHeight: '200px' 
                       }}
                     >
@@ -880,7 +880,7 @@ function App() {
                         <img src={process.env.PUBLIC_URL + '/logo-optimized.png'} alt="CashflowCrunch Logo" style={{ height: '120px', width: '120px', marginBottom: '8px' }} /> 
                         <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ color: 'white' }}> {/* Changed color to white */}
                           Start Crunching! {/* Changed text */}
-                        </Typography>
+                          </Typography>
                       </Box>
                     </Box>
                   </Box>
@@ -1379,8 +1379,8 @@ function App() {
                       return (
                       <PropertyCard
                         key={property.property_id}
-                        property={property} // Pass original property for reference
-                        overridePrice={overridePrice} // Pass down the specific override price for this card
+                        property={property}
+                        overridePrice={overridePrice} 
                   calculateCashflow={calculateCashflow}
                   formatCurrency={formatCurrency}
                   formatPercent={formatPercent}
@@ -1388,8 +1388,7 @@ function App() {
                   capexPercent={capexPercent}
                         downPaymentPercent={downPaymentPercent}
                         propertyManagementPercent={propertyManagementPercent}
-                        handleRentEstimateChange={handleRentEstimateChange} // Pass down rent handler
-                        handlePriceOverrideChange={handlePriceOverrideChange} // Pass down price handler
+                        handleRentEstimateChange={handleRentEstimateChange}
                         crunchScore={score} 
                       />
                       );
@@ -1743,48 +1742,49 @@ function App() {
                   </div>
                 </Paper>
               </Modal>
-            </Container>
+    </Container>
           </> // Close the fragment for the root route element
         } />
         
-        {/* Property Details Route - Ensure correct props are passed */}
+        {/* Property Details Route - Restore calculateCashflow implementation */}
         <Route 
           path="/property/:propertyId" 
           element={
             <PropertyDetailsPage 
-              properties={displayedProperties} // Pass the list of properties
-              calculateCashflow={(property, settings) => { // Pass the specific cashflow calc function
-                  // ... (inner calculateCashflowWithSettings and helper) ...
-                  const calculateCashflowWithSettings = (property: Property, settings: CashflowSettings) => {
-                    const monthlyMortgage = calculateMortgageWithSettings(property.price, settings);
-                    const monthlyTaxInsurance = property.price * (settings.taxInsurancePercent / 100) / 12;
-                    const monthlyVacancy = property.rent_estimate * (settings.vacancyPercent / 100);
-                    const monthlyCapex = property.rent_estimate * (settings.capexPercent / 100);
-                    const monthlyPropertyManagement = property.rent_estimate * (settings.propertyManagementPercent / 100);
-                    const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
-                    const monthlyCashflow = property.rent_estimate - totalMonthlyExpenses;
-                    const annualCashflow = monthlyCashflow * 12;
+              properties={displayedProperties}
+              calculateCashflow={(property, settings) => {
+                  // Restore implementation
+                  const calculateCashflowWithSettings = (property: Property, settings: CashflowSettings): Cashflow => {
+                  const monthlyMortgage = calculateMortgageWithSettings(property.price, settings);
+                  const monthlyTaxInsurance = property.price * (settings.taxInsurancePercent / 100) / 12;
+                  const monthlyVacancy = property.rent_estimate * (settings.vacancyPercent / 100);
+                  const monthlyCapex = property.rent_estimate * (settings.capexPercent / 100);
+                  const monthlyPropertyManagement = property.rent_estimate * (settings.propertyManagementPercent / 100);
+                  const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
+                  const monthlyCashflow = property.rent_estimate - totalMonthlyExpenses;
+                  const annualCashflow = monthlyCashflow * 12;
                     const initialInvestment = (property.price * (settings.downPaymentPercent / 100)) + (property.price * 0.03) + settings.rehabAmount;
                     const cashOnCashReturn = initialInvestment > 0 ? (annualCashflow / initialInvestment) * 100 : 0;
                     return { monthlyMortgage, monthlyTaxInsurance, monthlyVacancy, monthlyCapex, monthlyPropertyManagement, totalMonthlyExpenses, monthlyCashflow, annualCashflow, cashOnCashReturn };
                   };
-                  function calculateMortgageWithSettings(price: number, settings: CashflowSettings): number {
-                    const downPayment = price * (settings.downPaymentPercent / 100);
-                    const loanAmount = price - downPayment;
-                    const monthlyRate = settings.interestRate / 100 / 12;
-                    const payments = settings.loanTerm * 12;
-                    if (monthlyRate === 0) return loanAmount / payments;
-                    const x = Math.pow(1 + monthlyRate, payments);
-                    return loanAmount * (monthlyRate * x) / (x - 1);
-                  }
+                function calculateMortgageWithSettings(price: number, settings: CashflowSettings): number {
+                  const downPayment = price * (settings.downPaymentPercent / 100);
+                  const loanAmount = price - downPayment;
+                  const monthlyRate = settings.interestRate / 100 / 12;
+                  const payments = settings.loanTerm * 12;
+                  if (monthlyRate === 0) return loanAmount / payments;
+                  const x = Math.pow(1 + monthlyRate, payments);
+                  return loanAmount * (monthlyRate * x) / (x - 1);
+                }
                   const propertyForCashflow = { ...property, rent_source: property.rent_source ?? "calculated" };
-                  return calculateCashflowWithSettings(propertyForCashflow, settings);
+                return calculateCashflowWithSettings(propertyForCashflow, settings);
               }}
-              formatCurrency={formatCurrency} // Pass formatCurrency
-              formatPercent={formatPercent}   // Pass formatPercent
-              defaultSettings={defaultSettings} // Pass defaultSettings
+              formatCurrency={formatCurrency}
+              formatPercent={formatPercent}
+              defaultSettings={defaultSettings}
+              handlePriceOverrideChange={handlePriceOverrideChange} 
             />
-          }
+          } 
         />
         
         {/* Bookmarks Route */}

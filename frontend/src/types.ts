@@ -37,4 +37,17 @@ export interface CashflowSettings {
   capexPercent: number;
   propertyManagementPercent: number;
   rehabAmount: number;
+}
+
+// Add the interface for long-term cashflow data
+export interface YearlyProjection {
+  year: number;
+  propertyValue: number;
+  annualRent: number;
+  yearlyExpenses: number;
+  yearlyCashflow: number;
+  equity: number;
+  equityGrowth: number;
+  roi: number;
+  roiWithEquity: number;
 } 
