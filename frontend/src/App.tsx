@@ -31,6 +31,7 @@ import Drawer from '@mui/material/Drawer';
 import PropertyCard from './components/PropertyCard';
 // Import the scoring function
 import { calculateCrunchScore } from './utils/scoring';
+import WelcomeTour from './components/WelcomeTour'; // Import the new component
 
 // Define possible sort keys
 type SortableKey = keyof Pick<Property, 'price' | 'rent_estimate' | 'bedrooms' | 'bathrooms' | 'sqft' | 'days_on_market'> | 'ratio' | 'cashflow' | 'crunchScore'; // Add crunchScore
@@ -108,6 +109,32 @@ function App() {
 
   const navigate = useNavigate(); // Initialize useNavigate
 
+  const [showWelcomeTour, setShowWelcomeTour] = useState(false); // State for welcome tour modal
+
+  // --- Check for first visit on mount ---
+  useEffect(() => {
+    try {
+      const seenTour = localStorage.getItem('hasSeenWelcomeTour');
+      if (!seenTour) {
+        setShowWelcomeTour(true);
+      }
+    } catch (error) {
+      console.error("Error accessing localStorage:", error);
+      // Decide if you want to show the tour anyway if localStorage fails
+      // setShowWelcomeTour(true);
+    }
+  }, []); // Empty dependency array ensures this runs only once on mount
+
+  // --- Handler to close welcome tour and set flag ---
+  const handleCloseWelcomeTour = () => {
+    try {
+      localStorage.setItem('hasSeenWelcomeTour', 'true');
+    } catch (error) {
+      console.error("Error saving to localStorage:", error);
+    }
+    setShowWelcomeTour(false);
+  };
+
   // --- Load Saved Searches from LocalStorage ---
   useEffect(() => {
     try {
@@ -120,7 +147,7 @@ function App() {
       // Optionally clear corrupted data
       // localStorage.removeItem('cashflowcrunch_savedSearches');
     }
-  }, []);
+  }, []); // Empty dependency array
 
   // --- Update LocalStorage when savedSearches change ---
   useEffect(() => {
@@ -229,8 +256,11 @@ function App() {
     currentSearchId.current = searchId;
 
     // --- Address Detection Heuristic --- 
-    // Simple check: does the input contain at least one digit?
-    const looksLikeAddress = /\d/.test(location.trim());
+    // Refined check: Treat as address only if it contains both letters and digits
+    const trimmedLocation = location.trim();
+    const containsLetters = /[a-zA-Z]/.test(trimmedLocation);
+    const containsDigits = /\d/.test(trimmedLocation);
+    const looksLikeAddress = containsLetters && containsDigits; 
 
     try {
       if (looksLikeAddress) {
@@ -259,79 +289,79 @@ function App() {
         // --- General Location Search Path (Existing Logic) --- 
         console.log(`Performing general location search for: ${location}`);
         // --- Prepare Filters & Prices --- 
-        let minP: number | null = null;
-        let maxP: number | null = null;
-        let minBd: number | null = null;
-        let minBa: number | null = null;
+      let minP: number | null = null;
+      let maxP: number | null = null;
+      let minBd: number | null = null;
+      let minBa: number | null = null;
 
-        // Parse Min Price
+      // Parse Min Price
         const parsedMin = typeof minPrice === 'number' ? minPrice : parseFloat(String(minPrice).replace(/[^\d.]/g, ''));
-        if (!isNaN(parsedMin) && parsedMin >= 0) {
-            minP = parsedMin;
-            console.log('Applying Min price filter:', minP);
-        }
-        
-        // Parse Max Price
+      if (!isNaN(parsedMin) && parsedMin >= 0) {
+          minP = parsedMin;
+          console.log('Applying Min price filter:', minP);
+      }
+      
+      // Parse Max Price
         const parsedMax = typeof maxPrice === 'number' ? maxPrice : parseFloat(String(maxPrice).replace(/[^\d.]/g, ''));
-        if (!isNaN(parsedMax) && parsedMax > 0) {
-            maxP = parsedMax;
-            console.log('Applying Max price filter:', maxP);
-        }
-        
+      if (!isNaN(parsedMax) && parsedMax > 0) {
+          maxP = parsedMax;
+          console.log('Applying Max price filter:', maxP);
+      }
+      
         // Parse Bed Filters
-        const parsedMinBeds = parseInt(minBeds, 10);
-        if (!isNaN(parsedMinBeds) && parsedMinBeds >= 0) {
-          minBd = parsedMinBeds;
+      const parsedMinBeds = parseInt(minBeds, 10);
+      if (!isNaN(parsedMinBeds) && parsedMinBeds >= 0) {
+        minBd = parsedMinBeds;
         }
 
         // Parse Bath Filters
-        const parsedMinBaths = parseFloat(minBaths);
-        if (!isNaN(parsedMinBaths) && parsedMinBaths >= 0) {
-          minBa = parsedMinBaths;
+      const parsedMinBaths = parseFloat(minBaths);
+      if (!isNaN(parsedMinBaths) && parsedMinBaths >= 0) {
+        minBa = parsedMinBaths;
         }
 
         const propertyType = 'Houses'; // Or make this configurable
 
         // Get total properties first, passing the filters
         console.log('Fetching total property count with filters...');
-        const totalCount = await getTotalPropertiesCount(location, minP, maxP, minBd, minBa, propertyType);
+      const totalCount = await getTotalPropertiesCount(location, minP, maxP, minBd, minBa, propertyType);
         
         if (searchId !== currentSearchId.current) return; // Check if search changed
-        setTotalProperties(totalCount);
+      setTotalProperties(totalCount);
         console.log('Total properties found with filters:', totalCount);
 
-        if (totalCount === 0) {
-          setLoading(false);
+      if (totalCount === 0) {
+        setLoading(false);
           return;
         }
 
         const totalPages = Math.ceil(totalCount / 42); // Assuming API limit
         
         // Function to fetch and process a single page, passing filters
-        const fetchAndProcessPage = async (page: number) => {
-          if (searchId !== currentSearchId.current) return; // Abort if new search started
-          try {
+      const fetchAndProcessPage = async (page: number) => {
+        if (searchId !== currentSearchId.current) return; // Abort if new search started
+        try {
             console.log(`Fetching page ${page + 1}/${totalPages} with filters...`);
             // Pass the parsed filters (minP, maxP, minBd, minBa) to searchProperties
             const results = await searchProperties(location, page, minP, maxP, minBd, minBa, propertyType, null);
             
-            if (searchId === currentSearchId.current && results.allProperties.length > 0) {
-              setDisplayedProperties(prev => {
+          if (searchId === currentSearchId.current && results.allProperties.length > 0) {
+            setDisplayedProperties(prev => {
                 const existingIds = new Set(prev.map(p => p.property_id));
                 const newProps = results.allProperties.filter(np => !existingIds.has(np.property_id));
-                return [...prev, ...newProps];
-              });
-              if (!isProcessingBackground) setIsProcessingBackground(true); 
-            }
+              return [...prev, ...newProps];
+            });
+            if (!isProcessingBackground) setIsProcessingBackground(true); 
+          }
           } catch (error) {
             console.error(`Error fetching page ${page + 1}:`, error);
-          }
-        };
+        }
+      };
 
-        // Fetch all pages concurrently
-        console.log(`Starting fetch for ${totalPages} pages.`);
-        const pagePromises = Array.from({ length: totalPages }, (_, i) => fetchAndProcessPage(i));
-        await Promise.all(pagePromises);
+      // Fetch all pages concurrently
+      console.log(`Starting fetch for ${totalPages} pages.`);
+      const pagePromises = Array.from({ length: totalPages }, (_, i) => fetchAndProcessPage(i));
+      await Promise.all(pagePromises);
 
         console.log('All page fetches initiated or completed.');
         // setLoading(false); // Keep loading until background processing finishes (handled by handlePropertyUpdate)
@@ -342,7 +372,7 @@ function App() {
       if (searchId === currentSearchId.current) { // Only set error if it's for the current search
         setError("Failed to search properties. Please try again later.");
         setLoading(false);
-        setIsProcessingBackground(false);
+      setIsProcessingBackground(false);
       }
     } 
     // Removed final setLoading(false) here - it's handled when updates complete or specific address search finishes
@@ -740,6 +770,9 @@ function App() {
   
   return (
     <div className="app-container"> 
+      {/* --- Render Welcome Tour Modal --- */}
+      <WelcomeTour open={showWelcomeTour} onClose={handleCloseWelcomeTour} />
+
       {/* --- Header Removed from here --- */}
 
       <Routes>
