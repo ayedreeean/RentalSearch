@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  useNavigate // Add useNavigate import
+} from 'react-router-dom';
 import {
   Typography, Container, TextField, Button, Box, CircularProgress, 
   Paper, IconButton, Alert,
@@ -100,6 +105,8 @@ function App() {
   
   // --- State for Price Overrides ---
   const [overridePrices, setOverridePrices] = useState<Record<string, number>>({});
+
+  const navigate = useNavigate(); // Initialize useNavigate
 
   // --- Load Saved Searches from LocalStorage ---
   useEffect(() => {
@@ -206,114 +213,139 @@ function App() {
 
   // Function to handle search button click
   const handleSearch = async () => {
-    // Reset state
     setError(null);
-    
-    // Validate input: If no text, return
     if (!location.trim()) {
       setError("Please enter a search location");
       return;
     }
-    
-    // Show loading state
+
     setIsProcessingBackground(false);
     setLoading(true);
     setDisplayedProperties([]);
     setSearchPerformed(true);
-    setTotalProperties(0); // Reset total properties
-    
-    // Create unique search ID
+    setTotalProperties(0);
+
     const searchId = currentSearchId.current + 1;
     currentSearchId.current = searchId;
 
+    // --- Address Detection Heuristic --- 
+    // Simple check: does the input contain at least one digit?
+    const looksLikeAddress = /\d/.test(location.trim());
+
     try {
-      // --- Prepare Filters & Prices --- 
-      let minP: number | null = null;
-      let maxP: number | null = null;
-      let minBd: number | null = null;
-      let minBa: number | null = null;
+      if (looksLikeAddress) {
+        // --- Specific Address Search Path --- 
+        console.log(`Attempting specific address search for: ${location}`);
+        const foundProperty = await searchPropertyByAddress(location);
 
-      // Parse Min Price
-      const parsedMin = typeof minPrice === 'number' ? minPrice : parseFloat(String(minPrice).replace(/[^\d.]/g, ''));
-      if (!isNaN(parsedMin) && parsedMin >= 0) {
-          minP = parsedMin;
-          console.log('Applying Min price filter:', minP);
-      }
-      
-      // Parse Max Price
-      const parsedMax = typeof maxPrice === 'number' ? maxPrice : parseFloat(String(maxPrice).replace(/[^\d.]/g, ''));
-      if (!isNaN(parsedMax) && parsedMax > 0) {
-          maxP = parsedMax;
-          console.log('Applying Max price filter:', maxP);
-      }
-      
-      // Parse Bed Filters
-      const parsedMinBeds = parseInt(minBeds, 10);
-      if (!isNaN(parsedMinBeds) && parsedMinBeds >= 0) {
-        minBd = parsedMinBeds;
-      }
+        if (searchId !== currentSearchId.current) return; // Check if search changed
 
-      // Parse Bath Filters
-      const parsedMinBaths = parseFloat(minBaths);
-      if (!isNaN(parsedMinBaths) && parsedMinBaths >= 0) {
-        minBa = parsedMinBaths;
-      }
-
-      const propertyType = 'Houses'; // Or make this configurable
-
-      // Get total properties first, passing the filters
-      console.log('Fetching total property count with filters...');
-      const totalCount = await getTotalPropertiesCount(location, minP, maxP, minBd, minBa, propertyType);
-      
-      if (searchId !== currentSearchId.current) return; // Check if search changed
-      setTotalProperties(totalCount);
-      console.log('Total properties found with filters:', totalCount);
-
-      if (totalCount === 0) {
-        setLoading(false);
-        return;
-      }
-
-      const totalPages = Math.ceil(totalCount / 42); // Assuming API limit
-      
-      // Function to fetch and process a single page, passing filters
-      const fetchAndProcessPage = async (page: number) => {
-        if (searchId !== currentSearchId.current) return; // Abort if new search started
-        try {
-          console.log(`Fetching page ${page + 1}/${totalPages} with filters...`);
-          // Pass the parsed filters (minP, maxP, minBd, minBa) to searchProperties
-          const results = await searchProperties(location, page, minP, maxP, minBd, minBa, propertyType, null);
-          
-          if (searchId === currentSearchId.current && results.allProperties.length > 0) {
-            setDisplayedProperties(prev => {
-              const existingIds = new Set(prev.map(p => p.property_id));
-              const newProps = results.allProperties.filter(np => !existingIds.has(np.property_id));
-              return [...prev, ...newProps];
-            });
-            if (!isProcessingBackground) setIsProcessingBackground(true); 
-          }
-        } catch (error) {
-          console.error(`Error fetching page ${page + 1}:`, error);
+        if (foundProperty) {
+          console.log("Specific address found:", foundProperty);
+          // Add to displayed properties (might be useful if navigating back)
+          setDisplayedProperties([foundProperty]); 
+          // Navigate directly to the property details page
+          navigate(`/property/${foundProperty.property_id}`);
+          // No background processing needed here as we have the full details
+          setIsProcessingBackground(false);
+        } else {
+          console.log(`Specific address not found or failed to process: ${location}`);
+          setError(`Could not find details for address: ${location}`);
+          setIsProcessingBackground(false);
         }
-      };
+        setLoading(false); // Turn off loading after address search attempt
 
-      // Fetch all pages concurrently
-      console.log(`Starting fetch for ${totalPages} pages.`);
-      const pagePromises = Array.from({ length: totalPages }, (_, i) => fetchAndProcessPage(i));
-      await Promise.all(pagePromises);
+      } else {
+        // --- General Location Search Path (Existing Logic) --- 
+        console.log(`Performing general location search for: ${location}`);
+        // --- Prepare Filters & Prices --- 
+        let minP: number | null = null;
+        let maxP: number | null = null;
+        let minBd: number | null = null;
+        let minBa: number | null = null;
 
-      console.log('All page fetches initiated or completed.');
-      // setLoading(false); // Keep loading until background processing finishes (handled by handlePropertyUpdate)
+        // Parse Min Price
+        const parsedMin = typeof minPrice === 'number' ? minPrice : parseFloat(String(minPrice).replace(/[^\d.]/g, ''));
+        if (!isNaN(parsedMin) && parsedMin >= 0) {
+            minP = parsedMin;
+            console.log('Applying Min price filter:', minP);
+        }
+        
+        // Parse Max Price
+        const parsedMax = typeof maxPrice === 'number' ? maxPrice : parseFloat(String(maxPrice).replace(/[^\d.]/g, ''));
+        if (!isNaN(parsedMax) && parsedMax > 0) {
+            maxP = parsedMax;
+            console.log('Applying Max price filter:', maxP);
+        }
+        
+        // Parse Bed Filters
+        const parsedMinBeds = parseInt(minBeds, 10);
+        if (!isNaN(parsedMinBeds) && parsedMinBeds >= 0) {
+          minBd = parsedMinBeds;
+        }
+
+        // Parse Bath Filters
+        const parsedMinBaths = parseFloat(minBaths);
+        if (!isNaN(parsedMinBaths) && parsedMinBaths >= 0) {
+          minBa = parsedMinBaths;
+        }
+
+        const propertyType = 'Houses'; // Or make this configurable
+
+        // Get total properties first, passing the filters
+        console.log('Fetching total property count with filters...');
+        const totalCount = await getTotalPropertiesCount(location, minP, maxP, minBd, minBa, propertyType);
+        
+        if (searchId !== currentSearchId.current) return; // Check if search changed
+        setTotalProperties(totalCount);
+        console.log('Total properties found with filters:', totalCount);
+
+        if (totalCount === 0) {
+          setLoading(false);
+          return;
+        }
+
+        const totalPages = Math.ceil(totalCount / 42); // Assuming API limit
+        
+        // Function to fetch and process a single page, passing filters
+        const fetchAndProcessPage = async (page: number) => {
+          if (searchId !== currentSearchId.current) return; // Abort if new search started
+          try {
+            console.log(`Fetching page ${page + 1}/${totalPages} with filters...`);
+            // Pass the parsed filters (minP, maxP, minBd, minBa) to searchProperties
+            const results = await searchProperties(location, page, minP, maxP, minBd, minBa, propertyType, null);
+            
+            if (searchId === currentSearchId.current && results.allProperties.length > 0) {
+              setDisplayedProperties(prev => {
+                const existingIds = new Set(prev.map(p => p.property_id));
+                const newProps = results.allProperties.filter(np => !existingIds.has(np.property_id));
+                return [...prev, ...newProps];
+              });
+              if (!isProcessingBackground) setIsProcessingBackground(true); 
+            }
+          } catch (error) {
+            console.error(`Error fetching page ${page + 1}:`, error);
+          }
+        };
+
+        // Fetch all pages concurrently
+        console.log(`Starting fetch for ${totalPages} pages.`);
+        const pagePromises = Array.from({ length: totalPages }, (_, i) => fetchAndProcessPage(i));
+        await Promise.all(pagePromises);
+
+        console.log('All page fetches initiated or completed.');
+        // setLoading(false); // Keep loading until background processing finishes (handled by handlePropertyUpdate)
+      }
 
     } catch (error) {
       console.error("Error during search", error);
       if (searchId === currentSearchId.current) { // Only set error if it's for the current search
         setError("Failed to search properties. Please try again later.");
         setLoading(false);
-      setIsProcessingBackground(false);
+        setIsProcessingBackground(false);
       }
     } 
-    // Removed final setLoading(false) here - it's handled when updates complete
+    // Removed final setLoading(false) here - it's handled when updates complete or specific address search finishes
   };
 
   // --- Saved Search Handlers ---
