@@ -755,7 +755,8 @@ const PropertyPDFReport = React.forwardRef<HTMLDivElement, PropertyPDFReportProp
               .map(data => data.yearlyCashflow);
             const finalYearData = longTermData.find(data => data.year === holdingPeriod);
             const finalEquityValue = finalYearData ? finalYearData.equity : 0;
-            const irr = calculateIRR(initialInvestment, relevantCashflows, finalEquityValue); // Call passed function
+            // Ensure the result of calculateIRR is assigned to 'irr'
+            const irr = calculateIRR(initialInvestment, relevantCashflows, finalEquityValue);
             const color = irr < 0 ? '#ef4444' : irr < 8 ? '#f97316' : irr < 15 ? '#10b981' : '#4f46e5';
 
             return (
@@ -2027,9 +2028,9 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
             </Typography>
           </RouterLink>
           {/* Use flexGrow on a Box after the Link to push buttons to the right */}
-          <Box sx={{ flexGrow: 1 }} />
-          <Box sx={{
-            display: 'flex',
+          <Box sx={{ flexGrow: 1 }} /> 
+          <Box sx={{ 
+            display: 'flex', 
             gap: { xs: 0.5, sm: 2 }, // Reduced gap on xs screens
             flexWrap: 'nowrap'
           }}>
@@ -2048,11 +2049,13 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 px: { xs: 1, sm: 2 } // Less padding on xs
               }}
             >
-              <Box sx={{ display: { xs: 'none', sm: 'block' }, ml: 1 }}> {/* Text only on sm+, add margin */} 
+              {/* Change breakpoint from sm to md */}
+              <Box sx={{ display: { xs: 'none', md: 'block' }, ml: 1 }}> 
                 {isBookmarked ? 'Bookmarked' : 'Bookmark'}
               </Box>
-              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-                {isBookmarked ? '' : ''}
+              {/* Change breakpoint from sm to md */}
+              <Box sx={{ display: { xs: 'block', md: 'none' } }}> 
+                {/* Content only needed for xs/sm (icon only) - currently empty */} 
               </Box>
             </Button>
             
@@ -2070,7 +2073,8 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 px: { xs: 1, sm: 2 } // Less padding on xs
               }}
             >
-              <Box sx={{ display: { xs: 'none', sm: 'block' }, ml: 1 }}>Copy URL</Box> {/* Text only on sm+, add margin */}
+              {/* Change breakpoint from sm to md */}
+              <Box sx={{ display: { xs: 'none', md: 'block' }, ml: 1 }}>Copy URL</Box> 
             </Button>
 
             <Button 
@@ -2087,11 +2091,13 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 px: { xs: 1, sm: 2 } // Less padding on xs
               }}
             >
-              <Box sx={{ display: { xs: 'none', sm: 'block' }, ml: 1 }}> {/* Text only on sm+, add margin */} 
+              {/* Change breakpoint from sm to md */}
+              <Box sx={{ display: { xs: 'none', md: 'block' }, ml: 1 }}> 
                 PDF Report
               </Box>
-              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-                {/* Keep icon, hide text for xs */}
+              {/* Change breakpoint from sm to md */}
+              <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+                {/* Content only needed for xs/sm (icon only) - currently empty */} 
               </Box>
             </Button>
           </Box>
@@ -2163,8 +2169,38 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 {property?.address}
             </Typography>
             </Box>
-            <Box>
-              {/* Add any additional actions you want to display here */}
+            <Box> {/* PASTE Crunch Score inside this Box */} 
+              {/* Remove this comment: Add any additional actions you want to display here */}
+              {/* Add Crunch Score display here */}
+              <Tooltip title={crunchScoreTooltip} arrow>
+                <Box 
+                  sx={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    mt: { xs: 1, sm: 0.5 }, // Adjusted margin-top for spacing
+                    justifyContent: 'flex-end',
+                    // Styling enhancements (copied from previous location)
+                    px: 1.5,
+                    py: 0.5,
+                    borderRadius: '16px', // Increased for pill shape
+                    backgroundColor: 
+                      crunchScore >= 65 ? 'success.light' : 
+                      crunchScore >= 45 ? 'warning.light' : 
+                      'error.light',
+                    color: 
+                      crunchScore >= 45 ? 'text.primary' : // Dark text for lighter backgrounds
+                      'common.white' // White text for darker (error) background
+                  }}
+                >
+                  <Typography variant="body1" fontWeight="medium" sx={{ mr: 0.5, color: 'common.white' }}> {/* Explicitly set white */} 
+                      Crunch Score:
+                  </Typography>
+                  <Typography variant="h6" fontWeight="bold" sx={{ color: 'common.white' }}> {/* Explicitly set white */} 
+                    {crunchScore.toFixed(0)} 
+                  </Typography>
+                    <InfoIcon sx={{ fontSize: '1rem', ml: 0.5, color: 'common.white' }} /> {/* Explicitly set white */} 
+                </Box>
+              </Tooltip>
             </Box>
           </Box>
         </Box>
@@ -2222,7 +2258,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
             <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                 <Typography variant="h5">Cashflow Analysis</Typography>
-                <Box>
+                <Box sx={{ textAlign: 'right' }}> {/* Align text within this box */} 
                   <Typography 
                     variant="h5" 
                     fontWeight="bold" 
@@ -2745,7 +2781,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
             IRR represents the annualized rate of return considering all cash flows and the final property value, accounting for the time value of money.
           </Typography>
           
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'space-between', pageBreakInside: 'avoid' }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'space-between', pageBreakInside: 'avoid' as 'avoid' }}>
             {[1, 5, 10, 15, 30].map(holdingPeriod => {
               // Calculate IRR for this holding period
               const relevantCashflows = longTermCashflowData // Use memoized data
