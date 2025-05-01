@@ -2009,23 +2009,28 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
             color="inherit" 
             aria-label="back" 
             onClick={handleBackToSearch}
-            sx={{ mr: 2 }}
+            sx={{ mr: { xs: 0.5, sm: 2 } }} // Reduced margin-right on xs screens
           >
             <ArrowBackIcon />
           </IconButton>
           {/* Wrap Icon and Title in a Link */}
           <RouterLink to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
-            {/* Replace HomeWorkIcon with img tag */}
-            <img src={process.env.PUBLIC_URL + '/favicon.png'} alt="CashflowCrunch Logo" style={{ height: '40px', width: '40px', marginRight: '8px', verticalAlign: 'middle' }} /> {/* Use process.env.PUBLIC_URL */}
-            <Typography variant="h6" color="inherit" noWrap >
+            {/* Remove the img tag for the logo */}
+            {/* <img src={process.env.PUBLIC_URL + '/favicon.png'} alt="CashflowCrunch Logo" style={{ height: '40px', width: '40px', marginRight: '8px', verticalAlign: 'middle' }} /> */}
+            <Typography
+              variant="h6"
+              color="inherit"
+              noWrap
+              sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }} // Smaller font size on xs screens
+            >
               CashflowCrunch
             </Typography>
           </RouterLink>
           {/* Use flexGrow on a Box after the Link to push buttons to the right */}
-          <Box sx={{ flexGrow: 1 }} /> 
-          <Box sx={{ 
-            display: 'flex', 
-            gap: { xs: 1, sm: 2 }, // Reverted gap
+          <Box sx={{ flexGrow: 1 }} />
+          <Box sx={{
+            display: 'flex',
+            gap: { xs: 0.5, sm: 2 }, // Reduced gap on xs screens
             flexWrap: 'nowrap'
           }}>
             {/* Add Bookmark Button */}
@@ -2086,7 +2091,7 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 PDF Report
               </Box>
               <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-                PDF
+                {/* Keep icon, hide text for xs */}
               </Box>
             </Button>
           </Box>
