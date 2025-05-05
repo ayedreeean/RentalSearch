@@ -318,12 +318,14 @@ const SimpleChart = ({
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#666';
-    const yearsToShow = numPoints <= 10 ? data.years : [1, 5, 10, 15, 20, 25, 30].filter(year => year <= numPoints);
+    const yearsToShow = numPoints <= 10 ? data.years : [0, 1, 5, 10, 15, 20, 25, 30].filter(year => {
+      return year <= Math.max(...data.years);
+    });
     yearsToShow.forEach(yearToShow => {
       const index = data.years.indexOf(yearToShow);
       if (index !== -1) {
         const x = padding.left + (index * xScale);
-        ctx.fillText(yearToShow.toString(), x, canvasHeight - padding.bottom + 5);
+        ctx.fillText(yearToShow === 0 ? 'Current' : yearToShow.toString(), x, canvasHeight - padding.bottom + 5);
         ctx.strokeStyle = '#f0f0f0';
         ctx.beginPath();
         ctx.moveTo(x, padding.top);
@@ -918,15 +920,34 @@ const PortfolioPage: React.FC = () => {
 
     // Handle removing a property from the portfolio
     const handleRemoveFromPortfolio = (propertyId: string) => {
+        // Update portfolio
         const updatedPortfolio = { ...portfolio };
         delete updatedPortfolio[propertyId];
         setPortfolio(updatedPortfolio);
+        
+        // Update selectedProperties to remove the deleted property
+        const updatedSelectedProperties = { ...selectedProperties };
+        delete updatedSelectedProperties[propertyId];
+        setSelectedProperties(updatedSelectedProperties);
+        
+        // Update localStorage
         try {
             localStorage.setItem('rentToolFinder_portfolio', JSON.stringify(updatedPortfolio));
         } catch (e) {
             console.error('Error saving portfolio:', e);
             setError('Failed to update portfolio. Storage might be full.');
         }
+        
+        // Update selectAll state based on whether all remaining properties are selected
+        if (Object.keys(updatedSelectedProperties).length > 0) {
+            const allSelected = Object.values(updatedSelectedProperties).every(selected => selected);
+            setSelectAll(allSelected);
+        } else {
+            setSelectAll(true); // Default to true when no properties remain
+        }
+        
+        // Force regeneration of aggregated data
+        generateAggregatedLongTermData();
     };
 
     // Handle assumption changes from the controls - ONLY updates state now
@@ -1024,7 +1045,7 @@ const PortfolioPage: React.FC = () => {
         const propertyProjections: ProjectionData[][] = [];
         const propertyInitialInvestments: number[] = [];
         const propertyTerminalEquities: Record<number, number[]> = { 5: [], 10: [], 15: [], 20: [], 30: [] }; // Store equity per property per period
-        const yearlyAggregatedCashflows: number[][] = Array(yearsToProject).fill(0).map(() => []); // Store cashflow per property per year
+        const yearlyAggregatedCashflows: number[][] = Array(yearsToProject + 1).fill(0).map(() => []); // Store cashflow per property per year, +1 for year 0
 
 
         selectedPropertyIds.forEach(propertyId => {
@@ -1129,6 +1150,29 @@ const PortfolioPage: React.FC = () => {
              }
              if (isNaN(monthlyMortgagePayment)) monthlyMortgagePayment = 0;
 
+            // Add Year 0 (current values) before starting the projection
+            const yearlyPropertyTax0 = currentPropertyValue * (settings.taxInsurancePercent / 100) / 2;
+            const yearlyInsurance0 = currentPropertyValue * (settings.taxInsurancePercent / 100) / 2;
+            const yearlyVacancy0 = currentRent * 12 * (settings.vacancyPercent / 100);
+            const yearlyCapex0 = currentRent * 12 * (settings.capexPercent / 100);
+            const yearlyPropertyManagement0 = currentRent * 12 * (settings.propertyManagementPercent / 100);
+            const yearlyMortgage0 = monthlyMortgagePayment * 12;
+            
+            const yearlyRentalIncome0 = currentRent * 12;
+            const yearlyExpenses0 = yearlyMortgage0 + yearlyPropertyTax0 + yearlyInsurance0 +
+                yearlyVacancy0 + yearlyCapex0 + yearlyPropertyManagement0;
+            const yearlyCashflow0 = yearlyRentalIncome0 - yearlyExpenses0;
+            
+            const equity0 = currentPropertyValue - loanAmount;
+            
+            yearlyData.push({ year: 0, propertyValue: currentPropertyValue, equity: equity0, cashflow: yearlyCashflow0 });
+            
+            // Store cashflow for this property for year 0
+            if (!yearlyAggregatedCashflows[0]) {
+                yearlyAggregatedCashflows[0] = [];
+            }
+            yearlyAggregatedCashflows[0].push(yearlyCashflow0);
+
             for (let year = 1; year <= yearsToProject; year++) {
                 // Update property value and rent using the GLOBAL state rates
                  const propertyValueGrowthRate = propertyValueIncreaseRate / 100;
@@ -1202,10 +1246,23 @@ const PortfolioPage: React.FC = () => {
 
         // --- Aggregate Projections ---
         const aggregatedData: ProjectionData[] = [];
+        
+        // Create year 0 data first - ensure consistent cashflow with dashboard
+        const year0Data: ProjectionData = { 
+            year: 0, 
+            propertyValue: totalPropertyValueSum,
+            equity: totalDownPaymentSum,
+            cashflow: aggregatedCashflowData.monthlyCashflow * 12 // Use the exact same value as the dashboard tile
+        };
+        
+        // Only add the manually created year 0 data, don't collect from property projections
+        aggregatedData.push(year0Data);
+        
+        // Add years 1 through yearsToProject
         for (let year = 1; year <= yearsToProject; year++) {
             const yearData: ProjectionData = { year, propertyValue: 0, equity: 0, cashflow: 0 };
             propertyProjections.forEach(proj => {
-                const yearIndex = year - 1;
+                const yearIndex = year; // year is already 1-based, but we need to match the 0-based array with projData[0] = year 0
                 if (proj && yearIndex < proj.length) {
                     yearData.propertyValue += proj[yearIndex]?.propertyValue || 0;
                     yearData.equity += proj[yearIndex]?.equity || 0;
@@ -1213,6 +1270,12 @@ const PortfolioPage: React.FC = () => {
                 }
             });
             aggregatedData.push(yearData);
+        }
+
+        // --- Ensure year 0 data is consistent with dashboard ---
+        if (aggregatedData.length > 0 && aggregatedData[0].year === 0) {
+            // Force year 0 to match dashboard exactly
+            aggregatedData[0].cashflow = aggregatedCashflowData.monthlyCashflow * 12;
         }
 
         // --- Calculate Aggregated IRR ---
@@ -1225,7 +1288,13 @@ const PortfolioPage: React.FC = () => {
                  const cashflowsForPeriod = Array(holdingPeriod).fill(0);
                  for (let year = 0; year < holdingPeriod; year++) {
                      // Sum cashflows from all selected properties for that year
-                     cashflowsForPeriod[year] = yearlyAggregatedCashflows[year].reduce((sum, cf) => sum + (cf || 0), 0);
+                     // Handle case where year is out of bounds
+                     if (year === 0) {
+                         // Use the dashboard value for year 0 to ensure consistency
+                         cashflowsForPeriod[0] = aggregatedCashflowData.monthlyCashflow * 12;
+                     } else if (yearlyAggregatedCashflows[year]) {
+                         cashflowsForPeriod[year] = yearlyAggregatedCashflows[year].reduce((sum, cf) => sum + (cf || 0), 0);
+                     }
                  }
 
                  // Aggregate terminal equity for the period
@@ -1240,6 +1309,7 @@ const PortfolioPage: React.FC = () => {
         // --- Update State ---
         // --- DEBUG LOG: Check the irrResults object before setting state ---
         console.log("[IRR Debug] Results before setting state:", JSON.stringify(irrResults));
+        console.log("[Year 0 Debug] Cashflow:", year0Data.cashflow, "Dashboard:", aggregatedCashflowData.monthlyCashflow * 12);
         // --- END DEBUG LOG ---
         setAggregatedLongTermData(aggregatedData);
         setAggregatedCashflowData(aggregatedCashflow);
@@ -1575,24 +1645,52 @@ const PortfolioPage: React.FC = () => {
                                         </Paper>
                                     </Grid>
 
-                                    {/* 5-Year IRR */}
+                                    {/* 5-Year IRR - Updated to use same calculation as IRR Projections */}
                                     {/* @ts-ignore TODO: Fix Grid type issue */}
-                                    <Grid xs={12} sm={6} md={4} lg={3}>
+                                    <Grid xs={12} sm={6} md={4} lg={2}>
                                          <Paper elevation={1} sx={{ /* ...styles... */ p: 2, borderRadius: 2, height: '100%', border: '1px solid #e0e0e0' }}>
                                              <Typography variant="subtitle2" color="text.secondary">5-Year IRR</Typography>
                                              <Typography 
                                                  variant="h5" 
-                                                 sx={{ mt: 1, fontWeight: 'medium', color: irrData['5 Year'] > 10 ? 'success.main' : irrData['5 Year'] > 5 ? 'warning.main' : 'error.main' }}
+                                                 sx={{ 
+                                                     mt: 1, 
+                                                     fontWeight: 'medium', 
+                                                     color: !isFinite(irrData['5 Year']) ? 'text.secondary' :
+                                                            irrData['5 Year'] > 15 ? 'success.dark' : 
+                                                            irrData['5 Year'] > 10 ? 'success.main' : 
+                                                            irrData['5 Year'] > 5 ? 'warning.main' : 'error.main'
+                                                 }}
                                              >
-                                                 {/* Check if irrData['5 Year'] is finite before formatting */}
-                                                 {isFinite(irrData['5 Year']) ? formatPercent(irrData['5 Year'] / 100) : 'N/A'}
+                                                 {/* Use same format as IRR Projections section */}
+                                                 {isFinite(irrData['5 Year']) ? formatPercent(irrData['5 Year']) : 'N/A'}
+                                             </Typography>
+                                         </Paper>
+                                    </Grid>
+                                    
+                                    {/* NEW: 30-Year IRR */}
+                                    {/* @ts-ignore TODO: Fix Grid type issue */}
+                                    <Grid xs={12} sm={6} md={4} lg={2}>
+                                         <Paper elevation={1} sx={{ p: 2, borderRadius: 2, height: '100%', border: '1px solid #e0e0e0' }}>
+                                             <Typography variant="subtitle2" color="text.secondary">30-Year IRR</Typography>
+                                             <Typography 
+                                                 variant="h5" 
+                                                 sx={{ 
+                                                     mt: 1, 
+                                                     fontWeight: 'medium', 
+                                                     color: !isFinite(irrData['30 Year']) ? 'text.secondary' :
+                                                            irrData['30 Year'] > 15 ? 'success.dark' : 
+                                                            irrData['30 Year'] > 10 ? 'success.main' : 
+                                                            irrData['30 Year'] > 5 ? 'warning.main' : 'error.main'
+                                                 }}
+                                             >
+                                                 {isFinite(irrData['30 Year']) ? formatPercent(irrData['30 Year']) : 'N/A'}
                                              </Typography>
                                          </Paper>
                                     </Grid>
 
                                     {/* Annual Cashflow */}
                                     {/* @ts-ignore TODO: Fix Grid type issue */}
-                                    <Grid xs={12} sm={6} md={4} lg={3}>
+                                    <Grid xs={12} sm={6} md={4} lg={2}>
                                          <Paper elevation={1} sx={{ /* ...styles... */ p: 2, borderRadius: 2, height: '100%', border: '1px solid #e0e0e0' }}>
                                              <Typography variant="subtitle2" color="text.secondary">Annual Cashflow</Typography>
                                              <Typography 
@@ -2030,8 +2128,13 @@ const PortfolioPage: React.FC = () => {
                                                 </TableHead>
                                                 <TableBody>
                                                     {aggregatedLongTermData.map((data) => (
-                                                        <TableRow key={data.year}>
-                                                            <TableCell align="center">{data.year}</TableCell>
+                                                        <TableRow key={data.year} 
+                                                            sx={{ 
+                                                                backgroundColor: data.year === 0 ? 'rgba(66, 165, 245, 0.08)' : 'inherit',
+                                                                fontWeight: data.year === 0 ? 'bold' : 'normal'
+                                                            }}
+                                                        >
+                                                            <TableCell align="center">{data.year === 0 ? 'Current' : data.year}</TableCell>
                                                             <TableCell align="right">{formatCurrency(data.propertyValue)}</TableCell>
                                                             <TableCell align="right">{formatCurrency(data.equity)}</TableCell>
                                                             <TableCell align="right" sx={{ color: data.cashflow >= 0 ? 'success.main' : 'error.main' }}>

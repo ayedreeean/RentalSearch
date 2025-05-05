@@ -727,15 +727,97 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   // NEW: State for price saving feedback
   const [priceSaveStatus, setPriceSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
+  // Define the enhanced property type for shared properties
+  type SharedProperty = Property & { 
+    custom_rent?: number | null;
+    notes?: string;
+  };
+
+  // Add sharedPropertyData state
+  const [sharedPropertyData, setSharedPropertyData] = useState<SharedProperty | null>(null);
+
   // Add a useEffect to scroll to top on page load
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [propertyId]); // Re-run when propertyId changes (new property is loaded)
+  
+  // Add a useEffect to process URL parameters for shared links
+  useEffect(() => {
+    // Parse URL search parameters
+    const searchParams = new URLSearchParams(location.search);
+    const sharedDataParam = searchParams.get('data');
+    const sharedSettingsParam = searchParams.get('settings');
+    
+    if (sharedDataParam && sharedSettingsParam) {
+      try {
+        // Decode the Base64-encoded property data
+        const decodedPropertyData = atob(sharedDataParam);
+        const propertyData = JSON.parse(decodedPropertyData) as SharedProperty;
+        
+        // Decode the Base64-encoded settings data
+        const decodedSettingsData = atob(sharedSettingsParam);
+        const settingsData = JSON.parse(decodedSettingsData);
+        
+        console.log("Found shared data in URL param:", propertyData);
+        console.log("Found shared settings in URL param:", settingsData);
+        
+        // Store the shared property data
+        setSharedPropertyData(propertyData);
+        
+        // Update property price and custom rent if available
+        if (propertyData.price) {
+          setCurrentAnalysisPrice(propertyData.price);
+          setEditablePriceString(formatCurrency(propertyData.price));
+        }
+        
+        if (propertyData.custom_rent) {
+          setCustomRentEstimate(propertyData.custom_rent);
+        }
+        
+        // Update notes if available
+        if (propertyData.notes) {
+          setNotes(propertyData.notes);
+        }
+        
+        // Update settings
+        if (settingsData) {
+          // Make sure we're maintaining the CashflowSettings type
+          setLocalSettings(prevSettings => ({
+            ...prevSettings,
+            interestRate: settingsData.interestRate ?? prevSettings.interestRate,
+            loanTerm: settingsData.loanTerm ?? prevSettings.loanTerm,
+            downPaymentPercent: settingsData.downPaymentPercent ?? prevSettings.downPaymentPercent,
+            taxInsurancePercent: settingsData.taxInsurancePercent ?? prevSettings.taxInsurancePercent,
+            vacancyPercent: settingsData.vacancyPercent ?? prevSettings.vacancyPercent,
+            capexPercent: settingsData.capexPercent ?? prevSettings.capexPercent,
+            propertyManagementPercent: settingsData.propertyManagementPercent ?? prevSettings.propertyManagementPercent,
+            rehabAmount: settingsData.rehabAmount ?? prevSettings.rehabAmount
+          }));
+          
+          // Update projection settings if available
+          if (settingsData.yearsToProject) setYearsToProject(settingsData.yearsToProject);
+          if (settingsData.rentAppreciationRate) setRentAppreciationRate(settingsData.rentAppreciationRate);
+          if (settingsData.propertyValueIncreaseRate) setPropertyValueIncreaseRate(settingsData.propertyValueIncreaseRate);
+        }
+      } catch (error) {
+        console.error("Error processing shared data from URL:", error);
+      }
+    }
+  }, [location.search]); // Re-run when URL search params change
 
   // Find the selected property
   const property = useMemo(() => {
-    return properties.find(p => p.property_id === propertyId) || properties[0] || null;
-  }, [properties, propertyId]);
+    // First try to find the property in the properties array
+    const foundProperty = properties.find(p => p.property_id === propertyId);
+    
+    // If not found but we have shared property data with matching ID, use that
+    if (!foundProperty && sharedPropertyData && sharedPropertyData.property_id === propertyId) {
+      return sharedPropertyData;
+    }
+    
+    // Otherwise, return the found property or the first property or the shared property or null
+    return foundProperty || (propertyId ? sharedPropertyData : properties[0]) || null;
+  }, [properties, propertyId, sharedPropertyData]);
 
   // PDF Hook - MOVED AFTER property definition
   const { toPDF, targetRef: pdfTargetRef } = usePDF({
@@ -1159,10 +1241,12 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   const generateShareableURL = useCallback(() => {
     if (!property || currentAnalysisPrice === null) return window.location.href; // Use currentAnalysisPrice
     
-    const baseUrl = window.location.origin + window.location.pathname;    
+    // Fix: Include the property ID in the path
+    const baseUrl = window.location.origin + "/#/property/" + property.property_id;    
     const searchParams = new URLSearchParams();
     
-    const propertyData = {
+    // Use the SharedProperty type to ensure consistent typing
+    const propertyData: SharedProperty = {
       ...property,
       price: currentAnalysisPrice, // Include currentAnalysisPrice
       custom_rent: customRentEstimate,
@@ -1612,7 +1696,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
                 {/* Price Display - Make it an Input */}
-                <TextField
+            <TextField
                   label="Purchase Price"
                   value={editablePriceString} // Controlled by editablePriceString
                   onChange={(e) => {
@@ -1634,7 +1718,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
                   }}
                   variant="outlined" // Change variant
                   size="small" // Add size prop
-                  sx={{
+                sx={{
                     mt: 1,
                     '& .MuiInputBase-input': {
                       fontSize: '1.5rem',
