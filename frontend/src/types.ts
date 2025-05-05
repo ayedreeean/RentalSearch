@@ -7,6 +7,7 @@ export interface Property {
   bathrooms: number;
   sqft: number;
   thumbnail: string;
+  photo_url?: string;
   url: string;
   ratio: number;
   days_on_market: number | null;
@@ -26,6 +27,10 @@ export interface Cashflow {
   monthlyCashflow: number;
   annualCashflow: number;
   cashOnCashReturn: number;
+  downPaymentAmount: number;
+  closingCosts: number;
+  rehabAmount: number;
+  totalInitialInvestment: number;
 }
 
 export interface CashflowSettings {
@@ -50,4 +55,19 @@ export interface YearlyProjection {
   equityGrowth: number;
   roi: number;
   roiWithEquity: number;
-} 
+}
+
+// Define the structure stored in localStorage
+// Export this interface so it can be imported elsewhere
+export interface PortfolioAssumptionOverrides {
+    interestRate?: number;
+    loanTerm?: number;
+    downPaymentPercent?: number;
+    taxInsurancePercent?: number;
+    vacancyPercent?: number;
+    capexPercent?: number;
+    propertyManagementPercent?: number;
+    rehabAmount?: number;
+    rentEstimate?: number;
+    customRent?: number;
+}

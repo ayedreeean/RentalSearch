@@ -1,38 +1,62 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useParams, useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Typography, Container, Box, CircularProgress, AppBar, Toolbar, 
-  Button, Paper, Divider, IconButton, TextField, Alert, Tooltip, 
-  CssBaseline, Grid, InputAdornment, Slider, Link as MuiLink,
-  Tabs, Tab, useMediaQuery, useTheme, Card, CardContent, Dialog, DialogContent, DialogTitle, DialogActions,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Snackbar
+  Button, Paper, IconButton, TextField, Snackbar, Tooltip, Divider,
+  CssBaseline, Grid, Slider, Dialog, DialogContent, DialogTitle, DialogActions,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tabs, Tab, useMediaQuery, useTheme, Drawer, Chip,
+  InputAdornment // Import InputAdornment
 } from '@mui/material';
-import { styled } from '@mui/material/styles';
 import {
-  BarChart as BarChartIcon, Home as HomeIcon, ArrowBack as ArrowBackIcon,
-  Share as ShareIcon, Link as LinkIcon,
-  Info as InfoIcon, Edit as EditIcon, 
-  Email as EmailIcon, ExpandMore as ExpandMoreIcon, Bookmark as BookmarkIcon, BookmarkBorder as BookmarkBorderIcon,
-  PictureAsPdf as PdfIcon, Tune as TuneIcon // Add TuneIcon import
+  ArrowBack as ArrowBackIcon, HomeWork as HomeWorkIcon,
+  BookmarkBorder as BookmarkBorderIcon, Bookmark as BookmarkIcon,
+  PictureAsPdf as PdfIcon, Tune as TuneIcon, BusinessCenter as BusinessCenterIcon,
+  Close as CloseIcon, Share as ShareIcon, Link as LinkIcon, ContentCopy as ContentCopyIcon,
+  Save as SaveIcon, // Import SaveIcon
+  Check as CheckIcon // Import CheckIcon for saved state
 } from '@mui/icons-material';
-import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Legend, Line, Bar, ComposedChart, ReferenceLine } from 'recharts';
-import { Property, Cashflow, CashflowSettings, YearlyProjection } from '../types'; // Import YearlyProjection
+import { Property, Cashflow, CashflowSettings, YearlyProjection } from '../types';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { usePDF } from 'react-to-pdf';
 import { QRCodeSVG } from 'qrcode.react';
-import HomeWorkIcon from '@mui/icons-material/HomeWork'; // Ensure this is imported if used
-import Drawer from '@mui/material/Drawer';
 import CashflowSankeyChart from '../components/CashflowSankeyChart';
-import { calculateCrunchScore } from '../utils/scoring'; // Moved import higher
+// Import utility functions
+import { formatCurrency, formatPercent } from '../utils/formatting';
+import { calculateCashflow as calculateCashflowUtil } from '../utils/calculations';
+import { calculateCrunchScore } from '../utils/scoring';
+
+// ---- Portfolio Data Structure (Define Outside Component) ----
+interface PortfolioAssumptionOverrides {
+    // Define fields for assumptions that can be overridden
+    interestRate?: number;
+    loanTerm?: number;
+    downPaymentPercent?: number;
+    taxInsurancePercent?: number;
+    vacancyPercent?: number;
+    capexPercent?: number;
+    propertyManagementPercent?: number;
+    rehabAmount?: number;
+    rentEstimate?: number;
+    yearsToProject?: number;
+    rentAppreciationRate?: number;
+    propertyValueIncreaseRate?: number;
+}
+
+interface PortfolioEntry {
+    property: Property & { notes?: string }; // Store the property snapshot including notes
+    portfolioAssumptions: PortfolioAssumptionOverrides;
+    dateAdded: string;
+}
+// ---- End Portfolio Data Structure ----
 
 interface PropertyDetailsPageProps {
-  properties: Property[];
-  calculateCashflow: (property: Property, settings: CashflowSettings) => Cashflow;
-  formatCurrency: (amount: number) => string;
-  formatPercent: (percent: number) => string;
-  defaultSettings: CashflowSettings;
-  // Add the override handler prop
+  properties: Property[]; // Keep properties if needed for finding the specific one
+  // Remove props that are now utility functions
+  // calculateCashflow: (property: Property, settings: CashflowSettings) => Cashflow;
+  // formatCurrency: (amount: number) => string;
+  // formatPercent: (percent: number) => string;
+  defaultSettings: CashflowSettings; // Keep default settings if used for initialization
   handlePriceOverrideChange: (propertyId: string, newPriceString: string) => void;
 }
 
@@ -461,17 +485,16 @@ interface PropertyPDFReportProps {
   customRentEstimate: number | null;
   notes: string;
   generateShareableURL: () => string;
-  generateLongTermCashflow: () => YearlyProjection[]; // Pass the function itself
-  formatCurrency: (amount: number) => string;
-  formatPercent: (percent: number) => string;
+  generateLongTermCashflow: () => YearlyProjection[]; 
   calculateIRR: (initialInvestment: number, cashFlows: number[], finalEquity?: number) => number;
   yearsToProject: number;
   rentAppreciationRate: number;
   propertyValueIncreaseRate: number;
-  effectivePrice: number; // Pass effective price for consistency
+  effectivePrice: number; 
 }
 
-const PropertyPDFReport = React.forwardRef<HTMLDivElement, PropertyPDFReportProps>((
+// Property PDF Report Component - Use forwardRef
+const PropertyPDFReport: React.ForwardRefRenderFunction<HTMLDivElement, PropertyPDFReportProps> = (
   {
     property,
     cashflow,
@@ -479,10 +502,8 @@ const PropertyPDFReport = React.forwardRef<HTMLDivElement, PropertyPDFReportProp
     customRentEstimate,
     notes,
     generateShareableURL,
-    generateLongTermCashflow, // Receive the function
-    formatCurrency,
-    formatPercent,
-    calculateIRR, // Receive the function
+    generateLongTermCashflow,
+    calculateIRR,
     yearsToProject,
     rentAppreciationRate,
     propertyValueIncreaseRate,
@@ -490,1905 +511,784 @@ const PropertyPDFReport = React.forwardRef<HTMLDivElement, PropertyPDFReportProp
   },
   ref
 ) => {
-  // No need for the early return here, parent component handles it
-  // if (!property || !cashflow) return null;
-
-  const rentValue = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
-  const downPaymentAmount = effectivePrice * (settings.downPaymentPercent / 100); // Use effectivePrice
-  const shareableURL = generateShareableURL(); // Call the passed function
-  const longTermData = generateLongTermCashflow(); // Call the passed function
-  const closingCosts = effectivePrice * 0.03; // Use effectivePrice
-  const initialInvestment = downPaymentAmount
-                           + closingCosts
-                           + settings.rehabAmount;
-
-  const longTermChartData = {
-    years: longTermData.map(d => d.year),
-    propertyValues: longTermData.map(d => d.propertyValue),
-    equity: longTermData.map(d => d.equity),
-    cashflow: longTermData.map(d => d.yearlyCashflow)
-  };
-
-  const sankeyData = {
-    rentalIncome: rentValue,
-    mortgage: cashflow.monthlyMortgage,
-    taxInsurance: cashflow.monthlyTaxInsurance,
-    vacancy: cashflow.monthlyVacancy,
-    capex: cashflow.monthlyCapex,
-    propertyManagement: cashflow.monthlyPropertyManagement,
-    monthlyCashflow: cashflow.monthlyCashflow
-  };
-
-  const sectionStyle = { p: 2, mb: 2, border: '1px solid #eee', borderRadius: 1, pageBreakInside: 'avoid' as 'avoid' };
-  const headingStyle = { fontWeight: 'bold', fontSize: '12pt', color: '#333', mb: 1.5 };
-  const subHeadingStyle = { fontWeight: 'bold', fontSize: '10pt', color: '#555', mb: 1 };
-  const bodyStyle = { fontSize: '10pt', mb: 0.5 };
-  const tableCellStyle = { fontSize: '9pt', py: 0.5, borderBottom: '1px solid #eee' };
-  const tableHeaderCellStyle = { ...tableCellStyle, fontWeight: 'bold', bgcolor: '#f8f8f8' };
+    // Use imported formatCurrency and formatPercent inside this component
+    const longTermData = generateLongTermCashflow();
+    const shareableURL = generateShareableURL();
+    const irr = calculateIRR(
+        cashflow.totalInitialInvestment, // Now exists on cashflow object
+        longTermData.map(year => year.yearlyCashflow),
+        longTermData[longTermData.length - 1]?.equity // Final equity
+    );
 
     return (
-    <Box
-      ref={ref}
-      sx={{
-        backgroundColor: 'white',
-        color: 'black',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '10pt',
-        width: '8.5in', // Standard letter width
-        padding: '0.5in' // Margins via padding
-      }}
-    >
-      {/* Report Header */}
-      <Box sx={{ mb: 2, borderBottom: '1px solid #ccc', pb: 1 }}>
-        <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
-          Investment Property Analysis
-        </Typography>
-        <Typography variant="h6" sx={{ color: '#333' }}>
-          {property.address}
-        </Typography>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-          <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-            List Price: {formatCurrency(effectivePrice)} {/* Use effectivePrice */}
-          </Typography>
-          <Typography variant="body2" sx={{ color: '#6b7280' }}>
-            Generated: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Typography>
-      </Box>
+        <div ref={ref} style={{ padding: '20px', backgroundColor: 'white' }}>
+            {/* Header */}
+            <Box sx={{ borderBottom: '2px solid #eee', pb: 2, mb: 3 }}>
+                <Typography variant="h4" gutterBottom sx={{ color: '#4f46e5' }}>CashflowCrunch Analysis</Typography>
+                <Typography variant="h6">{property.address}</Typography>
+                <Typography variant="body2" color="textSecondary">Report Generated: {new Date().toLocaleDateString()}</Typography>
       </Box>
 
-      {/* Property & Assumptions Section */}
-      <Paper elevation={0} sx={sectionStyle}>
-        <Typography sx={headingStyle}>Property & Assumptions</Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Box sx={{ flex: '1 1 50%', pageBreakInside: 'avoid' as 'avoid' }}>
-            {property.thumbnail && (
-              <Box sx={{ mb: 2 }}>
-                <img
-                  src={property.thumbnail}
-                  alt={property.address}
-                  style={{
-      width: '100%', 
-                    maxHeight: '200px',
-                    objectFit: 'cover',
-                    borderRadius: '4px',
-                    border: '1px solid #eee'
-                  }}
-                />
-              </Box>
-            )}
-            <Typography sx={subHeadingStyle}>Property Details</Typography>
-            <Typography sx={bodyStyle}>Beds/Baths: {property.bedrooms} / {property.bathrooms}</Typography>
-            <Typography sx={bodyStyle}>Sq Ft: {property.sqft.toLocaleString()}</Typography>
-            <Typography sx={bodyStyle}>Est. Rent: {formatCurrency(rentValue)}</Typography>
-            {/* Ratio based on effective price */}
-            <Typography sx={bodyStyle}>Ratio: {formatPercent((rentValue * 12 / effectivePrice) * 100)}</Typography>
-            {property.days_on_market !== null && (
-               <Typography sx={bodyStyle}>Days on Market: {property.days_on_market}</Typography>
-            )}
-          </Box>
-          <Box sx={{ flex: '1 1 50%', pageBreakInside: 'avoid' as 'avoid' }}>
-            <Typography sx={subHeadingStyle}>Key Assumptions</Typography>
-            <Typography sx={bodyStyle}>Interest Rate: {settings.interestRate}%</Typography>
-            <Typography sx={bodyStyle}>Loan Term: {settings.loanTerm} years</Typography>
-            <Typography sx={bodyStyle}>Down Payment: {settings.downPaymentPercent}% ({formatCurrency(downPaymentAmount)})</Typography>
-            <Typography sx={bodyStyle}>Tax/Insurance: {settings.taxInsurancePercent}%</Typography>
-            <Typography sx={bodyStyle}>Vacancy: {settings.vacancyPercent}%</Typography>
-            <Typography sx={bodyStyle}>CapEx: {settings.capexPercent}%</Typography>
-            <Typography sx={bodyStyle}>Management: {settings.propertyManagementPercent}%</Typography>
-            <Typography sx={bodyStyle}>Initial Rehab: {formatCurrency(settings.rehabAmount)}</Typography>
-          </Box>
-        </Box>
-      </Paper>
-
-      {/* Monthly Cashflow & Investment */}
-      <Paper elevation={0} sx={sectionStyle}>
-         <Typography sx={headingStyle}>Monthly Cashflow & Initial Investment</Typography>
-         <Box sx={{ display: 'flex', gap: 3 }}>
-           <Box sx={{ flex: '1 1 50%', pageBreakInside: 'avoid' as 'avoid' }}>
-              <Typography sx={subHeadingStyle}>Income & Expenses</Typography>
-              <Table size="small" sx={{ mb: 1.5 }}>
-                <TableBody>
-                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
-                    <TableCell sx={tableCellStyle}>Rental Income:</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(rentValue)}</TableCell>
-                  </TableRow>
-                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
-                    <TableCell sx={tableCellStyle}>Mortgage (P&I):</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyMortgage)}</TableCell>
-                  </TableRow>
-                   <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
-                    <TableCell sx={tableCellStyle}>Tax/Insurance:</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyTaxInsurance)}</TableCell>
-                  </TableRow>
-                   <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
-                    <TableCell sx={tableCellStyle}>Vacancy ({settings.vacancyPercent}%):</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyVacancy)}</TableCell>
-                  </TableRow>
-                   <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
-                    <TableCell sx={tableCellStyle}>CapEx ({settings.capexPercent}%):</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyCapex)}</TableCell>
-                  </TableRow>
-                   <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
-                    <TableCell sx={tableCellStyle}>Management ({settings.propertyManagementPercent}%):</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>-{formatCurrency(cashflow.monthlyPropertyManagement)}</TableCell>
-                  </TableRow>
-                   <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid', bgcolor: '#f8f8f8' }}>
-                    <TableCell sx={{...tableCellStyle, fontWeight: 'bold'}}>Monthly Cashflow:</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right', fontWeight: 'bold', color: cashflow.monthlyCashflow >= 0 ? '#047857' : '#dc2626'}}>
-                      {formatCurrency(cashflow.monthlyCashflow)}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-           </Box>
-           <Box sx={{ flex: '1 1 50%', pageBreakInside: 'avoid' as 'avoid' }}>
-              <Typography sx={subHeadingStyle}>Investment & Yr 1 Return</Typography>
+            {/* Key Info & QR Code */}
+            <Grid container spacing={3} sx={{ mb: 3 }}>
+                <Grid size={{ xs: 12, md: 8 }}>
+                    <Typography variant="h5" gutterBottom>Summary</Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
               <Table size="small">
                 <TableBody>
-                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
-                    <TableCell sx={tableCellStyle}>Down Payment:</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(downPaymentAmount)}</TableCell>
-                  </TableRow>
-                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
-                    <TableCell sx={tableCellStyle}>Initial Rehab:</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(settings.rehabAmount)}</TableCell>
-                  </TableRow>
-                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
-                    <TableCell sx={tableCellStyle}>Closing Costs (est. 3%):</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right'}}>{formatCurrency(closingCosts)}</TableCell>
-                  </TableRow>
-                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid', bgcolor: '#f0f7ff' }}>
-                    <TableCell sx={{...tableCellStyle, fontWeight: 'bold'}}>Total Investment:</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(initialInvestment)}</TableCell>
-                  </TableRow>
-                   <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
-                    <TableCell sx={tableCellStyle}>Annual Cashflow:</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right', color: cashflow.annualCashflow >= 0 ? '#047857' : '#dc2626'}}>
-                      {formatCurrency(cashflow.annualCashflow)}
-                    </TableCell>
-                  </TableRow>
-                  <TableRow sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
-                    <TableCell sx={{...tableCellStyle, fontWeight: 'bold'}}>Cash-on-Cash Return:</TableCell>
-                    <TableCell sx={{...tableCellStyle, textAlign: 'right', fontWeight: 'bold', color: cashflow.cashOnCashReturn >= 0 ? '#047857' : '#dc2626'}}>
-                       {formatPercent(cashflow.cashOnCashReturn)}
-                     </TableCell>
-                  </TableRow>
+                                <TableRow><TableCell>Price</TableCell><TableCell align="right">{formatCurrency(effectivePrice)}</TableCell></TableRow>
+                                <TableRow><TableCell>Rent Estimate</TableCell><TableCell align="right">{formatCurrency(customRentEstimate ?? property.rent_estimate)}</TableCell></TableRow>
+                                <TableRow><TableCell>Beds / Baths / SqFt</TableCell><TableCell align="right">{`${property.bedrooms} / ${property.bathrooms} / ${property.sqft.toLocaleString()}`}</TableCell></TableRow>
+                                <TableRow><TableCell>Monthly Cashflow</TableCell><TableCell align="right" sx={{ fontWeight: 'bold', color: cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(cashflow.monthlyCashflow)}</TableCell></TableRow>
+                                <TableRow><TableCell>Cash-on-Cash Return</TableCell><TableCell align="right" sx={{ fontWeight: 'bold', color: cashflow.cashOnCashReturn >= 0 ? 'success.main' : 'error.main' }}>{formatPercent(cashflow.cashOnCashReturn)}</TableCell></TableRow>
+                                <TableRow><TableCell>Projected {yearsToProject}-Year IRR</TableCell><TableCell align="right" sx={{ fontWeight: 'bold' }}>{formatPercent(irr)}</TableCell></TableRow>
                 </TableBody>
               </Table>
-           </Box>
-         </Box>
-      </Paper>
+                    </TableContainer>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }} sx={{ textAlign: 'center' }}>
+                    <Typography variant="caption" display="block" gutterBottom>Scan to view live analysis:</Typography>
+                    <QRCodeSVG value={shareableURL} size={128} style={{ marginBottom: '8px' }} />
+                </Grid>
+            </Grid>
 
-      {/* Long-Term Chart Visualization */}
-      <Paper elevation={0} sx={{...sectionStyle, pageBreakBefore: 'always'}}>
-        <Typography sx={headingStyle}>Projection: Value, Equity & Cashflow ({yearsToProject} Years)</Typography>
-        <Typography sx={bodyStyle}>
-          Assumes {rentAppreciationRate}% rent appreciation & {propertyValueIncreaseRate}% value increase annually.
-        </Typography>
-        <Box sx={{ height: 260, mt: 1.5, pageBreakInside: 'avoid' as 'avoid' }}>
-          <SimpleChart data={longTermChartData} height={260} />
-        </Box>
-      </Paper>
-
-      {/* Monthly Cashflow Sankey Chart */}
-      <Paper elevation={0} sx={sectionStyle}>
-        <Typography sx={headingStyle}>Monthly Cashflow Breakdown</Typography>
-        <Box sx={{ height: 525, pageBreakInside: 'avoid' as 'avoid' }}>
-          <CashflowSankeyChart
-            data={sankeyData}
-            formatCurrency={formatCurrency}
-          />
-        </Box>
-      </Paper>
-
-      {/* Long-term Analysis Table */}
-      <Paper elevation={0} sx={{...sectionStyle, pageBreakBefore: 'always'}}>
-        <Typography sx={headingStyle}>Yearly Projection Highlights</Typography>
-        <TableContainer sx={{ maxHeight: '350px', pageBreakInside: 'avoid' as 'avoid' }}>
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={tableHeaderCellStyle}>Year</TableCell>
-                <TableCell sx={tableHeaderCellStyle} align="right">Prop. Value</TableCell>
-                <TableCell sx={tableHeaderCellStyle} align="right">Equity</TableCell>
-                <TableCell sx={tableHeaderCellStyle} align="right">Ann. Rent</TableCell>
-                <TableCell sx={tableHeaderCellStyle} align="right">Ann. Cashflow</TableCell>
-                <TableCell sx={tableHeaderCellStyle} align="right">ROI (Cash)</TableCell>
-                <TableCell sx={tableHeaderCellStyle} align="right">ROI (Total)</TableCell>
-              </TableRow>
-            </TableHead>
+             {/* Cashflow Breakdown */}
+            <Typography variant="h5" gutterBottom sx={{ mt: 3 }}>Monthly Cashflow Breakdown</Typography>
+            <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
+                <Table size="small">
             <TableBody>
-              {longTermData
-                .filter(data => [1, 5, 10, 15, 20, 25, 30].includes(data.year))
-                .map((data) => (
-                <TableRow key={data.year} sx={{ pageBreakInside: 'avoid' as 'avoid' }}>
-                  <TableCell sx={tableCellStyle}>{data.year}</TableCell>
-                  <TableCell sx={tableCellStyle} align="right">{formatCurrency(data.propertyValue)}</TableCell>
-                  <TableCell sx={tableCellStyle} align="right">{formatCurrency(data.equity)}</TableCell>
-                  <TableCell sx={tableCellStyle} align="right">{formatCurrency(data.annualRent)}</TableCell>
-                  <TableCell sx={{ ...tableCellStyle, color: data.yearlyCashflow >= 0 ? '#047857' : '#dc2626' }} align="right">
-                    {formatCurrency(data.yearlyCashflow)}
-                  </TableCell>
-                  <TableCell sx={{ ...tableCellStyle, color: data.roi >= 0 ? '#047857' : '#dc2626' }} align="right">
-                    {formatPercent(data.roi)}
-                  </TableCell>
-                  <TableCell sx={{ ...tableCellStyle, color: data.roiWithEquity >= 0 ? '#047857' : '#dc2626' }} align="right">
-                    {formatPercent(data.roiWithEquity)}
-                  </TableCell>
-                </TableRow>
-              ))}
+                        <TableRow><TableCell>Rent Income</TableCell><TableCell align="right">{formatCurrency(customRentEstimate ?? property.rent_estimate)}</TableCell></TableRow>
+                        <TableRow><TableCell>Mortgage (P&I)</TableCell><TableCell align="right">({formatCurrency(cashflow.monthlyMortgage)})</TableCell></TableRow>
+                        <TableRow><TableCell>Taxes & Insurance</TableCell><TableCell align="right">({formatCurrency(cashflow.monthlyTaxInsurance)})</TableCell></TableRow>
+                        <TableRow><TableCell>Vacancy ({settings.vacancyPercent}%)</TableCell><TableCell align="right">({formatCurrency(cashflow.monthlyVacancy)})</TableCell></TableRow>
+                        <TableRow><TableCell>CapEx ({settings.capexPercent}%)</TableCell><TableCell align="right">({formatCurrency(cashflow.monthlyCapex)})</TableCell></TableRow>
+                        <TableRow><TableCell>Property Mgmt ({settings.propertyManagementPercent}%)</TableCell><TableCell align="right">({formatCurrency(cashflow.monthlyPropertyManagement)})</TableCell></TableRow>
+                        <TableRow sx={{ borderTop: '1px solid #eee' }}><TableCell sx={{ fontWeight: 'bold' }}>Est. Monthly Cashflow</TableCell><TableCell align="right" sx={{ fontWeight: 'bold', color: cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(cashflow.monthlyCashflow)}</TableCell></TableRow>
             </TableBody>
           </Table>
         </TableContainer>
-      </Paper>
 
-      {/* IRR Summary Panel */}
-      <Paper elevation={0} sx={sectionStyle}>
-        <Typography sx={headingStyle}>Internal Rate of Return (IRR) by Holding Period</Typography>
-        <Typography sx={{...bodyStyle, color: '#6b7280', mb: 1.5}}>
-          Annualized return considering cash flows and equity growth upon sale.
+            {/* Add IRR Summary Panel */}
+            <Box sx={{ mt: 3, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+              <Typography variant="h6" gutterBottom sx={{ color: '#333', fontWeight: 'medium' }}>
+                Internal Rate of Return (IRR) by Holding Period
         </Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '0.2in', justifyContent: 'space-between', pageBreakInside: 'avoid' as 'avoid' }}>
+              
+              <Typography variant="body2" gutterBottom sx={{ color: '#666', mb: 2 }}>
+                IRR represents the annualized rate of return considering all cash flows and the final property value, accounting for the time value of money.
+              </Typography>
+              
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'space-between', pageBreakInside: 'avoid' as 'avoid' }}>
           {[1, 5, 10, 15, 30].map(holdingPeriod => {
+                  // Calculate IRR for this holding period
             const relevantCashflows = longTermData
               .filter(data => data.year <= holdingPeriod)
               .map(data => data.yearlyCashflow);
+                    
+                  // Get final property value and equity for the exit scenario
             const finalYearData = longTermData.find(data => data.year === holdingPeriod);
-            const finalEquityValue = finalYearData ? finalYearData.equity : 0;
-            // Ensure the result of calculateIRR is assigned to 'irr'
-            const irr = calculateIRR(initialInvestment, relevantCashflows, finalEquityValue);
-            const color = irr < 0 ? '#ef4444' : irr < 8 ? '#f97316' : irr < 15 ? '#10b981' : '#4f46e5';
+                  const finalEquity = finalYearData ? finalYearData.equity : 0;
+                  
+                  // Assume sale at end of period and use equity as final value
+                  // Make sure to use the totalInvestment calculated earlier
+                  const irr = calculateIRR(
+                    cashflow.totalInitialInvestment, // Use total investment including rehab
+                    relevantCashflows,
+                    finalEquity
+                  );
+                  
+                  // Generate color based on IRR value
+                  const color = irr < 0 ? '#ef4444' : 
+                                irr < 8 ? '#f97316' : 
+                                irr < 15 ? '#10b981' : 
+                                '#4f46e5';
 
             return (
               <Box
                 key={holdingPeriod}
                 sx={{
                   flex: '1',
-                  minWidth: '80px',
+                        minWidth: '150px', 
                   textAlign: 'center',
-                  p: 1,
-                  bgcolor: '#fafafa',
+                        p: 2,
+                        bgcolor: 'white',
                   borderRadius: 1,
-                  border: '1px solid #eee'
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                 }}
               >
-                <Typography sx={{ color: '#555', fontWeight: 'bold', fontSize: '9pt' }}>
-                  {holdingPeriod} Yr
+                      <Typography variant="subtitle1" color="#555">
+                        {holdingPeriod} Year{holdingPeriod > 1 ? 's' : ''}
                 </Typography>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', color, fontSize: '11pt' }}>
-                  {irr.toFixed(1)}%
+                      <Typography 
+                        variant="h5" 
+                        fontWeight="bold" 
+                        sx={{ color }}
+                      >
+                        {irr.toFixed(2)}%
+                      </Typography>
+                      <Typography variant="body2" color="#777" fontSize="0.8rem">
+                        {irr < 0 ? 'Poor' : 
+                         irr < 8 ? 'Moderate' : 
+                         irr < 15 ? 'Good' : 
+                         'Excellent'}
                 </Typography>
     </Box>
   );
           })}
         </Box>
-      </Paper>
+              
+              <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #e0e0e0' }}>
+                <Typography variant="body2" color="#666">
+                  <strong>Assumptions:</strong> IRR calculations include annual cash flows and assume property sale at the end of the holding period with proceeds equal to your equity. Sale costs (agent fees, closing costs, etc.) are not factored in. Initial rehab cost is included in the initial investment. {/* Added note about rehab cost */}
+                </Typography>
+              </Box>
+            </Box>
 
-      {/* Notes Section */}
-      {notes && notes.trim() !== '' && (
-        <Paper elevation={0} sx={{...sectionStyle, pageBreakBefore: 'auto', pageBreakInside: 'avoid' as 'avoid'}}>
-          <Typography sx={headingStyle}>Notes</Typography>
-          <Typography sx={{...bodyStyle, whiteSpace: 'pre-line'}}>
+            {/* Investment Summary Table */}
+            <Typography variant="h5" gutterBottom sx={{ mt: 3 }}>Initial Investment</Typography>
+            <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
+                 <Table size="small">
+                     <TableBody>
+                         <TableRow><TableCell>Down Payment ({settings.downPaymentPercent}%)</TableCell><TableCell align="right">{formatCurrency(cashflow.downPaymentAmount)}</TableCell></TableRow>
+                         <TableRow><TableCell>Est. Closing Costs (3%)</TableCell><TableCell align="right">{formatCurrency(cashflow.closingCosts)}</TableCell></TableRow>
+                         <TableRow><TableCell>Rehab Costs</TableCell><TableCell align="right">{formatCurrency(settings.rehabAmount)}</TableCell></TableRow>
+                         <TableRow sx={{ borderTop: '1px solid #eee' }}><TableCell sx={{ fontWeight: 'bold' }}>Total Estimated Investment</TableCell><TableCell align="right" sx={{ fontWeight: 'bold' }}>{formatCurrency(cashflow.totalInitialInvestment)}</TableCell></TableRow>
+                     </TableBody>
+                 </Table>
+            </TableContainer>
+
+            {/* Long Term Projections Table */}
+            <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
+                <Table size="small">
+                    <TableBody>
+                         {/* ... Table Body Rows ... */}                       
+                    </TableBody>
+                </Table>
+            </TableContainer>
+
+            {/* Notes */}
+            {notes && (
+                <Typography variant="body2" sx={{ mt: 3, color: '#666' }}>
             {notes}
           </Typography>
-        </Paper>
-      )}
+            )}
 
-      {/* Footer with QR Code */}
-      <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid #ccc', textAlign: 'center' }}>
-         <QRCodeSVG value={shareableURL} size={70} />
-         <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5, fontSize: '8pt' }}>
-           Scan QR code for live analysis: cashflowcrunch.com
+            {/* Footer */}
+            <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid #e0e0e0' }}>
+                <Typography variant="body2" color="#666">
+                    <strong>Note:</strong> This report is for informational purposes only and should not be considered as professional financial advice. Always consult with a financial advisor before making investment decisions.
          </Typography>
       </Box>
-    </Box>
-  );
-});
+        </div>
+    );
+};
 
-// --- Main Property Details Page Component ---
-interface PropertyDetailsPageProps {
-  properties: Property[];
-  calculateCashflow: (property: Property, settings: CashflowSettings) => Cashflow;
-  formatCurrency: (amount: number) => string;
-  formatPercent: (percent: number) => string;
-  defaultSettings: CashflowSettings;
-  handlePriceOverrideChange: (propertyId: string, newPriceString: string) => void;
-  // Add calculateIRR here if it's defined in App.tsx and needed globally
-  // calculateIRR: (initialInvestment: number, cashFlows: number[], finalEquity?: number) => number;
-}
+// Use the forwarded ref component
+const ForwardedPropertyPDFReport = React.forwardRef(PropertyPDFReport);
 
+// --- Main Component --- 
 const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   properties,
-  calculateCashflow,
-  formatCurrency,
-  formatPercent,
   defaultSettings,
-  handlePriceOverrideChange // Add handlePriceOverrideChange here
+  handlePriceOverrideChange
 }) => {
-  // Get property ID from URL parameters
   const { propertyId } = useParams<{ propertyId: string }>();
-  const location = useLocation();
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
-  
-  // --- State Hooks (Moved to top) ---
-  const [property, setProperty] = useState<Property | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const location = useLocation();
   const [customRentEstimate, setCustomRentEstimate] = useState<number | null>(null);
-  const [displayRent, setDisplayRent] = useState<string>('');
-  const [isRentEditing, setIsRentEditing] = useState(false);
-  const [userEditedRent, setUserEditedRent] = useState(false);
-  const [settings, setSettings] = useState<CashflowSettings>(defaultSettings);
-  const [rentAppreciationRate, setRentAppreciationRate] = useState<number>(3);  
-  const [propertyValueIncreaseRate, setPropertyValueIncreaseRate] = useState<number>(3);
-  const [yearsToProject, setYearsToProject] = useState<number>(30); // Default 30 years
-  const [showTextPreview, setShowTextPreview] = useState(false);
-  const [copySuccess, setCopySuccess] = useState('');
-  const [notes, setNotes] = useState('');
-  const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [isAssumptionsDrawerOpen, setIsAssumptionsDrawerOpen] = useState(false);
-  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [isInPortfolio, setIsInPortfolio] = useState<boolean>(false);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [projectionTab, setProjectionTab] = useState(0); // 0 for Chart, 1 for Table
   const [showPdfModal, setShowPdfModal] = useState(false);
-  const [isPriceEditing, setIsPriceEditing] = useState(false);
-  const [displayPrice, setDisplayPrice] = useState('');
-  const [overridePrice, setOverridePrice] = useState<number | undefined>(undefined);
+  const [notes, setNotes] = useState('');
+  const [yearsToProject, setYearsToProject] = useState(30);
+  const [rentAppreciationRate, setRentAppreciationRate] = useState(3);
+  const [propertyValueIncreaseRate, setPropertyValueIncreaseRate] = useState(3);
+  const [effectivePrice, setEffectivePrice] = useState(0); // DEPRECATED? Let's track usage. Used by PDF currently.
+  const [assumptionsDrawerOpen, setAssumptionsDrawerOpen] = useState(false);
+  const [portfolioSnackbarOpen, setPortfolioSnackbarOpen] = useState(false);
+  const [portfolioAction, setPortfolioAction] = useState<'added' | 'removed'>('added');
+  const drawerWidth = '300px';
   
-  // Calculate effective price, prioritizing override
-  const effectivePrice = useMemo(() => {
-    return overridePrice !== undefined ? overridePrice : (property?.price ?? 0);
-  }, [overridePrice, property?.price]);
+  // Create local copy of settings that can be modified per property
+  const [localSettings, setLocalSettings] = useState<CashflowSettings>({...defaultSettings});
+  const [savedMessage, setSavedMessage] = useState('');
   
-  // PDF generation
-  const pdfRef = useRef<HTMLDivElement>(null);
-  const { toPDF, targetRef } = usePDF({
-    // Conditionally generate filename only if property exists
-    filename: property && property.address ? `${property.address.replace(/\s+/g, '_')}_analysis.pdf` : 'property_analysis.pdf',
-  });
-  
-  // Scroll to top when component mounts
+  // Share URL state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareableURL, setShareableURL] = useState('');
+  const [shareURLCopied, setShareURLCopied] = useState(false);
+
+  // NEW: State for editable price (raw input)
+  const [editablePriceString, setEditablePriceString] = useState<string>(''); // Store as string for formatting
+  // NEW: State for the price used in calculations
+  const [currentAnalysisPrice, setCurrentAnalysisPrice] = useState<number | null>(null);
+  // NEW: State for price saving feedback
+  const [priceSaveStatus, setPriceSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+  // Add a useEffect to scroll to top on page load
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, []);
-  
-  // Load property data
-  useEffect(() => {
-    if (!propertyId) {
-      setError('Invalid property ID');
-      setLoading(false);
-      return;
-    }
-    
-    // First, check if there's encoded property data in the URL
-    const searchParams = new URLSearchParams(location.search);
-    const encodedData = searchParams.get('d') || searchParams.get('data'); // Support both 'd' (new) and 'data' (old)
-    const customRentParam = searchParams.get('re');
-    const hasCustomRent = customRentParam !== null;
-    
-    let loadedFromSearch = false; // Flag to track if loaded from search results
-    
-    if (encodedData) {
-      try {
-        const decodedProperty = decodePropertyFromURL(encodedData);
-        if (decodedProperty) {
-          setProperty(decodedProperty);
-          // Set notes if present in decoded data
-          if (decodedProperty.notes) {
-            setNotes(decodedProperty.notes);
-          }
-          setLoading(false);
-          
-          // Initialize custom rent if available
-          if (decodedProperty.rent_estimate) {
-            if (!customRentEstimate) {
-              setCustomRentEstimate(decodedProperty.rent_estimate);
-              setDisplayRent(formatCurrency(decodedProperty.rent_estimate));
-            }
-          }
-          return; // Exit early if loaded from URL data
-        }
-      } catch (error) {
-        console.error('Error loading property from URL data:', error);
-      }
-    }
-    
-    // If not loaded from URL data, try finding in properties array (search results)
-    const foundProperty = properties.find(p => p.property_id === propertyId);
-    
-    if (foundProperty) {
-      setProperty(foundProperty);
-      setLoading(false);
-      loadedFromSearch = true; // Mark as loaded from search
-      
-      // Initialize custom rent if available and not set by URL param
-      if (foundProperty.rent_estimate && !hasCustomRent && !customRentEstimate) {
-        setCustomRentEstimate(foundProperty.rent_estimate);
-        setDisplayRent(formatCurrency(foundProperty.rent_estimate));
-      }
-      
-      // Set notes from property object if they exist (e.g., previously bookmarked/saved)
-      if (foundProperty.notes) {
-          setNotes(foundProperty.notes);
-      }
-      // AUTO-EXPAND assumptions drawer if loaded from search
-      // setIsAssumptionsDrawerOpen(true); <-- Remove this
-      
-      return; // Exit early if loaded from search results
-    }
-    
-    // If not found in properties, try localStorage (likely a bookmark)
-    try {
-      const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
-      if (savedPropertiesStr) {
-        const savedProperties = JSON.parse(savedPropertiesStr);
-        const savedProperty = savedProperties[propertyId];
-        
-        if (savedProperty) {
-          setProperty(savedProperty);
-          setLoading(false);
-          
-          // Initialize custom rent if available and not set by URL param
-          if (savedProperty.rent_estimate && !hasCustomRent && !customRentEstimate) {
-            setCustomRentEstimate(savedProperty.rent_estimate);
-            setDisplayRent(formatCurrency(savedProperty.rent_estimate));
-          }
-          
-          // Set notes from saved property
-          if (savedProperty.notes) {
-            setNotes(savedProperty.notes);
-          }
-          
-          return; // Exit early if loaded from localStorage
-        }
-      }
-    } catch (error) {
-      console.error('Error loading property from localStorage:', error);
-    }
-    
-    // If property not found anywhere, set error
-    setError('Property not found');
-    setLoading(false);
-    
-  }, [propertyId, properties, formatCurrency, location.search]); // Dependencies remain the same
-  
-  // Update page title and load settings from localStorage
+  }, [propertyId]); // Re-run when propertyId changes (new property is loaded)
+
+  // Find the selected property
+  const property = useMemo(() => {
+    return properties.find(p => p.property_id === propertyId) || properties[0] || null;
+  }, [properties, propertyId]);
+
+  // PDF Hook - MOVED AFTER property definition
+  const { toPDF, targetRef: pdfTargetRef } = usePDF({
+    filename: property && property.address ? `${property.address.replace(/\s+/g, '_')}_CashflowCrunch_Report.pdf` : 'CashflowCrunch-Report.pdf',
+  });
+
+  // Initialize editablePriceString and currentAnalysisPrice when property loads or changes
   useEffect(() => {
     if (property) {
-      document.title = `${property.address} | CashflowCrunch`;
-      
-      // Check if there are saved settings for this property in localStorage
-      try {
-        const savedSettingsStr = localStorage.getItem('rentToolFinder_settings');
-        if (savedSettingsStr) {
-          const savedSettings = JSON.parse(savedSettingsStr);
-          
-          // If we have saved settings for this property, use them
-          if (savedSettings[property.property_id]) {
-            // Check if we have cashflow settings saved
-            const propertySettings = savedSettings[property.property_id];
-            
-            // Only apply settings if not already applied from URL
-            const urlParams = new URLSearchParams(location.search);
-            const hasSettingsInUrl = urlParams.has('ir') || urlParams.has('lt') || 
-                                    urlParams.has('dp') || urlParams.has('ti') || 
-                                    urlParams.has('vc') || urlParams.has('cx') || 
-                                    urlParams.has('pm') || urlParams.has('rh'); // Added rh check
-            
-            // Apply saved cashflow settings if valid and no URL settings
-            if (!hasSettingsInUrl) {
-              // Update cashflow settings
-              const hasValidSettings = propertySettings.interestRate !== undefined && 
-                                      propertySettings.loanTerm !== undefined &&
-                                      propertySettings.downPaymentPercent !== undefined;
-                                      // No need to check rehabAmount explicitly, it's handled by spread
-              
-              if (hasValidSettings) {
-                setSettings(prev => ({
-                  ...prev,
-                  ...propertySettings // Spread saved settings, including rehabAmount if present
-                }));
-              }
-            }
-            
-            // Check for projection settings
-            const hasProjectionSettingsInUrl = urlParams.has('ra') || urlParams.has('pvi');
-            
-            if (!hasProjectionSettingsInUrl && propertySettings.projectionSettings) {
-              // Apply saved projection settings
-              const projSettings = propertySettings.projectionSettings;
-              
-              if (projSettings.rentAppreciationRate !== undefined) {
-                setRentAppreciationRate(projSettings.rentAppreciationRate);
-              }
-              
-              if (projSettings.propertyValueIncreaseRate !== undefined) {
-                setPropertyValueIncreaseRate(projSettings.propertyValueIncreaseRate);
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error loading settings from localStorage:', error);
-      }
-    } else {
-      document.title = 'Property Details | CashflowCrunch';
-    }
-    
-    return () => {
-      document.title = 'CashflowCrunch';
-    };
-  }, [property, location.search]);
-
-  // Handle URL query parameters for settings (including notes if passed directly)
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    
-    // Check if there are settings in the URL
-    const ir = searchParams.get('ir'); // interest rate
-    const lt = searchParams.get('lt'); // loan term
-    const dp = searchParams.get('dp'); // down payment
-    const ti = searchParams.get('ti'); // tax insurance
-    const vc = searchParams.get('vc'); // vacancy
-    const cx = searchParams.get('cx'); // capex
-    const pm = searchParams.get('pm'); // property management
-    const re = searchParams.get('re'); // custom rent estimate
-    const rh = searchParams.get('rh'); // rehab amount - Added
-    
-    // Update settings if values exist in URL
-    const newSettings = {...settings}; // Start with current settings to preserve any already set
-    let updated = false;
-    
-    if (ir) { 
-      const val = parseFloat(ir);
-      if (!isNaN(val) && val >= 0.1 && val <= 15) {
-        newSettings.interestRate = val;
-        updated = true;
-      }
-    }
-    
-    if (lt) {
-      const val = parseInt(lt, 10);
-      if (!isNaN(val) && val >= 5 && val <= 40) {
-        newSettings.loanTerm = val;
-        updated = true;
-      }
-    }
-    
-    if (dp) {
-      const val = parseInt(dp, 10);
-      if (!isNaN(val) && val >= 0 && val <= 100) {
-        newSettings.downPaymentPercent = val;
-        updated = true;
-      }
-    }
-    
-    if (ti) {
-      const val = parseFloat(ti);
-      if (!isNaN(val) && val >= 0 && val <= 5) {
-        newSettings.taxInsurancePercent = val;
-        updated = true;
-      }
-    }
-    
-    if (vc) {
-      const val = parseInt(vc, 10);
-      if (!isNaN(val) && val >= 0 && val <= 10) {
-        newSettings.vacancyPercent = val;
-        updated = true;
-      }
-    }
-    
-    if (cx) {
-      const val = parseInt(cx, 10);
-      if (!isNaN(val) && val >= 0 && val <= 10) {
-        newSettings.capexPercent = val;
-        updated = true;
-      }
-    }
-    
-    if (pm) {
-      const val = parseInt(pm, 10);
-      if (!isNaN(val) && val >= 0 && val <= 20) {
-        newSettings.propertyManagementPercent = val;
-        updated = true;
-      }
-    }
-    
-    // Handle rehab amount parameter
-    if (rh) {
-      const val = parseFloat(rh);
-      // Updated max rehab amount range
-      if (!isNaN(val) && val >= 0 && val <= 100000) { // Increased max to 100k
-        newSettings.rehabAmount = val;
-        updated = true;
-      }
-    }
-    
-    if (updated) {
-      setSettings(newSettings);
-    }
-    
-    // Check for custom rent estimate - Only set this on initial load and if user hasn't edited
-    // Only update from URL if the user hasn't manually edited the rent
-    if (re && property && !userEditedRent) {
-      const val = parseFloat(re);
-      if (!isNaN(val) && val > 0) {
-        setCustomRentEstimate(val);
-        setDisplayRent(formatCurrency(val));
-      }
-    }
-
-    // Check for notes param (nt) - this might override notes loaded from 'data' if both exist
-    const notesParam = searchParams.get('nt');
-    if (notesParam) {
-        // Check if notes were already set by the main loading effect
-        // Only update if the param value is different or notes are currently empty
-        const decodedNotes = decodeURIComponent(notesParam);
-        if (decodedNotes !== notes) {
-            setNotes(decodedNotes);
-        }
-    }
-  }, [location.search, defaultSettings, property, formatCurrency, userEditedRent, notes, customRentEstimate]); // Added customRentEstimate
-  
-  // Add useEffect for long-term projection settings from URL
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    
-    // Check if there are long-term projection settings in the URL
-    const ra = searchParams.get('ra'); // rent appreciation
-    const pvi = searchParams.get('pvi'); // property value increase
-    
-    // Update settings if values exist in URL
-    if (ra) {
-      const val = parseFloat(ra);
-      if (!isNaN(val) && val >= 0 && val <= 10) {
-        setRentAppreciationRate(val);
-      }
-    }
-    
-    if (pvi) {
-      const val = parseFloat(pvi);
-      if (!isNaN(val) && val >= 0 && val <= 10) {
-        setPropertyValueIncreaseRate(val);
-      }
-    }
-  }, [location.search]);
-
-  // Handlers for rent input
-  const handleRentChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    // Remove currency formatting for editing
-    const numericValue = parseFloat(value.replace(/[^0-9.]/g, ''));
-    
-    if (!isNaN(numericValue)) {
-      setCustomRentEstimate(numericValue);
-      // During editing, show the raw value for easier editing
-      setDisplayRent(value);
-      // Flag that user has edited the rent
-      setUserEditedRent(true);
-    } else {
-      setDisplayRent(value === '$' ? '' : value);
+      const initialPrice = property.price;
+      setCurrentAnalysisPrice(initialPrice);
+      setEditablePriceString(formatCurrency(initialPrice)); // Format initially (removed options)
     }
   }, [property]);
 
-  const handleRentBlur = () => {
-    setIsRentEditing(false);
+  // Check if the property is in portfolio...
+  useEffect(() => {
+    if (!property) return;
     
-    // When focus is lost, format the value properly
-    if (customRentEstimate) {
-      setDisplayRent(formatCurrency(customRentEstimate));
-      
-      // Update URL with new rent estimate
-      const currentUrl = new URL(window.location.href);
-      const searchParams = new URLSearchParams(currentUrl.search);
-      searchParams.set('re', customRentEstimate.toString());
-      
-      const newUrl = `${currentUrl.pathname}?${searchParams.toString()}${currentUrl.hash}`;
-      window.history.replaceState({}, '', newUrl);
-      
-      // If this is a bookmarked or shared property, update the localStorage version too
-      if (property) {
-        // Get existing saved properties
-        try {
-          const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
-          const savedProperties = savedPropertiesStr ? JSON.parse(savedPropertiesStr) : {};
+    try {
+      const portfolioStr = localStorage.getItem('rentToolFinder_portfolio');
+      if (portfolioStr) {
+        const portfolio = JSON.parse(portfolioStr);
+        const portfolioEntry = portfolio[property.property_id];
+        
+        if (portfolioEntry) {
+          setIsInPortfolio(true);
           
-          // If this property is in localStorage, update its rent value
-          if (savedProperties[property.property_id]) {
-            savedProperties[property.property_id] = {
-              ...savedProperties[property.property_id],
-              rent_estimate: customRentEstimate
-            };
-            localStorage.setItem('rentToolFinder_properties', JSON.stringify(savedProperties));
+          // Load custom settings from portfolio
+          if (portfolioEntry.portfolioAssumptions) {
+            const savedAssumptions = portfolioEntry.portfolioAssumptions;
+            
+            // Update local settings with saved values
+            setLocalSettings(prevSettings => ({
+              ...prevSettings,
+              interestRate: savedAssumptions.interestRate ?? defaultSettings.interestRate,
+              loanTerm: savedAssumptions.loanTerm ?? defaultSettings.loanTerm,
+              downPaymentPercent: savedAssumptions.downPaymentPercent ?? defaultSettings.downPaymentPercent,
+              taxInsurancePercent: savedAssumptions.taxInsurancePercent ?? defaultSettings.taxInsurancePercent,
+              vacancyPercent: savedAssumptions.vacancyPercent ?? defaultSettings.vacancyPercent,
+              capexPercent: savedAssumptions.capexPercent ?? defaultSettings.capexPercent,
+              propertyManagementPercent: savedAssumptions.propertyManagementPercent ?? defaultSettings.propertyManagementPercent,
+              rehabAmount: savedAssumptions.rehabAmount ?? defaultSettings.rehabAmount
+            }));
+            
+            // Load price from portfolio if different - This needs refinement based on handleSavePrice logic
+            // const savedPrice = portfolioEntry.property.price;
+            // if (savedPrice !== undefined && savedPrice !== currentAnalysisPrice) {
+            //   setCurrentAnalysisPrice(savedPrice);
+            //   setEditablePriceString(formatCurrency(savedPrice, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+            // }
+            
+            // Update other settings if they exist
+            if (savedAssumptions.rentEstimate) setCustomRentEstimate(savedAssumptions.rentEstimate);
+            if (savedAssumptions.yearsToProject) setYearsToProject(savedAssumptions.yearsToProject);
+            if (savedAssumptions.rentAppreciationRate) setRentAppreciationRate(savedAssumptions.rentAppreciationRate);
+            if (savedAssumptions.propertyValueIncreaseRate) setPropertyValueIncreaseRate(savedAssumptions.propertyValueIncreaseRate);
+            
+            // Load notes if any
+            if (portfolioEntry.property.notes) {
+              setNotes(portfolioEntry.property.notes);
+            }
           }
-        } catch (error) {
-          console.error('Error updating property in localStorage:', error);
+        } else {
+          setIsInPortfolio(false);
+          // Reset to default settings if not in portfolio
+          setLocalSettings({...defaultSettings});
+          }
+        }
+      } catch (error) {
+      console.error('Error checking portfolio status:', error);
+    }
+  }, [property, defaultSettings]);
+
+  // Generic handler for slider changes
+  const handleSettingChange = (settingKey: keyof CashflowSettings) => (_: Event | React.SyntheticEvent, newValue: number | number[]) => {
+    const value = typeof newValue === 'number' ? newValue : newValue[0];
+    setLocalSettings(prev => ({
+      ...prev,
+      [settingKey]: value
+    }));
+  };
+
+  // NEW: Handler to save the edited price
+  const handleSavePrice = useCallback(() => {
+    if (!property) return;
+
+    const parsedPrice = parseFloat(editablePriceString.replace(/[^\d.-]/g, ''));
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      // Handle invalid input if necessary (e.g., show error)
+      console.error("Invalid price entered");
+      return;
+    }
+
+    setPriceSaveStatus('saving');
+    setCurrentAnalysisPrice(parsedPrice); // Update the price used for analysis
+
+    // Update portfolio if the property is already saved
+    if (isInPortfolio) {
+      try {
+        const portfolioStr = localStorage.getItem('rentToolFinder_portfolio');
+        const portfolio = portfolioStr ? JSON.parse(portfolioStr) : {};
+        if (portfolio[property.property_id]) {
+          portfolio[property.property_id].property.price = parsedPrice; // Update the price in the snapshot
+          localStorage.setItem('rentToolFinder_portfolio', JSON.stringify(portfolio));
+        }
+      } catch (error) {
+        console.error('Error updating price in portfolio:', error);
+        // Optionally revert price or show error to user
+      }
+    }
+
+    // Provide feedback
+    setTimeout(() => {
+      setPriceSaveStatus('saved');
+      setTimeout(() => setPriceSaveStatus('idle'), 2000); // Reset after 2 seconds
+    }, 300); // Simulate save time
+
+  }, [editablePriceString, property, isInPortfolio]);
+
+  // Save current settings to portfolio
+  const saveSettingsToPortfolio = () => {
+    if (!property || currentAnalysisPrice === null) return; // Check currentAnalysisPrice
+
+    try {
+      // Get current portfolio
+      const portfolioStr = localStorage.getItem('rentToolFinder_portfolio');
+      const portfolio = portfolioStr ? JSON.parse(portfolioStr) : {};
+      
+      // Create or update portfolio entry
+      const portfolioEntry: PortfolioEntry = portfolio[property.property_id] || {
+        property: { ...property, notes },
+        portfolioAssumptions: {},
+        dateAdded: new Date().toISOString()
+      };
+      
+      // Update property snapshot price when saving settings
+      portfolioEntry.property.price = currentAnalysisPrice;
+      
+      // Update with current settings
+      portfolioEntry.portfolioAssumptions = {
+        interestRate: localSettings.interestRate,
+        loanTerm: localSettings.loanTerm,
+        downPaymentPercent: localSettings.downPaymentPercent,
+        taxInsurancePercent: localSettings.taxInsurancePercent,
+        vacancyPercent: localSettings.vacancyPercent,
+        capexPercent: localSettings.capexPercent,
+        propertyManagementPercent: localSettings.propertyManagementPercent,
+        rehabAmount: localSettings.rehabAmount,
+        rentEstimate: customRentEstimate ?? property.rent_estimate,
+        yearsToProject,
+        rentAppreciationRate,
+        propertyValueIncreaseRate
+      };
+      
+      // Update notes
+      portfolioEntry.property.notes = notes;
+      
+      // Save back to portfolio
+      portfolio[property.property_id] = portfolioEntry;
+      // Log the object before stringifying to debug potential issues
+      console.log('Attempting to save portfolio object:', JSON.stringify(portfolio, null, 2)); // Use pretty print for readability
+      localStorage.setItem('rentToolFinder_portfolio', JSON.stringify(portfolio));
+      
+      // Show saved message
+      setSavedMessage('Settings saved to this property!');
+      setTimeout(() => setSavedMessage(''), 3000);
+      
+      // Update portfolio status
+      setIsInPortfolio(true);
+      } catch (error) {
+      console.error('Error saving settings to portfolio:', error);
+    }
+  };
+
+  // Portfolio handlers
+  const togglePortfolio = () => {
+    if (!property || currentAnalysisPrice === null) return; // Check currentAnalysisPrice
+
+    try {
+      const portfolioData = localStorage.getItem('rentToolFinder_portfolio');
+      // Log the raw data fetched from localStorage
+      console.log('Raw data from localStorage:', portfolioData);
+      const portfolio: Record<string, PortfolioEntry> = portfolioData ? JSON.parse(portfolioData) : {};
+
+      const propertyId = property.property_id;
+
+      if (portfolio[propertyId]) {
+        // Remove property from portfolio
+        delete portfolio[propertyId];
+        // Log the object before stringifying
+        console.log('Attempting to save portfolio object (removal):', JSON.stringify(portfolio, null, 2)); 
+        localStorage.setItem('rentToolFinder_portfolio', JSON.stringify(portfolio));
+        setIsInPortfolio(false);
+        setPortfolioAction('removed');
+    } else {
+        // Add property to portfolio
+        // Create a clean, serializable snapshot of essential data
+        const propertySnapshot: Property & { notes?: string } = {
+          // --- Fields from Property type ---
+          property_id: property.property_id,
+          address: property.address,
+          // city: property.city, // Does not exist
+          // state: property.state, // Does not exist
+          // zipcode: property.zipcode, // Does not exist
+          latitude: property.latitude,
+          longitude: property.longitude,
+          price: currentAnalysisPrice, // USE currentAnalysisPrice
+          // original_price: property.original_price, // Does not exist
+          bedrooms: property.bedrooms, // Correct field name
+          bathrooms: property.bathrooms, // Correct field name
+          sqft: property.sqft,
+          // lot_size: property.lot_size, // Does not exist
+          // year_built: property.year_built, // Does not exist
+          // property_type: property.property_type, // Does not exist
+          // description: property.description, // Does not exist
+          url: property.url, // Correct field name
+          thumbnail: property.thumbnail, // Correct field name
+          photo_url: property.photo_url, // Use this if available
+          // mls_id: property.mls_id, // Does not exist
+          // status: property.status, // Does not exist
+          days_on_market: property.days_on_market,
+          // broker_name: property.broker_name, // Does not exist
+          rent_estimate: customRentEstimate ?? property.rent_estimate, // Use custom rent if set
+          ratio: property.ratio, // Include ratio if needed for portfolio display
+          rent_source: property.rent_source,
+          notes: notes, // Include user notes
+        };
+
+        const portfolioEntry: PortfolioEntry = {
+          property: propertySnapshot, // Use the clean snapshot
+          portfolioAssumptions: { // Store the *current* settings used on this page
+            interestRate: localSettings.interestRate,
+            loanTerm: localSettings.loanTerm,
+            downPaymentPercent: localSettings.downPaymentPercent,
+            taxInsurancePercent: localSettings.taxInsurancePercent,
+            vacancyPercent: localSettings.vacancyPercent,
+            capexPercent: localSettings.capexPercent,
+            propertyManagementPercent: localSettings.propertyManagementPercent,
+            rehabAmount: localSettings.rehabAmount,
+            rentEstimate: customRentEstimate ?? property.rent_estimate, // Redundant but explicit
+            // Store long-term projection settings as well
+            yearsToProject: yearsToProject,
+            rentAppreciationRate: rentAppreciationRate,
+            propertyValueIncreaseRate: propertyValueIncreaseRate,
+          },
+          dateAdded: new Date().toISOString()
+        };
+
+        portfolio[propertyId] = portfolioEntry;
+        // Log the object before stringifying to debug potential issues
+        console.log('Attempting to save portfolio object:', JSON.stringify(portfolio, null, 2)); // Use pretty print for readability
+        localStorage.setItem('rentToolFinder_portfolio', JSON.stringify(portfolio));
+        setIsInPortfolio(true);
+        setPortfolioAction('added');
+      }
+
+      setPortfolioSnackbarOpen(true);
+    } catch (error) {
+      console.error('Error updating portfolio:', error);
+    }
+  };
+  
+  const handleCloseSnackbar = () => {
+    setPortfolioSnackbarOpen(false);
+  };
+
+  // Calculate IRR function
+  const calculateIRR = useCallback((initialInvestment: number, cashFlows: number[], finalEquity: number = 0): number => {
+    // Add final equity to the last cash flow
+    const allCashFlows = [...cashFlows];
+    if (allCashFlows.length > 0) {
+      allCashFlows[allCashFlows.length - 1] += finalEquity;
+    }
+    
+    // Add initial investment as negative cash flow at year 0
+    allCashFlows.unshift(-initialInvestment);
+    
+    // IRR calculation using Newton-Raphson method
+    const maxIterations = 1000;
+    const precision = 0.000001;
+    
+    let guess = 0.1; // Initial guess at 10% return
+    
+    // Guard against invalid inputs
+    if (allCashFlows.length <= 1) return 0;
+    if (allCashFlows[0] >= 0) return 0; // Initial investment must be negative
+    
+    for (let i = 0; i < maxIterations; i++) {
+      let npv = 0;
+      let derivativeNpv = 0;
+      
+      for (let j = 0; j < allCashFlows.length; j++) {
+        const factor = Math.pow(1 + guess, j);
+        npv += allCashFlows[j] / factor;
+        if (j > 0) { // Skip the derivative calculation for the initial investment
+          derivativeNpv -= j * allCashFlows[j] / (factor * (1 + guess));
         }
       }
-    } else {
-      // If input is cleared, revert to the original rent
-      if (property) {
-        const originalRent = property.rent_estimate || 0;
-        setCustomRentEstimate(originalRent);
-        setDisplayRent(formatCurrency(originalRent));
+      
+      // Avoid division by zero
+      if (Math.abs(derivativeNpv) < precision) break;
+      
+      const newGuess = guess - npv / derivativeNpv;
+      
+      // Check for convergence
+      if (Math.abs(newGuess - guess) < precision) {
+        guess = newGuess;
+        break;
       }
+      
+      guess = newGuess;
+      
+      // Check if the result is diverging
+      if (guess < -1) return 0; // Return 0 as IRR if calculation is not converging
     }
-  };
-
-  const handleRentFocus = () => {
-    setIsRentEditing(true);
     
-    // When focused, show numeric value without currency formatting
-    if (customRentEstimate) {
-      setDisplayRent(customRentEstimate.toString());
-    } else {
-      setDisplayRent('');
-    }
-  };
+    // Convert to percentage
+    return guess * 100;
+  }, []);
   
-  // --- Price Input Handlers ---
-  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDisplayPrice(e.target.value); // Allow raw input while typing
-  };
-
-  // Initialize displayPrice when property loads or overridePrice changes
-  useEffect(() => {
-    if (property) {
-        setDisplayPrice(formatCurrency(effectivePrice));
-    }
-  }, [property, effectivePrice, formatCurrency]);
-
-  const handlePriceBlur = () => {
-    setIsPriceEditing(false);
-    const currentPrice = overridePrice !== undefined ? overridePrice : (property?.price ?? 0);
-    const newPrice = parseFloat(displayPrice.replace(/[^\d.]/g, ''));
-
-    if (!isNaN(newPrice) && newPrice > 0 && newPrice !== currentPrice) {
-      console.log(`[PropertyDetails] Setting override price to: ${newPrice}`);
-      setOverridePrice(newPrice);
-      // Call the prop handler passed down from App.tsx to update the global state
-      if (property && handlePriceOverrideChange) {
-        handlePriceOverrideChange(property.property_id, String(newPrice));
-      }
-      // Update display (useEffect based on overridePrice will also handle this, but set it here too for immediate feedback)
-      // Display Price is now handled by the useEffect hook based on effectivePrice
-      // setDisplayPrice(formatCurrency(newPrice));
-    } else {
-      // Revert to formatted current price if input is invalid or unchanged
-      console.log("[PropertyDetails] Invalid price or no change, reverting display.");
-      // Display Price is now handled by the useEffect hook based on effectivePrice
-      // setDisplayPrice(formatCurrency(currentPrice));
-    }
-  };
-
-  const handlePriceFocus = () => {
-    setIsPriceEditing(true);
-    // Show raw number when editing
-    const currentPrice = overridePrice !== undefined ? overridePrice : (property?.price ?? 0);
-    setDisplayPrice(String(currentPrice));
-  };
-  
-  // Navigate back to search results
-  const handleBackToSearch = () => {
-    navigate('/');
-  };
-  
-  // Add handler for notes change
-  const handleNotesChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setNotes(event.target.value);
-    // Consider adding logic here to save notes to localStorage if the property is bookmarked
-    // For now, saving happens primarily during bookmarking/sharing actions.
-  };
-  
-  // Create a modified property object for cashflow calculations
-  const propertyForCashflow = useMemo(() => (property ? {
-    ...property,
-    // Use the effective price for cashflow calculations
-    price: effectivePrice,
-    // Use the custom rent estimate for cashflow calculations if it exists
-    rent_estimate: customRentEstimate !== null ? customRentEstimate : property.rent_estimate
-  } : undefined), [property, effectivePrice, customRentEstimate]);
-  
-  // Calculate cashflow using current settings and effective price
+  // Calculate cashflow from property and settings
   const cashflow = useMemo(() => {
-    return propertyForCashflow ? calculateCashflow(propertyForCashflow, settings) : null;
-  // Add overridePrice and effectivePrice to dependencies
-  }, [propertyForCashflow, settings, calculateCashflow, overridePrice, effectivePrice]);
-  
-  // --- Calculate Crunch Score (Moved Higher) ---
-  const crunchScore = useMemo(() => {
-    // Remove effectivePrice from this call as the function doesn't expect it
-    return property && cashflow ? calculateCrunchScore(property, settings, cashflow) : 0;
-  }, [property, cashflow, settings, calculateCashflow]); // Removed effectivePrice dependency
-
-  // --- Define Crunch Score CSS class based on score (Moved Higher) ---
-  const getCrunchScoreClass = (score: number): string => {
-    if (score >= 65) return 'crunch-score-good';
-    if (score >= 45) return 'crunch-score-medium';
-    return 'crunch-score-poor';
-  };
-  const crunchScoreClass = getCrunchScoreClass(crunchScore);
-
-  // --- Tooltip Text (Moved Higher) ---
-  const crunchScoreTooltip = "Overall investment potential (0-100) based on cash flow, rent/price ratio, and your assumptions (higher is better).";
-  
-  // Create RentCast URL
-  const rentCastUrl = property ? `https://app.rentcast.io/app?address=${encodeURIComponent(property.address)}` : '#';
-  
-  // Update URL with settings for shareable link
-  const updateUrlWithSettings = (changedParams: Record<string, any>) => {
-    const searchParams = new URLSearchParams(location.search);
+    if (!property || currentAnalysisPrice === null) return null; // Use currentAnalysisPrice
     
-    // Update or add changed parameters
-    Object.entries(changedParams).forEach(([key, value]) => {
-      searchParams.set(key, String(value));
-    });
-    
-    // Generate the URL with new search parameters
-    const newUrl = `${location.pathname}?${searchParams.toString()}`;
-    
-    // Update URL without reloading the page
-    window.history.replaceState({}, '', newUrl);
-  };
-  
-  // Handle settings changes
-  const handleSettingChange = (setting: keyof CashflowSettings) => (event: Event, newValue: number | number[]) => {
-    const value = typeof newValue === 'number' ? newValue : newValue[0];
-    
-    setSettings(prev => ({
-      ...prev,
-      [setting]: value
-    }));
-    
-    // Create parameter key from setting name
-    const paramMap: Record<keyof CashflowSettings, string> = {
-      interestRate: 'ir',
-      loanTerm: 'lt',
-      downPaymentPercent: 'dp',
-      taxInsurancePercent: 'ti',
-      vacancyPercent: 'vc',
-      capexPercent: 'cx',
-      propertyManagementPercent: 'pm',
-      rehabAmount: 'rh' // Added rehab amount mapping
+    const propertyWithCustoms = {
+      ...property,
+      price: currentAnalysisPrice, // Use currentAnalysisPrice
+      rent_estimate: customRentEstimate ?? property.rent_estimate
     };
     
-    // Update URL with new setting
-    updateUrlWithSettings({ [paramMap[setting]]: value });
-    
-    // If this is a bookmarked property, update settings in localStorage
-    if (property) {
-      saveSettingsToLocalStorage(property.property_id, setting, value);
-    }
-  };
-
-  // Add function to save cashflow settings to localStorage
-  const saveSettingsToLocalStorage = (propertyId: string, setting?: keyof CashflowSettings, value?: number) => {
-    try {
-      // Get existing saved settings
-      const savedSettingsStr = localStorage.getItem('rentToolFinder_settings');
-      const savedSettings = savedSettingsStr ? JSON.parse(savedSettingsStr) : {};
-      
-      // Initialize settings for this property if they don't exist
-      if (!savedSettings[propertyId]) {
-        savedSettings[propertyId] = { ...settings };
-      }
-      
-      // Update specific setting if provided
-      if (setting && value !== undefined) {
-        savedSettings[propertyId][setting] = value;
-      } else {
-        // Otherwise update all settings (including rehabAmount)
-        savedSettings[propertyId] = { ...settings };
-      }
-      
-      // Save projection settings too
-      if (!savedSettings[propertyId].projectionSettings) {
-        savedSettings[propertyId].projectionSettings = {};
-      }
-      
-      savedSettings[propertyId].projectionSettings = {
-        rentAppreciationRate,
-        propertyValueIncreaseRate,
-        yearsToProject
-      };
-      
-      // Save back to localStorage
-      localStorage.setItem('rentToolFinder_settings', JSON.stringify(savedSettings));
-    } catch (error) {
-      console.error('Error saving settings to localStorage:', error);
-    }
-  };
+    return calculateCashflowUtil(propertyWithCustoms, localSettings);
+  }, [property, localSettings, customRentEstimate, currentAnalysisPrice]); // DEPEND ON currentAnalysisPrice
   
-  // Copy to clipboard handler
-  const handleCopyToClipboard = async () => {
-    const summary = generatePropertySummary();
-    
-    // Save the current property to localStorage to enable shared links to work
-    if (property) {
-      savePropertyToLocalStorage(property, notes);
-      // Also save current settings
-      saveSettingsToLocalStorage(property.property_id);
-    }
-    
-    try {
-      await navigator.clipboard.writeText(summary);
-      setCopySuccess('Copied to clipboard!');
-      setTimeout(() => setCopySuccess(''), 3000);
-    } catch (err) {
-      setCopySuccess('Failed to copy! Try selecting and copying the text manually.');
-    }
-  };
-
-  // Email share handler
-  // const handleEmailShare = () => { ... }; // Comment out or delete
+  // Update effective price (handled by separate useEffect now)
+  // useEffect(() => { ... });
   
-  // Add new function to save property to localStorage
-  const savePropertyToLocalStorage = (prop: Property, currentNotes: string) => {
-    try {
-      // Get existing saved properties
-      const savedPropertiesStr = localStorage.getItem('rentToolFinder_properties');
-      const savedProperties = savedPropertiesStr ? JSON.parse(savedPropertiesStr) : {};
-      
-      // Add or update this property, including notes
-      savedProperties[prop.property_id] = {
-        ...prop,
-        notes: currentNotes // Add notes here
-      };
-      
-      // Save back to localStorage
-      localStorage.setItem('rentToolFinder_properties', JSON.stringify(savedProperties));
-    } catch (error) {
-      console.error('Error saving property to localStorage:', error);
-    }
-  };
-  
-  // Add handler for rent appreciation rate change
-  const handleRentAppreciationChange = (_event: Event, newValue: number | number[]) => {
-    const value = newValue as number;
-    setRentAppreciationRate(value);
+  // Generate long-term cashflow projections
+  const generateLongTermCashflow = useCallback(() => {
+    if (!property || !cashflow || currentAnalysisPrice === null) return []; // Use currentAnalysisPrice
     
-    // Update URL
-    updateUrlWithSettings({ 'ra': value });
+    const result: YearlyProjection[] = [];
+    // Use currentAnalysisPrice for calculations
+    const priceToUse = currentAnalysisPrice; 
+    const downPaymentAmount = priceToUse * (localSettings.downPaymentPercent / 100); // Recalculate DP based on price
+    const loanAmount = priceToUse - downPaymentAmount;
+    const monthlyRate = localSettings.interestRate / 100 / 12;
+    const loanTermMonths = localSettings.loanTerm * 12;
     
-    // Save to localStorage if this is a bookmarked property
-    if (property) {
-      try {
-        const savedSettingsStr = localStorage.getItem('rentToolFinder_settings');
-        const savedSettings = savedSettingsStr ? JSON.parse(savedSettingsStr) : {};
-        
-        // Initialize settings for this property if they don't exist
-        if (!savedSettings[property.property_id]) {
-          savedSettings[property.property_id] = { 
-            ...settings,
-            projectionSettings: {
-              rentAppreciationRate: value,
-              propertyValueIncreaseRate,
-              yearsToProject
-            }
-          };
-        } else if (!savedSettings[property.property_id].projectionSettings) {
-          savedSettings[property.property_id].projectionSettings = {
-            rentAppreciationRate: value,
-            propertyValueIncreaseRate,
-            yearsToProject
-          };
+    // Initialize lastYearEquity with the down payment amount
+    let lastYearEquity = downPaymentAmount;
+    
+    for (let year = 1; year <= yearsToProject; year++) {
+      // Calculate property value growth based on currentAnalysisPrice
+      const propertyValue = priceToUse * Math.pow(1 + propertyValueIncreaseRate / 100, year);
+      
+      // Use custom rent estimate if available
+      const monthlyRent = customRentEstimate ?? property.rent_estimate;
+      const annualRent = monthlyRent * 12 * Math.pow(1 + rentAppreciationRate / 100, year);
+      
+      // Calculate remaining loan balance after 'year' years
+      let remainingBalance = 0;
+      if (loanAmount > 0) {
+        if (monthlyRate === 0) {
+          // For 0% interest loans, it's straight-line amortization
+          const monthsPaid = Math.min(year * 12, loanTermMonths);
+          remainingBalance = loanAmount * (1 - monthsPaid / loanTermMonths);
         } else {
-          savedSettings[property.property_id].projectionSettings.rentAppreciationRate = value;
-        }
-        
-        localStorage.setItem('rentToolFinder_settings', JSON.stringify(savedSettings));
-      } catch (error) {
-        console.error('Error saving rent appreciation setting to localStorage:', error);
-      }
-    }
-  };
-  
-  // Add handler for property value increase rate change
-  const handlePropertyValueIncreaseChange = (_event: Event, newValue: number | number[]) => {
-    const value = newValue as number;
-    setPropertyValueIncreaseRate(value);
-    
-    // Update URL
-    updateUrlWithSettings({ 'pvi': value });
-    
-    // Save to localStorage if this is a bookmarked property
-    if (property) {
-      try {
-        const savedSettingsStr = localStorage.getItem('rentToolFinder_settings');
-        const savedSettings = savedSettingsStr ? JSON.parse(savedSettingsStr) : {};
-        
-        // Initialize settings for this property if they don't exist
-        if (!savedSettings[property.property_id]) {
-          savedSettings[property.property_id] = { 
-            ...settings,
-            projectionSettings: {
-              rentAppreciationRate,
-              propertyValueIncreaseRate: value,
-              yearsToProject
-            }
-          };
-        } else if (!savedSettings[property.property_id].projectionSettings) {
-          savedSettings[property.property_id].projectionSettings = {
-            rentAppreciationRate,
-            propertyValueIncreaseRate: value,
-            yearsToProject
-          };
-        } else {
-          savedSettings[property.property_id].projectionSettings.propertyValueIncreaseRate = value;
-        }
-        
-        localStorage.setItem('rentToolFinder_settings', JSON.stringify(savedSettings));
-      } catch (error) {
-        console.error('Error saving property value increase setting to localStorage:', error);
-      }
-    }
-  };
-  
-  // Add handler for years to project change
-  // const handleYearsToProjectChange = (_event: Event, newValue: number | number[]) => { ... }; // Comment out or delete
-  
-  // Function to generate long-term cashflow projections
-  const generateLongTermCashflow = useCallback((): YearlyProjection[] => {
-    // Needs to check for property/cashflow existence *inside* because it might be called
-    // before the early return check conceptually (though practically it won't be used until after)
-    if (!property || !cashflow) return [];
-    
-    const years: YearlyProjection[] = [];
-    // Get the initial monthly rent
-    const initialMonthlyRent = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
-    // Calculate initial annual rent
-    const initialAnnualRent = initialMonthlyRent * 12;
-    // Use effectivePrice for starting property value
-    let propertyValue = effectivePrice;
-    
-    // Calculate initial equity based on effectivePrice
-    let equity = effectivePrice * (settings.downPaymentPercent / 100);
-    
-    // Calculate loan details based on effectivePrice
-    const loanAmount = effectivePrice - equity;
-    const monthlyInterestRate = settings.interestRate / 100 / 12;
-    const totalPayments = settings.loanTerm * 12;
-    
-    // Calculate remaining principal as of start
-    let remainingPrincipal = loanAmount;
-    
-    // Initialize previous year equity
-    let previousYearEquity = equity;
-    
-    for (let i = 1; i <= yearsToProject; i++) {
-      // Calculate rent with appreciation compounding properly from initial value
-      const yearRent = initialAnnualRent * Math.pow(1 + rentAppreciationRate / 100, i - 1);
-      
-      // Increase property value with appreciation (compounding)
-      propertyValue = effectivePrice * Math.pow(1 + propertyValueIncreaseRate / 100, i - 1);
-      
-      // Calculate expenses
-      // Mortgage calculation needs the correct loanAmount based on effectivePrice
-      // Note: calculateCashflow should already provide the correct monthlyMortgage based on propertyForCashflow
-      const yearlyMortgage = cashflow.monthlyMortgage * 12; // Mortgage stays fixed
-      
-      // Tax and insurance typically increase with property value (based on effective price)
-      const yearlyTaxInsurance = effectivePrice * (settings.taxInsurancePercent / 100) * Math.pow(1 + propertyValueIncreaseRate / 100, i - 1);
-      
-      // Other expenses are calculated as percentage of rent
-      const yearlyVacancy = yearRent * (settings.vacancyPercent / 100);
-      const yearlyCapex = yearRent * (settings.capexPercent / 100);
-      const yearlyPropertyManagement = yearRent * (settings.propertyManagementPercent / 100);
-      
-      // Total expenses for the year
-      const yearlyExpenses = yearlyMortgage + yearlyTaxInsurance + yearlyVacancy + yearlyCapex + yearlyPropertyManagement;
-      
-      // Cashflow for the year
-      const yearlyCashflow = yearRent - yearlyExpenses;
-      
-      // Calculate principal paid this year using amortization
-      // let principalPaidThisYear = 0;
-      
-      // Calculate month by month for the current year
-      const startMonth = (i - 1) * 12 + 1;
-      const endMonth = Math.min(i * 12, totalPayments);
-      
-      // Only calculate if we're still within the loan term
-      if (startMonth <= totalPayments) {
-        // For each month in the current year
-        for (let month = startMonth; month <= endMonth; month++) {
-          // Calculate interest for this month
-          const interestPayment = remainingPrincipal * monthlyInterestRate;
-          
-          // Calculate principal payment for this month (mortgage payment - interest)
-          const principalPayment = cashflow.monthlyMortgage - interestPayment;
-          
-          // Add to yearly principal total
-          // principalPaidThisYear += principalPayment;
-          
-          // Reduce remaining principal
-          remainingPrincipal = Math.max(0, remainingPrincipal - principalPayment);
+          // For normal amortizing loans
+          const monthsPaid = Math.min(year * 12, loanTermMonths);
+          const monthsRemaining = loanTermMonths - monthsPaid;
+          if (monthsRemaining <= 0) {
+            remainingBalance = 0;
+          } else {
+            // Standard amortization formula
+            const monthlyPayment = cashflow.monthlyMortgage;
+            remainingBalance = (monthlyPayment / monthlyRate) * (1 - 1 / Math.pow(1 + monthlyRate, monthsRemaining));
+          }
         }
       }
       
-      // Update equity (original down payment + principal paid so far + appreciation)
-      equity = propertyValue - remainingPrincipal;
+      // Ensure remaining balance doesn't go below zero
+      remainingBalance = Math.max(0, remainingBalance);
       
-      // Calculate equity growth from previous year
-      const equityGrowth = equity - previousYearEquity;
-      previousYearEquity = equity;
+      // Calculate equity
+      const equity = propertyValue - remainingBalance;
+      const equityGrowth = equity - lastYearEquity;
+      lastYearEquity = equity;
       
-      // Calculate ROI based on effectivePrice and investment
-      // Use effectivePrice for initial investment calculation
-      const initialInvestment = effectivePrice * (settings.downPaymentPercent / 100)
-                                + effectivePrice * 0.03 // Closing costs based on effective price
-                                + settings.rehabAmount; // Rehab costs
-      const cashOnCashReturn = initialInvestment > 0 ? (yearlyCashflow / initialInvestment) * 100 : 0; // Avoid division by zero
+      // Calculate expenses for the year (scaling with inflation for non-mortgage expenses)
+      const yearlyMortgage = cashflow.monthlyMortgage * 12;
+      const yearlyNonMortgageExpenses = 
+        (cashflow.monthlyTaxInsurance + cashflow.monthlyVacancy + 
+         cashflow.monthlyCapex + cashflow.monthlyPropertyManagement) * 12 * 
+        Math.pow(1 + rentAppreciationRate / 100, year); // Assume expenses grow with rent
       
-      // Calculate ROI with equity growth included
-      const totalReturn = yearlyCashflow + equityGrowth;
-      const roiWithEquity = initialInvestment > 0 ? (totalReturn / initialInvestment) * 100 : 0; // Avoid division by zero
+      const yearlyExpenses = yearlyMortgage + yearlyNonMortgageExpenses;
+      const yearlyCashflow = annualRent - yearlyExpenses;
       
-      years.push({
-        year: i,
+      // Calculate ROI metrics
+      const roi = yearlyCashflow / cashflow.totalInitialInvestment * 100;
+      const roiWithEquity = (yearlyCashflow + equityGrowth) / cashflow.totalInitialInvestment * 100;
+      
+      result.push({
+        year,
         propertyValue,
-        annualRent: yearRent,
+        annualRent,
         yearlyExpenses,
         yearlyCashflow,
         equity,
         equityGrowth,
-        roi: cashOnCashReturn,
+        roi,
         roiWithEquity
       });
-      
-      // No need to update annualRent for the next iteration since we're using the power function
-      // with the initial value for proper compounding
     }
     
-    return years;
-  }, [
-    property, cashflow, customRentEstimate, effectivePrice, settings, rentAppreciationRate,
-    propertyValueIncreaseRate, yearsToProject
-    // Removed calculateCashflow from deps if it comes from props and is stable
-  ]);
+    return result;
+  }, [property, cashflow, localSettings, yearsToProject, rentAppreciationRate, propertyValueIncreaseRate, customRentEstimate, currentAnalysisPrice]); // DEPEND ON currentAnalysisPrice
   
-  // Copy to clipboard handler
-  const generatePropertySummary = () => {
-    if (!property || !cashflow) return '';
+  // Generate shareable URL
+  const generateShareableURL = useCallback(() => {
+    if (!property || currentAnalysisPrice === null) return window.location.href; // Use currentAnalysisPrice
     
-    const rentValue = customRentEstimate !== null ? customRentEstimate : property.rent_estimate;
-    const downPaymentAmount = property.price * (settings.downPaymentPercent / 100);
-    // Calculate total initial investment including rehab
-    const closingCosts = property.price * 0.03;
-    const totalInvestment = downPaymentAmount + closingCosts + settings.rehabAmount;
+    const baseUrl = window.location.origin + window.location.pathname;    
+    const searchParams = new URLSearchParams();
     
-    // Add notes to summary if they exist
-    const notesSection = notes ? `\n📝 NOTES:\n${notes}\n` : '\n';
-    
-    return `🏠 Property Investment Analysis 🏠
-
-ADDRESS: ${property.address}
-PRICE: ${formatCurrency(property.price)}
-RENT ESTIMATE: ${formatCurrency(rentValue)}
-RENT-TO-PRICE RATIO: ${formatPercent(property.ratio * 100)}
-
-📊 PROPERTY DETAILS:
-• ${property.bedrooms} beds, ${property.bathrooms} baths
-• ${property.sqft.toLocaleString()} sq. ft.
-${property.days_on_market !== null ? `• Days on market: ${property.days_on_market}` : ''}
-
-💰 CASHFLOW ANALYSIS (Monthly):
-• Down payment (${settings.downPaymentPercent}%): ${formatCurrency(downPaymentAmount)}
-• Initial Rehab: ${formatCurrency(settings.rehabAmount)} 
-• Closing Costs (est. 3%): ${formatCurrency(closingCosts)}
-• Total Investment: ${formatCurrency(totalInvestment)}
------------------------------
-• Mortgage payment: ${formatCurrency(cashflow.monthlyMortgage)}
-• Property Tax & Insurance: ${formatCurrency(cashflow.monthlyTaxInsurance)}
-• Vacancy (${settings.vacancyPercent}%): ${formatCurrency(cashflow.monthlyVacancy)}
-• CapEx (${settings.capexPercent}%): ${formatCurrency(cashflow.monthlyCapex)}
-• Property Management (${settings.propertyManagementPercent}%): ${formatCurrency(cashflow.monthlyPropertyManagement)}
-• Total Monthly Expenses: ${formatCurrency(cashflow.totalMonthlyExpenses)}
------------------------------
-• Monthly Cashflow: ${formatCurrency(cashflow.monthlyCashflow)}
-• Annual Cashflow: ${formatCurrency(cashflow.annualCashflow)}
-• Cash-on-Cash Return: ${formatPercent(cashflow.cashOnCashReturn)}
-
-${notesSection}🔗 ZILLOW LISTING: ${property.url}
-🔗 RENTCAST ANALYSIS: ${rentCastUrl}
-
-See full analysis: ${generateShareableURL()}
-
-Generated with CashflowCrunch - https://cashflowcrunch.com/
-`;
-  };
-  
-  // Function to encode property data into a URL-safe string
-  const encodePropertyToURL = (property: Property, currentNotes: string): string => {
-    // Create a minimal version of the property with only essential fields
-    // Use shorter property names to reduce JSON size
-    const minimalProperty = {
-      id: property.property_id,
-      a: property.address,
-      p: property.price,
-      b: property.bedrooms,
-      bt: property.bathrooms,
-      s: property.sqft,
-      r: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
-      // Only include thumbnail if it exists and isn't too long
-      ...(property.thumbnail && property.thumbnail.length < 100 ? { t: property.thumbnail } : {}),
-      u: property.url,
-      d: property.days_on_market,
-      rt: property.ratio,
-      rs: property.rent_source,
-      // Only include coordinates if they exist
-      ...(property.latitude && property.longitude ? { 
-        lat: property.latitude,
-        lng: property.longitude 
-      } : {}),
-      // Only include notes if they exist and aren't empty
-      ...(currentNotes && currentNotes.trim() !== '' ? { n: currentNotes } : {})
+    const propertyData = {
+      ...property,
+      price: currentAnalysisPrice, // Include currentAnalysisPrice
+      custom_rent: customRentEstimate,
+      notes: notes,
     };
+    const encodedProperty = btoa(JSON.stringify(propertyData));
+    searchParams.set('data', encodedProperty);
     
-    // Encode as JSON and then to base64
-    const jsonStr = JSON.stringify(minimalProperty);
+    const settingsData = {
+      ...localSettings,
+      yearsToProject,
+      rentAppreciationRate,
+      propertyValueIncreaseRate
+    };
+    const encodedSettings = btoa(JSON.stringify(settingsData));
+    searchParams.set('settings', encodedSettings);
     
-    // Use a more compact encoding: URL-safe base64 without padding
-    return btoa(encodeURIComponent(jsonStr))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
+    return `${baseUrl}?${searchParams.toString()}`;
+  }, [property, currentAnalysisPrice, customRentEstimate, notes, localSettings, yearsToProject, rentAppreciationRate, propertyValueIncreaseRate]); // DEPEND ON currentAnalysisPrice
+  
+  // Modal handlers
+  const handleOpenPdfModal = () => setShowPdfModal(true);
+  const handleClosePdfModal = () => setShowPdfModal(false);
+  const handleOpenShareModal = () => {
+    setShareableURL(generateShareableURL());
+    setShareURLCopied(false);
+    setShowShareModal(true);
+  };
+  const handleCloseShareModal = () => setShowShareModal(false);
+  const handleCopyShareURL = () => {
+    navigator.clipboard.writeText(shareableURL)
+      .then(() => {
+        setShareURLCopied(true);
+        setTimeout(() => setShareURLCopied(false), 3000);
+      })
+      .catch(err => console.error('Failed to copy URL:', err));
+  };
+  const handleDownloadPDF = () => toPDF();
+  
+  // Use longTermData variable name correctly
+  const longTermData = useMemo(() => generateLongTermCashflow(), [generateLongTermCashflow]);
+
+  // Recalculate IRR in a useMemo - DEPEND ON currentAnalysisPrice
+  const irrData = useMemo(() => {
+    // Ensure cashflow (which depends on currentAnalysisPrice) is calculated first
+    if (!cashflow || !longTermData || longTermData.length === 0 || currentAnalysisPrice === null) return {}; // Use currentAnalysisPrice
+    const holdingPeriods = [1, 5, 10, 15, 30];
+    const results: Record<number, number> = {};
+    holdingPeriods.forEach(holdingPeriod => {
+      const relevantCashflows = longTermData
+          .filter(data => data.year <= holdingPeriod)
+          .map(data => data.yearlyCashflow);
+      const finalYearData = longTermData.find(data => data.year === holdingPeriod);
+      const finalEquity = finalYearData ? finalYearData.equity : 0;
+      // Use cashflow.totalInitialInvestment
+      results[holdingPeriod] = calculateIRR(cashflow.totalInitialInvestment, relevantCashflows, finalEquity);
+    });
+    return results;
+  }, [cashflow, longTermData, calculateIRR, currentAnalysisPrice]); // DEPEND ON currentAnalysisPrice
+
+  // Drawer handlers
+  const toggleDrawer = (open: boolean) => (
+    event?: React.KeyboardEvent | React.MouseEvent,
+  ) => {
+    if (
+      event && 
+      event.type === 'keydown' &&
+      ((event as React.KeyboardEvent).key === 'Tab' ||
+        (event as React.KeyboardEvent).key === 'Shift')
+    ) {
+      return;
+    }
+    setAssumptionsDrawerOpen(open);
   };
   
-  // Add IRR calculation function
-  const calculateIRR = (initialInvestment: number, cashFlows: number[], finalEquity: number = 0): number => {
-    // Combine initial investment (negative) with cash flows and final value
-    const allCashFlows = [-initialInvestment, ...cashFlows, finalEquity];
-    
-    // IRR calculation using Newton's method
-    const maxIterations = 1000;
-    const tolerance = 0.0000001;
-    
-    let guess = 0.1; // Start with 10% as initial guess
-    
-    // Newton's method iteration
-    for (let iteration = 0; iteration < maxIterations; iteration++) {
-      let fValue = 0;
-      let fPrime = 0;
-      
-      // Calculate function value and derivative
-      for (let i = 0; i < allCashFlows.length; i++) {
-        fValue += allCashFlows[i] / Math.pow(1 + guess, i);
-        if (i > 0) {
-          fPrime -= i * allCashFlows[i] / Math.pow(1 + guess, i + 1);
-        }
-      }
-      
-      // Adjust guess using Newton's method
-      const newGuess = guess - fValue / fPrime;
-      
-      // Check for convergence
-      if (Math.abs(newGuess - guess) < tolerance) {
-        return newGuess * 100; // Convert to percentage
-      }
-      
-      guess = newGuess;
-    }
-    
-    // Return best guess if not converged
-    return guess * 100;
+  // Handler for closing drawer via backdrop/escape key
+  const handleDrawerClose = () => {
+    setAssumptionsDrawerOpen(false);
   };
   
-  // Function to decode property data from URL string
-  const decodePropertyFromURL = (encodedStr: string): (Property & { notes?: string }) | null => {
-    try {
-      // Add padding if needed
-      let padded = encodedStr;
-      while (padded.length % 4 !== 0) {
-        padded += '=';
-      }
-      
-      // Restore standard base64 characters
-      padded = padded.replace(/-/g, '+').replace(/_/g, '/');
-      
-      // Decode from base64, then from URI encoding, then parse JSON
-      const jsonStr = decodeURIComponent(atob(padded));
-      const data = JSON.parse(jsonStr);
-      
-      // Convert back to original property structure
-      return {
-        property_id: data.id,
-        address: data.a,
-        price: data.p,
-        bedrooms: data.b,
-        bathrooms: data.bt,
-        sqft: data.s,
-        rent_estimate: data.r,
-        thumbnail: data.t || null,
-        url: data.u,
-        days_on_market: data.d,
-        ratio: data.rt,
-        rent_source: data.rs,
-        latitude: data.lat || null,
-        longitude: data.lng || null,
-        notes: data.n || ""
-      } as (Property & { notes?: string });
-    } catch (error) {
-      console.error('Error decoding property from URL:', error);
-      return null;
-    }
-  };
-  
-  // Function to generate a shareable URL
-  const generateShareableURL = useCallback((): string => {
-    if (!property) return window.location.href;
-    const baseUrl = `https://cashflowcrunch.com/#/property/${property.property_id}`;
-    const params = new URLSearchParams();
-    // Ensure encodePropertyToURL uses the correct price (effectivePrice)
-    const encodedProperty = encodePropertyToURL(property, notes);
-    params.set('d', encodedProperty);
-
-    // Add settings to params...
-    // ... (rest of the function)
-    
-    return `${baseUrl}?${params.toString()}`;
-  }, [
-    property, notes, settings, defaultSettings, rentAppreciationRate,
-    propertyValueIncreaseRate, customRentEstimate, encodePropertyToURL
-  ]);
-  
-  // Function to handle share via URL
-  const handleShareViaURL = async () => {
-    const shareableURL = generateShareableURL();
-    
-    try {
-      // Use the clipboard API to copy the URL
-      await navigator.clipboard.writeText(shareableURL);
-      setCopySuccess('Shareable URL copied to clipboard!');
-      setTimeout(() => setCopySuccess(''), 3000);
-    } catch (err) {
-      setCopySuccess('Failed to copy URL. Try copying it from the address bar.');
-    }
-  };
-  
-  // Add function to handle bookmarking properties
-  const handleBookmarkToggle = () => {
-    if (!property) return;
-
-    // Generate the shareable URL that contains all settings/customizations including notes
-    const shareableURL = generateShareableURL(); // Already includes notes logic
-    
-    // Get current bookmarks from localStorage
-    const bookmarksStr = localStorage.getItem('rentToolFinder_bookmarks');
-    let bookmarks: Record<string, {url: string, property: Property, date: string}> = {};
-    
-    try {
-      bookmarks = bookmarksStr ? JSON.parse(bookmarksStr) : {};
-    } catch (e) {
-      console.error('Error parsing bookmarks:', e);
-    }
-    
-    if (isBookmarked) {
-      // Remove bookmark
-      if (property.property_id in bookmarks) {
-        delete bookmarks[property.property_id];
-        setIsBookmarked(false);
-        setCopySuccess('Property removed from bookmarks');
-      }
-    } else {
-      // Add bookmark - ensure notes are included in the saved property object
-      bookmarks[property.property_id] = {
-        url: shareableURL,
-        property: {
-            ...property,
-            notes: notes // Explicitly add notes here
-        },
-        date: new Date().toISOString()
-      };
-      setIsBookmarked(true);
-      setCopySuccess('Property bookmarked!');
-    }
-    
-    // Save updated bookmarks back to localStorage
-    localStorage.setItem('rentToolFinder_bookmarks', JSON.stringify(bookmarks));
-    
-    // Clear the success message after 3 seconds
-    setTimeout(() => setCopySuccess(''), 3000);
-  };
-  
-  // Check if property is bookmarked on component mount
-  useEffect(() => {
-    if (!property) return;
-    
-    const bookmarksStr = localStorage.getItem('rentToolFinder_bookmarks');
-    try {
-      const bookmarks = bookmarksStr ? JSON.parse(bookmarksStr) : {};
-      setIsBookmarked(!!bookmarks[property.property_id]);
-    } catch (e) {
-      console.error('Error checking bookmark status:', e);
-    }
-  }, [property]);
-  
-  // Handle PDF generation
-  const handleGeneratePDF = useCallback(() => {
-    setShowPdfModal(true);
-  }, []);
-
-  const handleDownloadPDF = useCallback(() => {
-    toPDF();
-    setCopySuccess('PDF downloaded successfully!');
-    setTimeout(() => setCopySuccess(''), 3000);
-  }, [toPDF]);
-
-  // Close PDF modal
-  const handleClosePdfModal = useCallback(() => {
-    setShowPdfModal(false);
-  }, []);
-
-  // --- Early Returns (Keep AFTER all hooks) ---
-  // Display loading state
-  if (loading) {
+  // If property not found
+  if (!property) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box sx={{ textAlign: 'center', py: 8 }}>
+      <Container maxWidth="md" sx={{ py: 4, textAlign: 'center' }}>
+        <CircularProgress sx={{ mb: 3 }} />
           <Typography variant="h5">Loading property details...</Typography>
-        </Box>
       </Container>
     );
   }
   
-  // Display error state
-  if (error || !property || !cashflow) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <Typography variant="h5" color="error" gutterBottom>
-            {error || 'Property data not available'}
-          </Typography>
-          <Button 
-            variant="contained" 
-            startIcon={<ArrowBackIcon />}
-            onClick={handleBackToSearch}
-            sx={{ mt: 2 }}
-          >
-            Back to Search
-          </Button>
-        </Box>
-      </Container>
-    );
-  }
-  
-  // --- Calculate derived values AFTER checks ---
-  // Now we are sure property, cashflow, effectivePrice are valid
-  let downPaymentAmount: number = 0;
-  let closingCosts: number = 0;
-  let totalInvestment: number = 0;
-  let longTermCashflowData: YearlyProjection[] = [];
-
-  downPaymentAmount = effectivePrice * (settings.downPaymentPercent / 100);
-  closingCosts = effectivePrice * 0.03;
-  totalInvestment = downPaymentAmount + closingCosts + settings.rehabAmount;
-  longTermCashflowData = generateLongTermCashflow(); // Call the useCallback memoized function
-
-  // Generate long-term cashflow data - wrapped in useMemo
-  
-  // Generate chart data
-  const chartYears = longTermCashflowData.map(data => data.year);
-  const chartPropertyValues = longTermCashflowData.map(data => data.propertyValue);
-  const chartEquity = longTermCashflowData.map(data => data.equity);
-  const chartCashflow = longTermCashflowData.map(data => data.yearlyCashflow);
-  
-  // Custom bar component for handling positive and negative cashflow values
-  // const CustomBar = (props: any) => { ... }; // Comment out or delete
-  
+  // --- Render --- 
   return (
     <>
       <CssBaseline />
       <AppBar position="sticky" elevation={0} sx={{ bgcolor: '#6366f1', color: 'white' }}>
-        <Toolbar sx={{ 
-          px: { xs: 1, sm: 2 },
-          minHeight: { xs: '56px', sm: '64px' }
-        }}>
-          <IconButton 
-            edge="start" 
-            color="inherit" 
-            aria-label="back" 
-            onClick={handleBackToSearch}
-            sx={{ mr: { xs: 0.5, sm: 2 } }} // Reduced margin-right on xs screens
-          >
+        <Toolbar>
+          <IconButton edge="start" color="inherit" aria-label="back" onClick={() => navigate(-1)} sx={{ mr: 2 }}>
             <ArrowBackIcon />
           </IconButton>
-          {/* Wrap Icon and Title in a Link */}
-          <RouterLink to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
-            {/* Remove the img tag for the logo */}
-            {/* <img src={process.env.PUBLIC_URL + '/favicon.png'} alt="CashflowCrunch Logo" style={{ height: '40px', width: '40px', marginRight: '8px', verticalAlign: 'middle' }} /> */}
-            <Typography
-              variant="h6"
-              color="inherit"
-              noWrap
-              sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }} // Smaller font size on xs screens
-            >
+          <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => navigate('/')}>
+            <HomeWorkIcon sx={{ mr: 1, color: 'white' }} />
+            <Typography variant="h6" color="inherit" noWrap sx={{ flexGrow: 1 }}>
               CashflowCrunch
             </Typography>
-          </RouterLink>
-          {/* Use flexGrow on a Box after the Link to push buttons to the right */}
-          <Box sx={{ flexGrow: 1 }} /> 
-          <Box sx={{ 
-            display: 'flex', 
-            gap: { xs: 0.5, sm: 2 }, // Reduced gap on xs screens
-            flexWrap: 'nowrap'
-          }}>
-            {/* Add Bookmark Button */}
-            <Button
-              variant="outlined"
-              startIcon={isBookmarked ? <BookmarkIcon /> : <BookmarkBorderIcon />}
-              onClick={handleBookmarkToggle}
-              size="small"
-              sx={{ 
-                color: 'white', 
-                borderColor: 'white', 
-                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
-                whiteSpace: 'nowrap',
-                minWidth: { xs: 'auto', sm: 'auto' }, // Allow shrink on xs
-                px: { xs: 1, sm: 2 } // Less padding on xs
-              }}
-            >
-              {/* Change breakpoint from sm to md */}
-              <Box sx={{ display: { xs: 'none', md: 'block' }, ml: 1 }}> 
-                {isBookmarked ? 'Bookmarked' : 'Bookmark'}
               </Box>
-              {/* Change breakpoint from sm to md */}
-              <Box sx={{ display: { xs: 'block', md: 'none' } }}> 
-                {/* Content only needed for xs/sm (icon only) - currently empty */} 
-              </Box>
-            </Button>
-            
-            <Button 
-              variant="outlined" 
-              startIcon={<ShareIcon />}
-              onClick={handleShareViaURL}
-              size="small"
-              sx={{ 
-                color: 'white', 
-                borderColor: 'white', 
-                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
-                whiteSpace: 'nowrap',
-                minWidth: { xs: 'auto', sm: 'auto' }, // Allow shrink on xs
-                px: { xs: 1, sm: 2 } // Less padding on xs
-              }}
-            >
-              {/* Change breakpoint from sm to md */}
-              <Box sx={{ display: { xs: 'none', md: 'block' }, ml: 1 }}>Copy URL</Box> 
-            </Button>
-
-            <Button 
-              variant="outlined" 
-              startIcon={<PdfIcon />}
-              onClick={handleGeneratePDF}
-              size="small"
-              sx={{ 
-                color: 'white', 
-                borderColor: 'white', 
-                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
-                whiteSpace: 'nowrap',
-                minWidth: { xs: 'auto', sm: 'auto' }, // Allow shrink on xs
-                px: { xs: 1, sm: 2 } // Less padding on xs
-              }}
-            >
-              {/* Change breakpoint from sm to md */}
-              <Box sx={{ display: { xs: 'none', md: 'block' }, ml: 1 }}> 
-                PDF Report
-              </Box>
-              {/* Change breakpoint from sm to md */}
-              <Box sx={{ display: { xs: 'block', md: 'none' } }}>
-                {/* Content only needed for xs/sm (icon only) - currently empty */} 
-              </Box>
-            </Button>
-          </Box>
+          <Box sx={{ flexGrow: 1 }} />
+          <IconButton color="inherit" onClick={handleOpenShareModal} sx={{ mr: 1 }}>
+            <ShareIcon />
+          </IconButton>
+          <IconButton color="inherit" onClick={handleOpenPdfModal} sx={{ mr: 1 }}>
+            <PdfIcon />
+          </IconButton>
+          <IconButton color="inherit" aria-label="Portfolio" onClick={() => navigate('/portfolio')} sx={{ mr: 1 }}>
+            <BusinessCenterIcon />
+          </IconButton>
         </Toolbar>
       </AppBar>
       
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        {/* Success message for clipboard copy */}
-        {copySuccess && (
-          <Alert severity="success" sx={{ mb: 3 }}>
-            {copySuccess}
-          </Alert>
-        )}
-        
-        {/* Property Header */}
-        <Box sx={{ mb: 4 }}>
-          {/* Display Address and Actions */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1, flexWrap: 'wrap' }}>
-            <Box>
-              <Typography variant="h4" component="h1" sx={{ mb: 0.5, display: 'flex', alignItems: 'center' }}>
-                {/* Conditionally render TextField or clickable span for Price */}
-                {isPriceEditing ? (
-                  <TextField
-                    variant="standard"
-                    size="small"
-                    value={displayPrice}
-                    onChange={handlePriceChange}
-                    onFocus={handlePriceFocus} 
-                    onBlur={handlePriceBlur}
-                    autoFocus
-                    InputProps={{
-                      disableUnderline: false, // Show underline while editing
-                      sx: { fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }
-                    }}
-                    sx={{ fontSize: 'inherit', padding: 0, margin: 0, height: 'auto', boxSizing: 'border-box' }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        (e.target as HTMLInputElement).blur(); // Trigger blur on Enter
-                      }
-                    }}
-                  />
-                ) : (
-                  // Display formatted price, allow clicking to edit
-                  <Box 
-                    component="span" 
-                    onClick={handlePriceFocus} 
-                    sx={{ 
-                      cursor: 'pointer', 
-                      borderBottom: '1px dashed transparent', 
-                      '&:hover': { borderBottomColor: 'currentColor' } // Use sx prop for hover
-                    }}
-                  >
-                    {formatCurrency(overridePrice !== undefined ? overridePrice : (property?.price ?? 0))}
-                  </Box>
-                )}
-                <Tooltip title="Edit Purchase Price">
-                  <IconButton size="small" onClick={handlePriceFocus} sx={{ ml: 0.5 }}>
-                    <EditIcon fontSize="inherit" />
-                  </IconButton>
-                </Tooltip>
-                {/* Override indicator */}
-                {overridePrice !== undefined && 
-                 <Tooltip title="Price has been manually overridden for this analysis" arrow placement="top">
-                   <span style={{ fontSize: '0.6em', verticalAlign: 'super', marginLeft: '4px', color: '#ffc107' }}>*</span>
-                 </Tooltip>
-               }
-          </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>
-                {property?.address}
-            </Typography>
-            </Box>
-            <Box> {/* PASTE Crunch Score inside this Box */} 
-              {/* Remove this comment: Add any additional actions you want to display here */}
-              {/* Add Crunch Score display here */}
-              <Tooltip title={crunchScoreTooltip} arrow>
-                <Box 
-                  sx={{ 
-                    display: 'inline-flex', 
-                    alignItems: 'center', 
-                    mt: { xs: 1, sm: 0.5 }, // Adjusted margin-top for spacing
-                    justifyContent: 'flex-end',
-                    // Styling enhancements (copied from previous location)
-                    px: 1.5,
-                    py: 0.5,
-                    borderRadius: '16px', // Increased for pill shape
-                    backgroundColor: 
-                      crunchScore >= 65 ? 'success.light' : 
-                      crunchScore >= 45 ? 'warning.light' : 
-                      'error.light',
-                    color: 
-                      crunchScore >= 45 ? 'text.primary' : // Dark text for lighter backgrounds
-                      'common.white' // White text for darker (error) background
-                  }}
-                >
-                  <Typography variant="body1" fontWeight="medium" sx={{ mr: 0.5, color: 'common.white' }}> {/* Explicitly set white */} 
-                      Crunch Score:
-                  </Typography>
-                  <Typography variant="h6" fontWeight="bold" sx={{ color: 'common.white' }}> {/* Explicitly set white */} 
-                    {crunchScore.toFixed(0)} 
-                  </Typography>
-                    <InfoIcon sx={{ fontSize: '1rem', ml: 0.5, color: 'common.white' }} /> {/* Explicitly set white */} 
-                </Box>
-              </Tooltip>
-            </Box>
-          </Box>
-        </Box>
-        
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4, mb: 4 }}>
-          {/* Left column: Property image and details */}
-          <Box sx={{ flex: '1', maxWidth: { xs: '100%', md: '40%' } }}>
-            <Box>
-              <img 
-                src={property.thumbnail} 
-                alt={property.address}
-                style={{ 
-                  width: '100%', 
-                  borderRadius: '0.5rem',
-                  maxHeight: '350px',
-                  objectFit: 'cover'
-                }}
-              />
-            </Box>
-            
-            <Paper sx={{ mt: 3, p: 3, borderRadius: 2 }}>
-              <Typography variant="h6" gutterBottom>Property Details</Typography>
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
-                <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">Beds</Typography>
-                  <Typography variant="h6">{property.bedrooms}</Typography>
-                </Box>
-                <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">Baths</Typography>
-                  <Typography variant="h6">{property.bathrooms}</Typography>
-                </Box>
-                <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">Sq Ft</Typography>
-                  <Typography variant="h6">{property.sqft.toLocaleString()}</Typography>
-                </Box>
-              </Box>
-              
-              <Divider sx={{ my: 2 }} />
-              
-              <Typography variant="h6" gutterBottom>External Links</Typography>
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <a href={property.url} target="_blank" rel="noopener noreferrer" className="quick-link">
-                  <HomeIcon sx={{ fontSize: 16, mr: 0.5, color: '#0D6EFD' }} /> Zillow
-                </a>
-                <a href={rentCastUrl} target="_blank" rel="noopener noreferrer" className="quick-link">
-                  <BarChartIcon sx={{ fontSize: 16, mr: 0.5, color: '#6366F1' }} /> RentCast
-                </a>
-              </Box>
-            </Paper>
-          </Box>
-          
-          {/* Right column: Cashflow Analysis & Settings */}
-          <Box sx={{ flex: '1', maxWidth: { xs: '100%', md: '60%' } }}>
-            {/* Cashflow Header */}
-            <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="h5">Cashflow Analysis</Typography>
-                <Box sx={{ textAlign: 'right' }}> {/* Align text within this box */} 
-                  <Typography 
-                    variant="h5" 
-                    fontWeight="bold" 
-                    color={cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main'}
-                    sx={{ textAlign: 'right' }}
-                  >
-                    {formatCurrency(cashflow.monthlyCashflow)}/mo
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color={cashflow.annualCashflow >= 0 ? 'success.main' : 'error.main'}
-                    sx={{ textAlign: 'right' }}
-                  >
-                    {formatCurrency(cashflow.annualCashflow)}/year
-                  </Typography>
-                </Box>
-              </Box>
-              
-              <Divider sx={{ my: 2 }} />
-              
-              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
-                <Box sx={{ flex: 1 }}>
-                  <Box sx={{ bgcolor: '#f9f9f9', p: 2, borderRadius: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom fontWeight="bold">Monthly Income</Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5, alignItems: 'center' }}>
-                      <Typography variant="body2">Rental Income:</Typography>
-                      <TextField
-                        variant="outlined" 
-                        size="small"
-                        value={isRentEditing ? displayRent : formatCurrency(customRentEstimate !== null ? customRentEstimate : property.rent_estimate)}
-                        onChange={handleRentChange}
-                        onFocus={handleRentFocus}
-                        onBlur={handleRentBlur}
-                        sx={{ maxWidth: '120px' }}
-                        InputProps={{
-                          endAdornment: <EditIcon sx={{ fontSize: 16, color: '#6b7280', opacity: 0.7 }} />,
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            (e.target as HTMLInputElement).blur();
-                          }
-                        }}
-                      />
-                    </Box>
-                  </Box>
-                </Box>
-                
-                <Box sx={{ flex: 1 }}>
-                  <Box sx={{ bgcolor: '#f0f7ff', p: 2, borderRadius: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom fontWeight="bold">Annual Returns</Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                      <Typography variant="body2">Cash-on-Cash Return:</Typography>
-                      <Typography variant="body2" fontWeight="bold" color={cashflow.cashOnCashReturn >= 0 ? 'success.main' : 'error.main'}>
-                        {formatPercent(cashflow.cashOnCashReturn)}
-                      </Typography>
-                    </Box>
-                  </Box>
-                </Box>
-              </Box>
-              
-              <Box sx={{ bgcolor: '#f9f9f9', p: 2, borderRadius: 2, mt: 2 }}>
-                <Typography variant="subtitle2" gutterBottom fontWeight="bold">Monthly Expenses</Typography>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Mortgage Payment:</Typography>
-                  <Typography variant="body2">{formatCurrency(cashflow.monthlyMortgage)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Property Tax & Insurance:</Typography>
-                  <Typography variant="body2">{formatCurrency(cashflow.monthlyTaxInsurance)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Vacancy:</Typography>
-                  <Typography variant="body2">{formatCurrency(cashflow.monthlyVacancy)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">CapEx:</Typography>
-                  <Typography variant="body2">{formatCurrency(cashflow.monthlyCapex)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Property Management:</Typography>
-                  <Typography variant="body2">{formatCurrency(cashflow.monthlyPropertyManagement)}</Typography>
-                </Box>
-                
-                <Divider sx={{ my: 1 }} />
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" fontWeight="bold">Total Monthly Expenses:</Typography>
-                  <Typography variant="body2" fontWeight="bold">{formatCurrency(cashflow.totalMonthlyExpenses)}</Typography>
-                </Box>
-              </Box>
-              
-              <Box sx={{ bgcolor: '#f0f7ff', p: 2, borderRadius: 2, mt: 2 }}>
-                <Typography variant="subtitle2" gutterBottom fontWeight="bold">Investment Details</Typography>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Down Payment:</Typography>
-                  <Typography variant="body2">{formatCurrency(downPaymentAmount)}</Typography>
-                </Box>
-
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Initial Rehab:</Typography> {/* Added Rehab */}
-                  <Typography variant="body2">{formatCurrency(settings.rehabAmount)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">Closing Costs (est. 3%):</Typography>
-                  <Typography variant="body2">{formatCurrency(closingCosts)}</Typography> {/* Use calculated closing costs */}
-                </Box>
-                
-                <Divider sx={{ my: 1 }} />
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" fontWeight="bold">Total Investment:</Typography>
-                  <Typography variant="body2" fontWeight="bold">{formatCurrency(totalInvestment)}</Typography> {/* Use calculated total investment */}
-                </Box>
-              </Box>
-            </Paper>
-            
-            {/* Assumptions Tab - positioned relative to drawer edge */}
+      {/* --- Assumptions Tab --- */}
+      <Tooltip title="Adjust assumptions" placement="left">
             <div 
               className="assumptions-tab"
-              onClick={() => setIsAssumptionsDrawerOpen(!isAssumptionsDrawerOpen)}
+          onClick={() => setAssumptionsDrawerOpen(prevState => !prevState)} 
               style={{
                 position: 'fixed',
-                right: isAssumptionsDrawerOpen ? '350px' : '0',
+            right: assumptionsDrawerOpen ? `var(--drawer-width, ${drawerWidth})` : '0px',
                 top: '50%',
                 transform: 'translateY(-50%)',
                 backgroundColor: '#4f46e5',
@@ -2400,11 +1300,10 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
                 transition: 'right 225ms cubic-bezier(0, 0, 0.2, 1) 0ms'
-              }}
-            >
-              <TuneIcon /> {/* Replace ExpandMoreIcon with TuneIcon */}
+          }}>
+          <TuneIcon />
               <span style={{ 
                 writingMode: 'vertical-rl', 
                 textOrientation: 'mixed', 
@@ -2415,20 +1314,23 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 fontSize: '14px'
               }}>Assumptions</span>
             </div>
+      </Tooltip>
             
             {/* Assumptions Drawer */}
             <Drawer
               anchor="right"
-              open={isAssumptionsDrawerOpen}
-              onClose={() => setIsAssumptionsDrawerOpen(false)}
+        open={assumptionsDrawerOpen}
+        onClose={handleDrawerClose}
+        className="assumptions-drawer"
               sx={{
                 '& .MuiDrawer-paper': {
-                  width: '350px',
-                  maxWidth: '90vw',
+            width: drawerWidth,
+            maxWidth: '80vw',
                   boxSizing: 'border-box',
                   padding: 3,
                   borderTopLeftRadius: 0,
                   borderBottomLeftRadius: 0,
+            overflowY: 'auto',
                 },
                 '& .MuiBackdrop-root': {
                   backgroundColor: 'rgba(0, 0, 0, 0.2)'
@@ -2442,173 +1344,401 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 }
               }}
             >
-              <Typography variant="h6" fontWeight="medium" gutterBottom> 
-                Customize Assumptions
+        {/* Header with close button */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" fontWeight="medium">
+            Analysis Assumptions
               </Typography>
-
-              {/* Sliders use settings state and handleSettingChange */}
-              <Box sx={{ mb: 2 }}>
+          <IconButton onClick={() => setAssumptionsDrawerOpen(false)} size="small">
+            <CloseIcon />
+          </IconButton>
+        </Box>
+        
+        {/* Saved message */}
+        {savedMessage && (
+          <Box 
+            sx={{ 
+              bgcolor: 'success.light', 
+              color: 'success.contrastText', 
+              p: 1, 
+              borderRadius: 1,
+              mb: 2,
+              display: 'flex',
+              justifyContent: 'center'
+            }}
+          >
+            <Typography variant="body2">{savedMessage}</Typography>
+          </Box>
+        )}
+        
+        {/* Mortgage Assumptions */}
+        <Typography variant="subtitle1" fontWeight="medium" sx={{ mb: 2 }}>
+          Mortgage Assumptions
+        </Typography>
+        
+        <Box sx={{ mb: 3 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="The annual interest rate for your mortgage loan. Higher rates increase your monthly payment." arrow>
-                    <span>Interest Rate: {settings.interestRate}%</span>
-                  </Tooltip>
+            Interest Rate: {localSettings.interestRate}%
                 </Typography>
-                <Slider value={settings.interestRate} onChange={handleSettingChange('interestRate')} aria-labelledby="interest-rate-slider" valueLabelDisplay="auto" step={0.1} min={0.1} max={15} sx={{ color: '#4f46e5' }} />
+          <Slider
+            value={localSettings.interestRate}
+            onChange={handleSettingChange('interestRate')}
+            min={2}
+            max={12}
+            step={0.25}
+            valueLabelDisplay="auto"
+            valueLabelFormat={(value) => `${value}%`}
+            sx={{ color: '#4f46e5' }}
+          />
               </Box>
               
-              <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: 3 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="The number of years you'll be paying your mortgage. Longer terms reduce monthly payments but increase total interest paid." arrow>
-                    <span>Loan Term: {settings.loanTerm} years</span>
-                  </Tooltip>
+            Loan Term: {localSettings.loanTerm} years
                 </Typography>
-                <Slider value={settings.loanTerm} onChange={handleSettingChange('loanTerm')} aria-labelledby="loan-term-slider" valueLabelDisplay="auto" step={1} min={5} max={40} sx={{ color: '#4f46e5' }} />
+          <Slider
+            value={localSettings.loanTerm}
+            onChange={handleSettingChange('loanTerm')}
+            min={5}
+            max={40}
+            step={5}
+            valueLabelDisplay="auto"
+            valueLabelFormat={(value) => `${value} yrs`}
+            sx={{ color: '#4f46e5' }}
+          />
               </Box>
               
-              <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: 3 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Percentage of the property price you pay upfront. Higher down payments reduce your loan amount and monthly payments." arrow>
-                    <span>Down Payment: {settings.downPaymentPercent}%</span>
-                  </Tooltip>
+            Down Payment: {localSettings.downPaymentPercent}%
                 </Typography>
-                <Slider value={settings.downPaymentPercent} onChange={handleSettingChange('downPaymentPercent')} aria-labelledby="down-payment-slider" valueLabelDisplay="auto" step={1} min={0} max={100} sx={{ color: '#4f46e5' }} />
+          <Slider
+            value={localSettings.downPaymentPercent}
+            onChange={handleSettingChange('downPaymentPercent')}
+            min={0}
+            max={100}
+            step={5}
+            valueLabelDisplay="auto"
+            valueLabelFormat={(value) => `${value}%`}
+            sx={{ color: '#4f46e5' }}
+          />
               </Box>
               
-              {/* --- Add Initial Rehab Slider --- */}
-              <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: 3 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Initial rehab costs needed before renting. This amount is added to your total investment when calculating ROI." arrow>
-                    <span>Initial Rehab: {formatCurrency(settings.rehabAmount)}</span>
-                  </Tooltip>
+            Rehab Amount: {formatCurrency(localSettings.rehabAmount)}
                 </Typography>
                 <Slider 
-                  value={settings.rehabAmount} 
+            value={localSettings.rehabAmount}
                   onChange={handleSettingChange('rehabAmount')} 
                   min={0} 
-                  max={100000} // Increased max to 100k
-                  step={500} 
+            max={50000}
+            step={1000}
                   valueLabelDisplay="auto" 
-                  valueLabelFormat={(value) => formatCurrency(value)}
+            valueLabelFormat={(value) => formatCurrency(value as number)}
                   sx={{ color: '#4f46e5' }} 
                 />
               </Box>
-              {/* --- End Initial Rehab Slider --- */}
-              
-              <Box sx={{ mb: 2 }}>
+        
+        <Typography variant="subtitle1" fontWeight="medium" sx={{ mt: 4, mb: 2 }}>
+          Expense Assumptions
+        </Typography>
+        
+        <Box sx={{ mb: 3 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Annual property taxes and insurance calculated as a percentage of property value. Varies by location." arrow>
-                    <span>Property Tax & Insurance: {settings.taxInsurancePercent}%</span>
-                  </Tooltip>
+            Property Tax & Insurance: {localSettings.taxInsurancePercent}%
                 </Typography>
-                <Slider value={settings.taxInsurancePercent} onChange={handleSettingChange('taxInsurancePercent')} min={0} max={5} step={0.1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+          <Slider
+            value={localSettings.taxInsurancePercent}
+            onChange={handleSettingChange('taxInsurancePercent')}
+            min={0}
+            max={5}
+            step={0.1}
+            valueLabelDisplay="auto"
+            valueLabelFormat={(value) => `${value}%`}
+            sx={{ color: '#4f46e5' }}
+          />
               </Box>
               
-              {/* Original slider content continues... */}
-              <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: 3 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Accounts for periods when the property is vacant between tenants. Typical range is 5-8%." arrow>
-                    <span>Vacancy: {settings.vacancyPercent}%</span>
-                  </Tooltip>
+            Vacancy: {localSettings.vacancyPercent}%
                 </Typography>
-                <Slider value={settings.vacancyPercent} onChange={handleSettingChange('vacancyPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+          <Slider
+            value={localSettings.vacancyPercent}
+            onChange={handleSettingChange('vacancyPercent')}
+            min={0}
+            max={15}
+            step={1}
+            valueLabelDisplay="auto"
+            valueLabelFormat={(value) => `${value}%`}
+            sx={{ color: '#4f46e5' }}
+          />
               </Box>
               
-              <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: 3 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Capital Expenditures: Savings for major replacements like roof, HVAC, etc. Typically 5-10% of rental income." arrow>
-                    <span>CapEx: {settings.capexPercent}%</span>
-                  </Tooltip>
+            CapEx: {localSettings.capexPercent}%
                 </Typography>
-                <Slider value={settings.capexPercent} onChange={handleSettingChange('capexPercent')} min={0} max={10} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+          <Slider
+            value={localSettings.capexPercent}
+            onChange={handleSettingChange('capexPercent')}
+            min={0}
+            max={15}
+            step={1}
+            valueLabelDisplay="auto"
+            valueLabelFormat={(value) => `${value}%`}
+            sx={{ color: '#4f46e5' }}
+          />
               </Box>
               
-              <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: 3 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Fee for professional property management. Typical range is 8-12% of rental income." arrow>
-                    <span>Property Management: {settings.propertyManagementPercent}%</span>
-                  </Tooltip>
+            Property Management: {localSettings.propertyManagementPercent}%
                 </Typography>
-                <Slider value={settings.propertyManagementPercent} onChange={handleSettingChange('propertyManagementPercent')} min={0} max={20} step={1} valueLabelDisplay="auto" valueLabelFormat={(value) => `${value}%`} sx={{ color: '#4f46e5' }} />
+          <Slider
+            value={localSettings.propertyManagementPercent}
+            onChange={handleSettingChange('propertyManagementPercent')}
+            min={0}
+            max={20}
+            step={1}
+            valueLabelDisplay="auto"
+            valueLabelFormat={(value) => `${value}%`}
+            sx={{ color: '#4f46e5' }}
+          />
               </Box>
               
-              <Typography variant="h6" fontWeight="medium" sx={{ mt: 4, mb: 2 }}>
-                Long-Term Projection
+        <Divider sx={{ my: 2 }} />
+        
+        <Typography variant="subtitle1" fontWeight="medium" sx={{ mt: 4, mb: 2 }}>
+          Property-Specific Settings
               </Typography>
               
-              <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: 3 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Annual percentage increase in rental rates due to inflation and market demand. Historically averages 2-4% in most markets." arrow>
-                    <span>Annual Rent Appreciation: {rentAppreciationRate}%</span>
-                  </Tooltip>
+            Custom Rent Estimate: {formatCurrency(customRentEstimate ?? property.rent_estimate)}
+          </Typography>
+          <Slider
+            value={customRentEstimate ?? property.rent_estimate}
+            onChange={(_, value) => setCustomRentEstimate(value as number)}
+            min={Math.max(property.rent_estimate * 0.5, 100)}
+            max={property.rent_estimate * 2}
+            step={50}
+            valueLabelDisplay="auto"
+            valueLabelFormat={(value) => formatCurrency(value as number)}
+            sx={{ color: '#4f46e5' }}
+          />
+        </Box>
+        
+        <Typography variant="subtitle1" fontWeight="medium" sx={{ mt: 4, mb: 2 }}>
+          Projection Settings
+        </Typography>
+        
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="body2" gutterBottom>
+            Long-Term Projection Years: {yearsToProject}
+          </Typography>
+          <Slider
+            value={yearsToProject}
+            onChange={(_, value) => setYearsToProject(value as number)}
+            min={1}
+            max={30}
+            step={1}
+            valueLabelDisplay="auto"
+            sx={{ color: '#4f46e5' }}
+          />
+        </Box>
+        
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="body2" gutterBottom>
+            Annual Rent Appreciation: {rentAppreciationRate}%
                 </Typography>
                 <Slider 
                   value={rentAppreciationRate} 
-                  onChange={handleRentAppreciationChange} 
+            onChange={(_, value) => setRentAppreciationRate(value as number)}
                   min={0} 
-                  max={10} 
-                  step={0.1} 
+            max={5}
+            step={0.5}
                   valueLabelDisplay="auto" 
                   valueLabelFormat={(value) => `${value}%`}
                   sx={{ color: '#4f46e5' }}
                 />
               </Box>
               
-              <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: 3 }}>
                 <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Annual percentage increase in property value over time. Historically real estate appreciates at 3-5% annually over the long term." arrow>
-                    <span>Property Value Increase: {propertyValueIncreaseRate}%</span>
-                  </Tooltip>
+            Annual Property Value Growth: {propertyValueIncreaseRate}%
                 </Typography>
                 <Slider 
                   value={propertyValueIncreaseRate} 
-                  onChange={handlePropertyValueIncreaseChange} 
+            onChange={(_, value) => setPropertyValueIncreaseRate(value as number)}
                   min={0} 
-                  max={10} 
-                  step={0.1} 
+            max={5}
+            step={0.5}
                   valueLabelDisplay="auto" 
                   valueLabelFormat={(value) => `${value}%`}
                   sx={{ color: '#4f46e5' }}
                 />
               </Box>
-            </Drawer>
-          </Box>
-        </Box>
         
-        {/* Notes Section - Add this before the Map */}
-        <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
-            <Typography variant="h5" mb={2}>Notes</Typography>
-            <TextField
+        <Button 
+          variant="contained" 
+          color="primary" 
                 fullWidth
-                multiline
-                rows={4}
-                variant="outlined"
-                placeholder="Add notes about this property... (saved with bookmarks & shared URLs)"
-                value={notes}
-                onChange={handleNotesChange}
+          onClick={saveSettingsToPortfolio}
                 sx={{
-                    '& .MuiOutlinedInput-root': {
-                        borderRadius: 1,
+            mt: 2,
+            height: '48px',
+            fontWeight: 'bold',
+            boxShadow: 2,
+            bgcolor: '#4f46e5',
+            '&:hover': {
+              bgcolor: '#4338ca',
+            }
+          }}
+        >
+          Save Settings to Property
+        </Button>
+            </Drawer>
+      
+      <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
+        {/* Property Header */}
+        <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: 2, border: '1px solid #e0e0e0' }}>
+          <Typography variant="h4" gutterBottom>{property.address}</Typography>
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <Typography variant="body1">
+                {property.bedrooms} Beds • {property.bathrooms} Baths • {property.sqft.toLocaleString()} sqft
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                {/* Price Display - Make it an Input */}
+                <TextField
+                  label="Purchase Price"
+                  value={editablePriceString} // Controlled by editablePriceString
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    // Basic filtering to allow only numbers and currency symbols for display
+                    // Formatting will happen more robustly on blur or save if needed
+                    setEditablePriceString(val);
+                    // Maybe add validation/formatting on blur later
+                  }}
+                  onBlur={(e) => {
+                    // Reformat on blur
+                    const parsed = parseFloat(e.target.value.replace(/[^\d.-]/g, ''));
+                    if (!isNaN(parsed)) {
+                      setEditablePriceString(formatCurrency(parsed)); // Removed options
+                    } else {
+                       // Optionally revert to last known good value if invalid
+                       setEditablePriceString(formatCurrency(currentAnalysisPrice ?? 0)); // Removed options
+                    }
+                  }}
+                  variant="outlined" // Change variant
+                  size="small" // Add size prop
+                  sx={{
+                    mt: 1,
+                    '& .MuiInputBase-input': {
+                      fontSize: '1.5rem',
+                      fontWeight: 'medium',
+                      color: 'primary.main'
                     },
-                }}
-            />
+                    // Make room for save button
+                    // width: 'calc(100% - 50px)', // REMOVE explicit width
+                    // mr: 1 // REMOVE margin right
+                  }}
+                />
+                {/* Save Price Button */}
+                <Tooltip title="Save this price to update analysis and portfolio entry" arrow>
+                  <span> {/* Span needed for disabled button tooltip */}
+                  <IconButton
+                    onClick={handleSavePrice}
+                    color="primary"
+                    size="small"
+                    disabled={priceSaveStatus !== 'idle' || currentAnalysisPrice === parseFloat(editablePriceString.replace(/[^\d.-]/g, ''))} // Disable if saving or price hasn't changed
+                    sx={{ mt: 2.5 }} // Align with text field baseline
+                  >
+                    {priceSaveStatus === 'saved' ? <CheckIcon fontSize="inherit" sx={{ color: 'success.main' }} /> : <SaveIcon fontSize="inherit" />}
+                  </IconButton>
+                  </span>
+                </Tooltip>
+
+                {/* Crunch Score - DEPENDS ON currentAnalysisPrice via cashflow */}
+                {cashflow && (
+                  <Tooltip title="Overall investment potential (0-100) based on cash flow, rent/price ratio, and your assumptions (higher is better)" arrow>
+                    <Box>
+                      {(() => {
+                        // Recalculate score based on currentAnalysisPrice
+                        const propertyForScore = { ...property, price: currentAnalysisPrice ?? property.price };
+                        const score = calculateCrunchScore(propertyForScore, localSettings, cashflow);
+                        const scoreClass = score >= 65 ? 'good' : (score >= 45 ? 'medium' : 'poor');
+                        return (
+                          <Chip
+                            label={`CrunchScore: ${score}`}
+                            size="small"
+                            sx={{
+                              fontWeight: 'bold',
+                              bgcolor: scoreClass === 'good' ? '#4caf50' : (scoreClass === 'medium' ? '#ff9800' : '#f44336'),
+                              color: 'white',
+                              '& .MuiChip-label': {
+                                px: 1
+                              }
+                            }}
+                          />
+                        );
+                      })()}
+          </Box>
+                  </Tooltip>
+                )}
+        </Box>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }} sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<BusinessCenterIcon />}
+                onClick={togglePortfolio}
+                sx={{ mt: { xs: 1, sm: 0 } }}
+              >
+                {isInPortfolio ? 'In Portfolio' : 'Add to Portfolio'}
+              </Button>
+            </Grid>
+          </Grid>
         </Paper>
         
-        {/* Property Location Map */}
-        <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
-          <Typography variant="h5" mb={2}>Property Location</Typography>
+        {/* Property Image */}
+        <Box sx={{ mb: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Box 
+            component="img"
+            src={property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'}
+            alt={property.address}
+                sx={{
+              width: '100%',
+              maxHeight: '500px',
+              objectFit: 'cover',
+              borderRadius: 2,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+            }}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+            Property image for {property.address}
+          </Typography>
+        </Box>
+        
+        {/* Property Map */}
+        <Typography variant="h5" gutterBottom sx={{ mt: 4, mb: 2 }}>Property Location</Typography>
           <PropertyMap 
             address={property.address} 
             lat={property.latitude || null} 
             lng={property.longitude || null} 
           />
-        </Paper>
 
-        {/* Cashflow Sankey Diagram */}
-        <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
+        {/* Sankey Chart for Cashflow Visualization */}
         {cashflow && (
+          <Box sx={{ my: 4 }}>
+            <Typography variant="h5" gutterBottom>Cashflow Visualization</Typography>
+            <Paper sx={{ p: 2, borderRadius: 2, minHeight: '300px' }}>
               <CashflowSankeyChart
                 data={{
-                  rentalIncome: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
+                  rentalIncome: customRentEstimate ?? property.rent_estimate,
                   mortgage: cashflow.monthlyMortgage,
                   taxInsurance: cashflow.monthlyTaxInsurance,
                   vacancy: cashflow.monthlyVacancy,
@@ -2618,302 +1748,433 @@ Generated with CashflowCrunch - https://cashflowcrunch.com/
                 }}
                 formatCurrency={formatCurrency}
               />
-          )}
           </Paper>
+              </Box>
+        )}
         
-        {/* Add new Long-Term Cashflow Analysis Section - Moved outside the columns to span full width */}
-        <Paper sx={{ p: 3, borderRadius: 2, mb: 3 }}>
-          <Typography variant="h5" mb={2}>Long-Term Cashflow Analysis</Typography>
-          
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle2" gutterBottom>Projection Assumptions</Typography>
-            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 3 }}>
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Expected annual increase in rental rates due to inflation and market demand. Historically averages 2-4% in most markets." arrow>
-                    <span>Annual Rent Appreciation: {rentAppreciationRate}%</span>
-                  </Tooltip>
-                </Typography>
-                <Slider value={rentAppreciationRate} onChange={handleRentAppreciationChange} aria-labelledby="rent-appreciation-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#4f46e5' }} />
-              </Box>
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="body2" gutterBottom>
-                  <Tooltip title="Expected annual increase in property value over time. Historically real estate appreciates at 3-5% annually over the long term." arrow>
-                    <span>Property Value Increase: {propertyValueIncreaseRate}%</span>
-                  </Tooltip>
-                </Typography>
-                <Slider value={propertyValueIncreaseRate} onChange={handlePropertyValueIncreaseChange} aria-labelledby="property-value-slider" valueLabelDisplay="auto" step={0.1} min={0} max={10} sx={{ color: '#4f46e5' }} />
-              </Box>
-            </Box>
-          </Box>
-          
-          <Box sx={{ width: '100%', mb: 4, height: 300 }}>
-            <Typography variant="subtitle2" gutterBottom>Property Value & Equity Growth</Typography>
-            <SimpleChart 
-              data={{
-                years: chartYears,
-                propertyValues: chartPropertyValues,
-                equity: chartEquity,
-                cashflow: chartCashflow
-              }}
-              height={300}
-            />
-          </Box>
-          
-          <Box sx={{ overflowX: 'auto' }}>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>
-                      <Tooltip title="Projection year" arrow placement="top">
-                        <span>Year</span>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip 
-                        title="Estimated property value after appreciation. Calculated using the initial property price compounded annually by the property value increase rate." 
-                        arrow 
-                        placement="top"
-                      >
-                        <span>Property Value</span>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip 
-                        title="Projected annual rental income. Calculated using the initial rent amount compounded annually by the rent appreciation rate." 
-                        arrow 
-                        placement="top"
-                      >
-                        <span>Annual Rent</span>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip 
-                        title="Total annual expenses including mortgage, taxes, insurance, vacancy, capital expenditures, and property management." 
-                        arrow 
-                        placement="top"
-                      >
-                        <span>Expenses</span>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip 
-                        title="Annual rental income minus all expenses. Represents your profit or loss each year." 
-                        arrow 
-                        placement="top"
-                      >
-                        <span>Cashflow</span>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip 
-                        title="Your ownership stake in the property. Calculated as property value minus remaining mortgage balance. Grows through principal payments and property appreciation." 
-                        arrow 
-                        placement="top"
-                      >
-                        <span>Equity</span>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip 
-                        title="Return on Investment percentage based on cashflow. Calculated as (Annual Cashflow / Initial Investment) * 100%." 
-                        arrow 
-                        placement="top"
-                      >
-                        <span>ROI (Cashflow)</span>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip 
-                        title="Total Return on Investment including both cashflow and equity growth. Calculated as ((Annual Cashflow + Annual Equity Growth) / Initial Investment) * 100%." 
-                        arrow 
-                        placement="top"
-                      >
-                        <span>ROI with Equity</span>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
+        {/* Cashflow Breakdown */}
+        <Grid container spacing={3} sx={{ mt: 1 }}>
+          <Grid size={{ xs: 12, md: 7 }}>
+            <Typography variant="h5" gutterBottom>Monthly Cashflow Breakdown</Typography>
+            <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
+              <Table>
                 <TableBody>
-                  {longTermCashflowData
-                    .filter(data => [1, 5, 10, 15, 20, 25, 30].includes(data.year))
-                    .map((data) => (
-                      <TableRow key={data.year}>
-                        <TableCell>{data.year}</TableCell>
-                        <TableCell align="right">{formatCurrency(data.propertyValue)}</TableCell>
-                        <TableCell align="right">{formatCurrency(data.annualRent)}</TableCell>
-                        <TableCell align="right">{formatCurrency(data.yearlyExpenses)}</TableCell>
+                  <TableRow>
+                    <TableCell>Monthly Rental Income</TableCell>
+                    <TableCell align="right">{formatCurrency(customRentEstimate ?? property.rent_estimate)}</TableCell>
+                  </TableRow>
+                  {cashflow && (
+                    <>
+                      <TableRow>
+                        <TableCell>Mortgage (P&I)</TableCell>
+                        <TableCell align="right">-{formatCurrency(cashflow.monthlyMortgage)}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Property Tax & Insurance ({localSettings.taxInsurancePercent}%)</TableCell>
+                        <TableCell align="right">-{formatCurrency(cashflow.monthlyTaxInsurance)}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Vacancy ({localSettings.vacancyPercent}%)</TableCell>
+                        <TableCell align="right">-{formatCurrency(cashflow.monthlyVacancy)}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Capital Expenditures ({localSettings.capexPercent}%)</TableCell>
+                        <TableCell align="right">-{formatCurrency(cashflow.monthlyCapex)}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Property Management ({localSettings.propertyManagementPercent}%)</TableCell>
+                        <TableCell align="right">-{formatCurrency(cashflow.monthlyPropertyManagement)}</TableCell>
+                      </TableRow>
+                      <TableRow sx={{ '& td': { fontWeight: 'bold', borderTop: '2px solid #e0e0e0' } }}>
+                        <TableCell>Monthly Cashflow</TableCell>
                         <TableCell 
                           align="right"
-                          sx={{ color: data.yearlyCashflow >= 0 ? 'success.main' : 'error.main' }}
+                          sx={{ 
+                            color: cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main',
+                            fontSize: '1.1rem'
+                          }}
                         >
-                          {formatCurrency(data.yearlyCashflow)}
-                        </TableCell>
-                        <TableCell align="right">{formatCurrency(data.equity)}</TableCell>
-                        <TableCell 
-                          align="right"
-                          sx={{ color: data.roi >= 0 ? 'success.main' : 'error.main' }}
-                        >
-                          {formatPercent(data.roi)}
-                        </TableCell>
-                        <TableCell 
-                          align="right"
-                          sx={{ color: data.roiWithEquity >= 0 ? 'success.main' : 'error.main' }}
-                        >
-                          {formatPercent(data.roiWithEquity)}
+                          {formatCurrency(cashflow.monthlyCashflow)}
                         </TableCell>
                       </TableRow>
-                    ))}
+                      <TableRow sx={{ '& td': { fontWeight: 'bold' } }}>
+                        <TableCell>Cash on Cash Return</TableCell>
+                        <TableCell 
+                          align="right"
+                          sx={{ 
+                            color: cashflow.cashOnCashReturn >= 0 ? 'success.main' : 'error.main',
+                            fontSize: '1.1rem'
+                          }}
+                        >
+                          {formatPercent(cashflow.cashOnCashReturn)}
+                        </TableCell>
+                      </TableRow>
+                    </>
+                  )}
                 </TableBody>
               </Table>
             </TableContainer>
-          </Box>
-        </Paper>
-
-        {/* Add IRR Summary Panel */}
+          </Grid>
+          
+          <Grid size={{ xs: 12, md: 5 }}>
+            <Typography variant="h5" gutterBottom>Initial Investment</Typography>
+            <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
+              <Table>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>Purchase Price</TableCell>
+                    {/* Display currentAnalysisPrice */}
+                    <TableCell align="right">{currentAnalysisPrice !== null ? formatCurrency(currentAnalysisPrice) : 'Loading...'}</TableCell>
+                  </TableRow>
+                  {cashflow && (
+                    <>
+                      {/* DP, Closing Costs, Rehab, Total - these depend on cashflow state variable */}
+                      <TableRow><TableCell>Down Payment ({localSettings.downPaymentPercent}%)</TableCell><TableCell align="right">{formatCurrency(cashflow.downPaymentAmount)}</TableCell></TableRow>
+                      <TableRow><TableCell>Closing Costs (3%)</TableCell><TableCell align="right">{formatCurrency(cashflow.closingCosts)}</TableCell></TableRow>
+                      <TableRow><TableCell>Rehab Budget</TableCell><TableCell align="right">{formatCurrency(localSettings.rehabAmount)}</TableCell></TableRow>
+                      <TableRow sx={{ '& td': { fontWeight: 'bold', borderTop: '2px solid #e0e0e0' } }}><TableCell sx={{ fontWeight: 'bold' }}>Total Estimated Investment</TableCell><TableCell align="right" sx={{ fontWeight: 'bold' }}>{formatCurrency(cashflow.totalInitialInvestment)}</TableCell></TableRow>
+                    </>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            
+            <Typography variant="h5" gutterBottom sx={{ mt: 3 }}>Financing</Typography>
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>Loan Amount</TableCell>
+                    <TableCell align="right">{formatCurrency(property.price * (1 - defaultSettings.downPaymentPercent / 100))}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Interest Rate</TableCell>
+                    <TableCell align="right">{formatPercent(defaultSettings.interestRate)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Loan Term</TableCell>
+                    <TableCell align="right">{defaultSettings.loanTerm} years</TableCell>
+                  </TableRow>
+                  {cashflow && (
+                    <TableRow>
+                      <TableCell>Monthly Principal & Interest</TableCell>
+                      <TableCell align="right">{formatCurrency(cashflow.monthlyMortgage)}</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Grid>
+        </Grid>
+        
+        {/* IRR Summary Panel - Reference irrData */}
         <Box sx={{ mt: 3, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0' }}>
-          <Typography variant="h6" gutterBottom sx={{ color: '#333', fontWeight: 'medium' }}>
-            Internal Rate of Return (IRR) by Holding Period
+           <Typography variant="h6" gutterBottom>Projected IRR (Internal Rate of Return)</Typography>
+           <Grid container spacing={1}>
+               {Object.entries(irrData).map(([period, irrValue]) => (
+                   <Grid size={{ xs: 6, sm: 4, md: 2.4 }} key={period}>
+                       <Typography variant="body2" align="center">{period} Year Hold</Typography>
+                       <Typography variant="h6" align="center" fontWeight="bold">{formatPercent(irrValue)}</Typography>
+                   </Grid>
+               ))}
+            </Grid>
+        </Box>
+
+        {/* Long-term Projections */}
+        <Box sx={{ mt: 4 }}>
+          <Typography variant="h5" gutterBottom>Long-term Projections</Typography>
+          
+          <Paper sx={{ p: 2, mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+              <Typography variant="body1" sx={{ mr: 2 }}>
+                Projection Period: <strong>{yearsToProject} years</strong>
           </Typography>
           
-          <Typography variant="body2" gutterBottom sx={{ color: '#666', mb: 2 }}>
-            IRR represents the annualized rate of return considering all cash flows and the final property value, accounting for the time value of money.
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ mr: 1 }}>
+                  Rent Appreciation:
           </Typography>
-          
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'space-between', pageBreakInside: 'avoid' as 'avoid' }}>
-            {[1, 5, 10, 15, 30].map(holdingPeriod => {
-              // Calculate IRR for this holding period
-              const relevantCashflows = longTermCashflowData // Use memoized data
-                .filter(data => data.year <= holdingPeriod)
-                .map(data => data.yearlyCashflow);
-                
-              // Get final property value and equity for the exit scenario
-              const finalYearData = longTermCashflowData.find(data => data.year === holdingPeriod);
-              const finalEquity = finalYearData ? finalYearData.equity : 0;
+                <Box sx={{ width: 150 }}>
+                  <Slider
+                    value={rentAppreciationRate}
+                    min={0}
+                    max={5}
+                    step={0.5}
+                    onChange={(_, value) => setRentAppreciationRate(value as number)}
+                    valueLabelDisplay="auto"
+                    valueLabelFormat={(value) => `${value}%`}
+                  />
+                </Box>
+              </Box>
               
-              // Assume sale at end of period and use equity as final value
-              // Make sure to use the totalInvestment calculated earlier
-              const irr = calculateIRR(
-                totalInvestment, // Use total investment including rehab
-                relevantCashflows,
-                finalEquity
-              );
-              
-              // Generate color based on IRR value
-              const color = irr < 0 ? '#ef4444' : 
-                            irr < 8 ? '#f97316' : 
-                            irr < 15 ? '#10b981' : 
-                            '#4f46e5';
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ mr: 1 }}>
+                  Property Value Growth:
+                </Typography>
+                <Box sx={{ width: 150 }}>
+                  <Slider
+                    value={propertyValueIncreaseRate}
+                    min={0}
+                    max={5}
+                    step={0.5}
+                    onChange={(_, value) => setPropertyValueIncreaseRate(value as number)}
+                    valueLabelDisplay="auto"
+                    valueLabelFormat={(value) => `${value}%`}
+                  />
+                </Box>
+              </Box>
+            </Box>
+            
+            {/* Render the SimpleChart component */}
+            {longTermData.length > 0 && (
+              <SimpleChart
+                data={{
+                  years: longTermData.map(data => data.year),
+                  propertyValues: longTermData.map(data => data.propertyValue),
+                  equity: longTermData.map(data => data.equity),
+                  cashflow: longTermData.map(data => data.yearlyCashflow)
+                }}
+                height={400}
+              />
+            )}
+            
+            {/* Projection Tabs */}
+            <Box sx={{ mt: 3, borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs 
+                value={projectionTab} 
+                onChange={(_, newValue) => setProjectionTab(newValue)}
+                aria-label="projection tabs"
+              >
+                <Tab label="Chart" />
+                <Tab label="Table" />
+              </Tabs>
+            </Box>
+            
+            {/* Projection Table (only shown when table tab is selected) */}
+            {projectionTab === 1 && (
+              <TableContainer component={Paper} variant="outlined" sx={{ mt: 2, maxHeight: 500, overflow: 'auto' }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow sx={{ backgroundColor: 'primary.light' }}>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Year</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Property Value</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Annual Rent</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Annual Expenses</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Annual Cashflow</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Equity</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Equity Growth</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Cash on Cash ROI</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total ROI (w/ Equity)</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Cumulative Cashflow</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {longTermData.map((yearData, index) => {
+                      // Calculate annual expenses
+                      const annualExpenses = yearData.annualRent - yearData.yearlyCashflow;
+                      
+                      // Calculate equity growth if possible
+                      const equityGrowth = index > 0 
+                        ? yearData.equity - longTermData[index-1].equity 
+                        : yearData.equity - (cashflow?.downPaymentAmount || 0);
+                        
+                      // Calculate cumulative cashflow
+                      const cumulativeCashflow = longTermData
+                        .slice(0, index + 1)
+                        .reduce((sum, data) => sum + data.yearlyCashflow, 0);
               
               return (
-                <Box 
-                  key={holdingPeriod} 
+                        <TableRow 
+                          key={yearData.year}
                   sx={{ 
-                    flex: '1', 
-                    minWidth: '150px', 
-                    textAlign: 'center',
-                    p: 2,
-                    bgcolor: 'white',
-                    borderRadius: 1,
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                  }}
-                >
-                  <Typography variant="subtitle1" color="#555">
-                    {holdingPeriod} Year{holdingPeriod > 1 ? 's' : ''}
-                  </Typography>
-                  <Typography 
-                    variant="h5" 
-                    fontWeight="bold" 
-                    sx={{ color }}
-                  >
-                    {irr.toFixed(2)}%
-                  </Typography>
-                  <Typography variant="body2" color="#777" fontSize="0.8rem">
-                    {irr < 0 ? 'Poor' : 
-                     irr < 8 ? 'Moderate' : 
-                     irr < 15 ? 'Good' : 
-                     'Excellent'}
-                  </Typography>
-                </Box>
+                            '&:nth-of-type(odd)': { backgroundColor: 'rgba(0, 0, 0, 0.02)' },
+                            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' }
+                          }}
+                        >
+                          <TableCell><strong>{yearData.year}</strong></TableCell>
+                          <TableCell align="right">{formatCurrency(yearData.propertyValue)}</TableCell>
+                          <TableCell align="right">{formatCurrency(yearData.annualRent)}</TableCell>
+                          <TableCell align="right">{formatCurrency(annualExpenses)}</TableCell>
+                          <TableCell align="right" sx={{ color: yearData.yearlyCashflow >= 0 ? 'success.main' : 'error.main' }}>
+                            {formatCurrency(yearData.yearlyCashflow)}
+                          </TableCell>
+                          <TableCell align="right">{formatCurrency(yearData.equity)}</TableCell>
+                          <TableCell align="right">{formatCurrency(equityGrowth)}</TableCell>
+                          <TableCell align="right">{formatPercent(yearData.roi)}</TableCell>
+                          <TableCell align="right">{formatPercent(yearData.roiWithEquity)}</TableCell>
+                          <TableCell align="right" sx={{ color: cumulativeCashflow >= 0 ? 'success.main' : 'error.main' }}>
+                            {formatCurrency(cumulativeCashflow)}
+                          </TableCell>
+                        </TableRow>
               );
             })}
-          </Box>
-          
-          <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #e0e0e0' }}>
-            <Typography variant="body2" color="#666">
-              <strong>Assumptions:</strong> IRR calculations include annual cash flows and assume property sale at the end of the holding period with proceeds equal to your equity. Sale costs (agent fees, closing costs, etc.) are not factored in. Initial rehab cost is included in the initial investment. {/* Added note about rehab cost */}
+                    
+                    {/* Summary row */}
+                    {longTermData.length > 0 && (
+                      <TableRow sx={{ backgroundColor: 'primary.light' }}>
+                        <TableCell colSpan={4} sx={{ fontWeight: 'bold' }}>
+                          {yearsToProject} Year Summary
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                          {formatCurrency(longTermData.reduce((sum, data) => sum + data.yearlyCashflow, 0))}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                          {formatCurrency(longTermData[longTermData.length - 1]?.equity || 0)}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                          {formatCurrency(
+                            (longTermData[longTermData.length - 1]?.equity || 0) - (cashflow?.downPaymentAmount || 0)
+                          )}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }} colSpan={3}>
+                          Total Return: {formatPercent(
+                            ((longTermData.reduce((sum, data) => sum + data.yearlyCashflow, 0) + 
+                            (longTermData[longTermData.length - 1]?.equity || 0) - (cashflow?.downPaymentAmount || 0)) /
+                            (cashflow?.totalInitialInvestment || 1)) * 100
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+                
+                <Box sx={{ p: 2, backgroundColor: 'rgba(0, 0, 0, 0.02)' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    <strong>Note:</strong> These projections assume consistent rent appreciation of {rentAppreciationRate}% and 
+                    property value growth of {propertyValueIncreaseRate}% annually. Actual results may vary based on market conditions.
             </Typography>
           </Box>
+              </TableContainer>
+            )}
+          </Paper>
         </Box>
+        
+        {/* Notes Section */}
+        <Paper sx={{ p: 3, mt: 3 }}>
+          <Typography variant="h5" gutterBottom>Property Notes</Typography>
+          <TextField
+            label="Your notes about this property"
+            multiline
+            rows={4}
+            variant="outlined"
+        fullWidth
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Add your thoughts, observations, or questions about this property..."
+          />
+        </Paper>
       </Container>
 
-      {/* PDF Preview Modal */}
-      <Dialog
-        open={showPdfModal}
-        onClose={handleClosePdfModal}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: {
-            maxHeight: '90vh', 
-            height: 'auto',
-            width: '100%',
-            maxWidth: '960px',
-            m: 2
-          }
-        }}
-      >
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6">PDF Report Preview</Typography>
-          <IconButton onClick={handleClosePdfModal} edge="end">
-            <ExpandMoreIcon sx={{ transform: 'rotate(180deg)' }} />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent dividers sx={{ p: 0, overflow: 'auto' }}>
-          <Box sx={{ 
-            bgcolor: '#f3f4f6', 
-            display: 'flex', 
-            justifyContent: 'center', 
-            p: 2, 
-            overflow: 'auto'
-          }}>
-            {/* Render PDF component conditionally based on data availability */}
-            {property && cashflow && (
-              <PropertyPDFReport
-                ref={targetRef}
+      {/* Portfolio Snackbar */}
+      <Snackbar
+        open={portfolioSnackbarOpen}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        message={portfolioAction === 'added' ? 'Property added to portfolio' : 'Property removed from portfolio'}
+      />
+
+      {/* PDF Modal - Use Forwarded component and correct ref */}
+      <Dialog open={showPdfModal} onClose={handleClosePdfModal} maxWidth="md" fullWidth>
+        <DialogTitle>PDF Report Preview</DialogTitle>
+        <DialogContent dividers>
+            {property && cashflow && currentAnalysisPrice !== null && (
+            <ForwardedPropertyPDFReport 
+                ref={pdfTargetRef} // Pass the ref here
                 property={property}
                 cashflow={cashflow}
-                settings={settings}
+                settings={defaultSettings} 
                 customRentEstimate={customRentEstimate}
                 notes={notes}
                 generateShareableURL={generateShareableURL}
                 generateLongTermCashflow={generateLongTermCashflow}
-                formatCurrency={formatCurrency}
-                formatPercent={formatPercent}
-                calculateIRR={calculateIRR} // Pass IRR function
+                calculateIRR={calculateIRR} 
                 yearsToProject={yearsToProject}
                 rentAppreciationRate={rentAppreciationRate}
                 propertyValueIncreaseRate={propertyValueIncreaseRate}
-                effectivePrice={effectivePrice}
+                effectivePrice={currentAnalysisPrice} // Pass currentAnalysisPrice to PDF
               />
             )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClosePdfModal}>Close</Button>
+          <Button onClick={handleDownloadPDF} variant="contained" startIcon={<PdfIcon />}>Download PDF</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Share Modal */}
+      <Dialog open={showShareModal} onClose={handleCloseShareModal} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box display="flex" alignItems="center">
+            <ShareIcon sx={{ mr: 1, color: 'primary.main' }} />
+            <Typography variant="h6">Share Property Analysis</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: 'center' }}>
+              Share this link to show this property with your current analysis assumptions and notes.
+            </Typography>
+            
+            <Box sx={{ 
+              display: 'flex', 
+              width: '100%', 
+              mb: 3, 
+              alignItems: 'center', 
+              bgcolor: 'grey.100', 
+              p: 1, 
+              borderRadius: 1 
+            }}>
+              <Box sx={{ flexGrow: 1, overflow: 'hidden', mr: 1 }}>
+                <Typography variant="body2" noWrap>
+                  {shareableURL}
+                </Typography>
+              </Box>
+          <Button 
+                startIcon={<ContentCopyIcon />} 
+                onClick={handleCopyShareURL} 
+            variant="contained" 
+                color={shareURLCopied ? "success" : "primary"}
+                size="small"
+          >
+                {shareURLCopied ? "Copied!" : "Copy"}
+          </Button>
+            </Box>
+            
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Scan QR Code
+            </Typography>
+            <Box sx={{ p: 2, bgcolor: 'white', borderRadius: 1, border: '1px solid #eee' }}>
+              <QRCodeSVG value={shareableURL} size={150} />
+            </Box>
+          </Box>
+          
+          <Divider sx={{ my: 2 }} />
+          
+          <Typography variant="subtitle2" color="text.secondary">
+            This analysis includes:
+          </Typography>
+          <Box component="ul" sx={{ pl: 2 }}>
+            <Typography variant="body2" component="li">
+              {/* Reference currentAnalysisPrice here too if desired, or keep original */}
+              Property details with analysis price of {property && currentAnalysisPrice !== null ? formatCurrency(currentAnalysisPrice) : '...'}
+            </Typography>
+            <Typography variant="body2" component="li">
+              Custom rent estimate: {formatCurrency(customRentEstimate ?? (property?.rent_estimate || 0))}
+            </Typography>
+            <Typography variant="body2" component="li">
+              Your financing and expense assumptions
+            </Typography>
+            <Typography variant="body2" component="li">
+              {notes ? "Your property notes" : "No notes added"}
+            </Typography>
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClosePdfModal}>Cancel</Button>
-          <Button 
-            variant="contained" 
-            color="primary"
-            startIcon={<PdfIcon />}
-            onClick={handleDownloadPDF}
-          >
-            Download PDF
-          </Button>
+          <Button onClick={handleCloseShareModal}>Close</Button>
         </DialogActions>
       </Dialog>
-    </>
-  );
-};
+    </> // Close the main fragment
+  ); // Close the return statement
+}; // Close the component function
 
 export default PropertyDetailsPage; 

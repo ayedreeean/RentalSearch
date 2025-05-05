@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Typography, Box, Skeleton,
   Paper, TextField, Card, CardContent, Accordion, AccordionSummary, AccordionDetails, Modal, Button, IconButton, Divider, Alert,
-  Tooltip
+  Tooltip, Chip
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -228,9 +228,9 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
 
   // --- Define Crunch Score CSS class based on score --- 
   const getCrunchScoreClass = (score: number): string => {
-    if (score >= 65) return 'crunch-score-good';
-    if (score >= 45) return 'crunch-score-medium';
-    return 'crunch-score-poor';
+    if (score >= 65) return 'good';
+    if (score >= 45) return 'medium';
+    return 'poor';
   };
   const crunchScoreClass = getCrunchScoreClass(crunchScore);
   
@@ -248,55 +248,37 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
           src={property.thumbnail}
           alt={property.address}
         />
-        <div className="property-price">
-          {formatCurrency(currentPrice)}
-          {overridePrice !== undefined && 
-             <Tooltip title="Price has been manually overridden" arrow placement="top">
-               <span style={{ fontSize: '0.7em', verticalAlign: 'super', marginLeft: '4px', color: '#ffc107' }}>*</span>
-             </Tooltip>
-           }
-        </div>
       </button>
       
-      <CardContent className="property-details">
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-          <Typography variant="h6" component="div" className="price-ratio-container" sx={{ display: 'flex', alignItems: 'center', gap: 1 }} gutterBottom>
-            <span style={{ fontSize: '1.1rem', fontWeight: 500 }}>{formatCurrency(currentPrice)}</span>
-            {overridePrice !== undefined && 
-             <Tooltip title="Price has been manually overridden" arrow placement="top">
-               <span style={{ fontSize: '0.7em', verticalAlign: 'super', color: '#ffc107' }}>*</span>
-             </Tooltip>
-            }
-            
-            <Tooltip title={crunchScoreTooltip} arrow>
-              <span className={`crunch-score-chip ${crunchScoreClass}`}>
-                Crunch Score: {crunchScore}
-              </span>
-            </Tooltip>
-            {property.days_on_market !== null && (
-              <span className="days-on-market ratio-chip"> 
-                {property.days_on_market} days
-              </span>
-            )}
-          </Typography>
-        </Box>
-        
-        <button 
-          onClick={handleOpenDeepDive} 
-          className="property-address"
-          style={{ 
-            background: 'none', 
-            border: 'none', 
-            padding: 0, 
-            cursor: 'pointer',
-            textAlign: 'left',
-            width: '100%'
-          }}
-        >
-          <Typography variant="body2" color="text.secondary">
+      <CardContent className="property-details" onClick={(e) => e.stopPropagation()}>
+        <div className="property-title" onClick={(e) => e.stopPropagation()}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 'medium', lineHeight: 1.3, mb: 0.5 }}>
             {property.address}
           </Typography>
-        </button>
+          
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+              {formatCurrency(currentPrice)}
+            </Typography>
+            
+            <Tooltip title={crunchScoreTooltip} arrow>
+              <Box>
+                <Chip
+                  label={`CrunchScore: ${crunchScore}`}
+                  size="small"
+                  sx={{
+                    fontWeight: 'bold',
+                    bgcolor: crunchScoreClass === 'good' ? '#4caf50' : (crunchScoreClass === 'medium' ? '#ff9800' : '#f44336'),
+                    color: 'white',
+                    '& .MuiChip-label': {
+                      px: 1,
+                    }
+                  }}
+                />
+              </Box>
+            </Tooltip>
+        </Box>
+        </div>
         
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <div>
@@ -326,11 +308,12 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
       </CardContent>
       
       <div className="property-footer">
-        <Accordion>
+        <Accordion onClick={(e) => e.stopPropagation()}>
           <AccordionSummary 
             expandIcon={<ExpandMoreIcon />}
             aria-controls="cashflow-content"
             id="cashflow-header"
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="cashflow-header">
               <Typography fontWeight="medium">Cashflow Analysis</Typography>
@@ -344,7 +327,7 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
               </Typography>
             </div>
           </AccordionSummary>
-          <AccordionDetails>
+          <AccordionDetails onClick={(e) => e.stopPropagation()}>
             <div className="cashflow-analysis">
               <div className="cashflow-row" style={{ alignItems: 'center' }}>
                 <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center' }}>

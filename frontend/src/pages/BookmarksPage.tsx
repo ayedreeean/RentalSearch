@@ -18,7 +18,8 @@ import {
   Paper,
   Divider,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Tooltip
 } from '@mui/material';
 import { 
   ArrowBack as ArrowBackIcon, 
@@ -26,6 +27,10 @@ import {
   Delete as DeleteIcon
 } from '@mui/icons-material';
 import { Property, Cashflow } from '../types';
+import { CashflowSettings } from '../types';
+import { formatCurrency, formatPercent } from '../utils/formatting';
+import { calculateCashflow as calculateCashflowUtil } from '../utils/calculations';
+import { calculateCrunchScore } from '../utils/scoring';
 
 // Define the CustomProperty interface locally for bookmarks
 interface CustomProperty extends Property {
@@ -45,17 +50,6 @@ const BookmarksPage: React.FC = () => {
   const [bookmarks, setBookmarks] = useState<Record<string, BookmarkEntry>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Format currency (Keep local function)
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-    }).format(amount);
-  };
-  
-  // Format percent (Keep local function)
-  const formatPercent = (percent: number): string => {
-    return `${percent.toFixed(1)}%`;
-  };
   
   // Load bookmarks from localStorage
   useEffect(() => {
@@ -146,54 +140,49 @@ const BookmarksPage: React.FC = () => {
     monthlyCashflow: number, 
     cashOnCashReturn: number, 
     effectiveRent: number,
-    effectivePrice: number // Add effective price
+    effectivePrice: number,
+    crunchScore: number
   } => {
     // Extract parameters from URL
     const params = extractParamsFromUrl(url);
     
-    // Use URL parameters if available, otherwise use default values or property values
-    const interestRate = params.interestRate ?? 7.5; // 7.5%
-    const loanTerm = params.loanTerm ?? 30; // 30 years
-    const downPaymentPercent = params.downPaymentPercent ?? 20; // 20%
-    const taxInsurancePercent = params.taxInsurancePercent ?? 3; // 3%
-    const vacancyPercent = params.vacancyPercent ?? 8; // 8%
-    const capexPercent = params.capexPercent ?? 5; // 5%
-    const propertyManagementPercent = params.propertyManagementPercent ?? 0; // 0%
-    
-    // Use custom rent from URL if available, otherwise from saved property
+    // Determine effective values
     const effectiveRent = params.customRent ?? property.customRent ?? property.rent_estimate;
-    // Use custom price from URL/saved property if available
     const effectivePrice = params.customPrice ?? property.customPrice ?? property.price;
     
-    // Calculate monthly mortgage payment using effectivePrice
-    const downPayment = effectivePrice * (downPaymentPercent / 100);
-    const loanAmount = effectivePrice - downPayment;
-    const monthlyRate = interestRate / 100 / 12;
-    const payments = loanTerm * 12;
+    // Create CashflowSettings object from params or defaults
+    const settings: CashflowSettings = {
+        interestRate: params.interestRate ?? 7.5, // Default or from App state?
+        loanTerm: params.loanTerm ?? 30,
+        downPaymentPercent: params.downPaymentPercent ?? 20,
+        taxInsurancePercent: params.taxInsurancePercent ?? 3,
+        vacancyPercent: params.vacancyPercent ?? 8,
+        capexPercent: params.capexPercent ?? 5,
+        propertyManagementPercent: params.propertyManagementPercent ?? 0,
+        rehabAmount: 0 // Assuming 0 rehab for bookmarks unless stored in URL (add if needed)
+    };
+
+    // Create a minimal property object for the calculation utility
+    const propertyForCalc: Property = {
+        ...property,
+        price: effectivePrice,
+        rent_estimate: effectiveRent
+    };
+
+    // Use the imported utility function
+    const cashflowResult = calculateCashflowUtil(propertyForCalc, settings);
     
-    let monthlyMortgage = 0;
-    if (monthlyRate === 0) {
-      monthlyMortgage = loanAmount / payments;
-    } else {
-      const x = Math.pow(1 + monthlyRate, payments);
-      monthlyMortgage = loanAmount * (monthlyRate * x) / (x - 1);
-    }
-    
-    // Calculate expenses using effectivePrice and effectiveRent
-    const monthlyTaxInsurance = effectivePrice * (taxInsurancePercent / 100) / 12;
-    const monthlyVacancy = effectiveRent * (vacancyPercent / 100);
-    const monthlyCapex = effectiveRent * (capexPercent / 100);
-    const monthlyPropertyManagement = effectiveRent * (propertyManagementPercent / 100);
-    
-    const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
-    const monthlyCashflow = effectiveRent - totalMonthlyExpenses;
-    const annualCashflow = monthlyCashflow * 12;
-    
-    // Calculate initial investment using effectivePrice
-    const initialInvestment = downPayment + (effectivePrice * 0.03); // Down payment + 3% closing costs
-    const cashOnCashReturn = (initialInvestment > 0 ? annualCashflow / initialInvestment : 0) * 100; // Check for zero investment
-    
-    return { monthlyCashflow, cashOnCashReturn, effectiveRent, effectivePrice };
+    // Calculate crunch score using custom settings
+    const crunchScore = calculateCrunchScore(propertyForCalc, settings, cashflowResult);
+
+    // Return the needed values along with effective price/rent
+    return { 
+        monthlyCashflow: cashflowResult.monthlyCashflow,
+        cashOnCashReturn: cashflowResult.cashOnCashReturn,
+        effectiveRent, 
+        effectivePrice,
+        crunchScore
+    };
   };
 
   return (
@@ -266,7 +255,7 @@ const BookmarksPage: React.FC = () => {
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
               {Object.entries(bookmarks).map(([id, entry]) => {
                 // Calculate simple cashflow based on stored URL/property data
-                const { monthlyCashflow, cashOnCashReturn, effectiveRent, effectivePrice } = calculateSimpleCashflow(entry.property, entry.url);
+                const { monthlyCashflow, cashOnCashReturn, effectiveRent, effectivePrice, crunchScore } = calculateSimpleCashflow(entry.property, entry.url);
                 const property = entry.property; // Use entry.property for clarity
                 
                 // Determine display price (custom or original)
@@ -319,6 +308,32 @@ const BookmarksPage: React.FC = () => {
                         <Typography variant="body2" color="text.secondary" gutterBottom>
                           {property.address}
                         </Typography>
+                        
+                        {/* Add Crunch Score as pill */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2 }}>
+                          <Tooltip title="Investment score based on cash flow, rent/price ratio, and assumptions" arrow>
+                            <Box>
+                              {(() => {
+                                const scoreClass = crunchScore >= 65 ? 'good' : (crunchScore >= 45 ? 'medium' : 'poor');
+                                return (
+                                  <Chip
+                                    label={`CrunchScore: ${crunchScore}`}
+                                    size="small"
+                                    sx={{
+                                      fontWeight: 'bold',
+                                      bgcolor: scoreClass === 'good' ? '#4caf50' : (scoreClass === 'medium' ? '#ff9800' : '#f44336'),
+                                      color: 'white',
+                                      '& .MuiChip-label': {
+                                        px: 1,
+                                      }
+                                    }}
+                                  />
+                                );
+                              })()}
+                            </Box>
+                          </Tooltip>
+                        </Box>
+                        
                         <Divider sx={{ my: 1 }} />
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
                           <Typography variant="body2">Rent Est:</Typography>
@@ -340,6 +355,11 @@ const BookmarksPage: React.FC = () => {
                           <Typography variant="body2">CoC Return:</Typography>
                           <Typography variant="body2" fontWeight="bold" color={cashOnCashReturn >= 0 ? 'success.main' : 'error.main'}>
                             {formatPercent(cashOnCashReturn)}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 1 }}>
+                          <Typography variant="body2">
+                            {formatCurrency(monthlyCashflow)}/mo • ROI: {formatPercent(cashOnCashReturn)}
                           </Typography>
                         </Box>
                       </CardContent>

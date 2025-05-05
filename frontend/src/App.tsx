@@ -18,7 +18,6 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import TuneIcon from '@mui/icons-material/Tune';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import CloseIcon from '@mui/icons-material/Close';
-import BookmarkIcon from '@mui/icons-material/Bookmark';
 import DeleteIcon from '@mui/icons-material/Delete';
 import './App.css';
 import { searchProperties, getTotalPropertiesCount, registerForPropertyUpdates, searchPropertyByAddress } from './api/propertyApi';
@@ -32,6 +31,14 @@ import PropertyCard from './components/PropertyCard';
 // Import the scoring function
 import { calculateCrunchScore } from './utils/scoring';
 import WelcomeTour from './components/WelcomeTour'; // Import the new component
+import PortfolioPage from './pages/PortfolioPage'; // Import PortfolioPage
+import BusinessCenterIcon from '@mui/icons-material/BusinessCenter'; // Import Portfolio icon
+import InfoIcon from '@mui/icons-material/Info';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import LightModeIcon from '@mui/icons-material/LightMode';
+// Import utility functions
+import { formatCurrency, formatPercent } from './utils/formatting';
+import { calculateCashflow } from './utils/calculations';
 
 // Define possible sort keys
 type SortableKey = keyof Pick<Property, 'price' | 'rent_estimate' | 'bedrooms' | 'bathrooms' | 'sqft' | 'days_on_market'> | 'ratio' | 'cashflow' | 'crunchScore'; // Add crunchScore
@@ -67,7 +74,7 @@ function App() {
   
   // State for FAQ modal
   const [isFaqOpen, setIsFaqOpen] = useState(false); // Restore state
-  const [activeFaqSection, setActiveFaqSection] = useState<'general' | 'search' | 'filters' | 'cashflow' | 'bookmarks' | 'details'>('general'); // Restore state
+  const [activeFaqSection, setActiveFaqSection] = useState<'general' | 'search' | 'filters' | 'cashflow' | 'portfolio' | 'details'>('general'); // Updated to include portfolio
   
   // New state for marketing intro panel - always show
   const [showMarketingIntro] = useState(true);
@@ -159,21 +166,11 @@ function App() {
   }, [savedSearches]);
   // --- End LocalStorage Handling ---
 
-  // --- Helper function to format currency (Wrap in useCallback) ---
-  const formatCurrency = useCallback((amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  }, []); // No dependencies, stable function
-
   // --- Price Input Handlers (Wrap formatPriceInput in useCallback) ---
   const formatPriceInput = useCallback((value: number | string): string => {
     if (value === '' || value === null || isNaN(Number(value))) return '';
     return formatCurrency(Number(value)); // Use existing formatCurrency
-  }, [formatCurrency]); // Dependency on formatCurrency
+  }, []); // Dependency on formatCurrency
 
   const parsePriceInput = (displayValue: string): number | string => {
     if (!displayValue) return '';
@@ -465,74 +462,11 @@ function App() {
 
 
   // --- Mortgage Calculation and Cashflow ---
-  // Function to calculate mortgage payment
-  const calculateMortgage = (price: number): number => {
-    const downPayment = price * (downPaymentPercent / 100);
-    const loanAmount = price - downPayment;
-    const monthlyRate = interestRate / 100 / 12;
-    const payments = loanTerm * 12;
-    
-    if (monthlyRate === 0) return loanAmount / payments;
-    
-    const x = Math.pow(1 + monthlyRate, payments);
-    return loanAmount * (monthlyRate * x) / (x - 1);
-  };
+  // Function to calculate mortgage payment - Removed, logic is in calculations.ts
   
-  // Function to calculate cashflow
-  // Ensure this uses the imported Property and Cashflow types
-  const calculateCashflow = useCallback((property: Property): Cashflow => {
-    // Use override price if it exists, otherwise use property price
-    const propertyPrice = overridePrices[property.property_id] ?? property.price;
-    
-    // Get final rent value - use custom rent if available
-    const rentEstimate = 
-      property.rent_estimate;
-    
-    // Calculate mortgage as a monthly expense
-    const monthlyMortgage = calculateMortgage(propertyPrice);
-    
-    // Calculate tax and insurance (monthly)
-    const annualTaxInsurance = propertyPrice * (taxInsurancePercent / 100);
-    const monthlyTaxInsurance = annualTaxInsurance / 12;
-    
-    // Calculate vacancy (monthly)
-    const monthlyVacancy = rentEstimate * (vacancyPercent / 100);
-    
-    // Calculate capital expenditures (capex)
-    const monthlyCapex = rentEstimate * (capexPercent / 100);
-    
-    // Calculate property management fees (if any)
-    const monthlyPropertyManagement = rentEstimate * (propertyManagementPercent / 100);
-    
-    // Calculate total monthly expenses
-    const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
-    
-    // Calculate cashflow
-    const monthlyCashflow = rentEstimate - totalMonthlyExpenses;
-    const annualCashflow = monthlyCashflow * 12;
-    
-    // Calculate cash on cash return
-    const downPaymentAmount = propertyPrice * (downPaymentPercent / 100);
-    const totalInitialInvestment = downPaymentAmount + rehabAmount;
-    const cashOnCashReturn = totalInitialInvestment > 0 ? (annualCashflow / totalInitialInvestment) * 100 : 0;
-    
-    return {
-      monthlyMortgage,
-      monthlyTaxInsurance,
-      monthlyVacancy,
-      monthlyCapex,
-      monthlyPropertyManagement,
-      totalMonthlyExpenses,
-      monthlyCashflow,
-      annualCashflow,
-      cashOnCashReturn
-    };
-  }, [interestRate, loanTerm, downPaymentPercent, taxInsurancePercent, vacancyPercent, capexPercent, propertyManagementPercent, rehabAmount, overridePrices, calculateMortgage]);
+  // Function to calculate cashflow - Removed useCallback wrapper, using imported function directly
   
-  // Helper function to format percentage
-  const formatPercent = (percent: number): string => {
-    return `${(percent).toFixed(2)}%`;
-  };
+  // Helper function to format percentage - Removed, now imported
   
   // Default settings for PropertyDetailsPage
   const defaultSettings: CashflowSettings = {
@@ -552,7 +486,6 @@ function App() {
     properties: Property[], 
     key: SortableKey | null, 
     direction: 'asc' | 'desc', 
-    calculateCashflowFn: (p: Property) => Cashflow, 
     priceOverrides: Record<string, number>,
     settings: CashflowSettings // Add settings parameter
   ): Property[] => {
@@ -570,18 +503,16 @@ function App() {
           if (key === 'ratio') {
             valA = priceA > 0 ? a.rent_estimate / priceA : 0;
             valB = priceB > 0 ? b.rent_estimate / priceB : 0;
-          } else if (key === 'cashflow') {
-              const cashflowA = calculateCashflowFn(propertyAForCalc);
-              const cashflowB = calculateCashflowFn(propertyBForCalc);
+          } else if (key === 'cashflow' || key === 'crunchScore') {
+              const cashflowA = calculateCashflow({ ...a, price: priceA }, settings);
+              const cashflowB = calculateCashflow({ ...b, price: priceB }, settings);
+              if (key === 'cashflow') {
               valA = cashflowA.monthlyCashflow;
               valB = cashflowB.monthlyCashflow;
-          } else if (key === 'crunchScore') {
-              // Use the full calculateCrunchScore utility function
-              const cashflowA = calculateCashflowFn(propertyAForCalc);
-              const cashflowB = calculateCashflowFn(propertyBForCalc);
-              // Pass the provided settings object
-              valA = calculateCrunchScore(propertyAForCalc, settings, cashflowA);
-              valB = calculateCrunchScore(propertyBForCalc, settings, cashflowB);
+              } else { // key === 'crunchScore'
+                  valA = calculateCrunchScore({ ...a, price: priceA }, settings, cashflowA);
+                  valB = calculateCrunchScore({ ...b, price: priceB }, settings, cashflowB);
+              }
           } else if (key === 'price') {
               valA = priceA;
               valB = priceB;
@@ -614,8 +545,8 @@ function App() {
       });
       
       return sorted;
-  // Add settings dependencies to useCallback
-  }, [calculateCrunchScore, calculateCashflow]); 
+  // Remove calculateCashflow from dependencies, add settings
+  }, [calculateCrunchScore, defaultSettings]); 
 
   // --- Add useEffect for handling property updates ---
   const handlePropertyUpdate = useCallback((updatedProperty: Property) => {
@@ -648,7 +579,7 @@ function App() {
           // Sort based on current config, passing current settings
           if (sortConfig.key) {
             const currentSettings: CashflowSettings = defaultSettings; // Get current settings
-            return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, calculateCashflow, overridePrices, currentSettings);
+            return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, overridePrices, currentSettings);
           } else {
             return newPropertyList;
           }
@@ -676,7 +607,7 @@ function App() {
        return currentProperties; 
     });
 
-  }, [sortConfig, totalProperties, calculateCashflow, searchPerformed, initialLoading, overridePrices, sortProperties, defaultSettings]); // Add missing dependencies
+  }, [sortConfig, totalProperties, overridePrices, sortProperties, defaultSettings]); // Add missing dependencies
 
   // UseEffect to register for updates when component mounts
   useEffect(() => {
@@ -702,9 +633,9 @@ function App() {
   const sortedProperties = useMemo(() => {
       // Pass overridePrices and current settings to the sort function
       const currentSettings: CashflowSettings = defaultSettings; // Get current settings
-      return sortProperties(displayedProperties, sortConfig.key, sortConfig.direction, calculateCashflow, overridePrices, currentSettings);
+      return sortProperties(displayedProperties, sortConfig.key, sortConfig.direction, overridePrices, currentSettings);
   // Update dependencies for useMemo
-  }, [displayedProperties, sortConfig, calculateCashflow, overridePrices, sortProperties, defaultSettings]); 
+  }, [displayedProperties, sortConfig, overridePrices, sortProperties, defaultSettings]); 
 
   // --- Rent Estimate Handling ---
   const handleRentEstimateChange = useCallback((propertyId: string, newRentString: string) => {
@@ -735,7 +666,7 @@ function App() {
   };
   
   const handleFaqSectionChange = (section: string) => {
-    setActiveFaqSection(section as 'general' | 'search' | 'filters' | 'cashflow' | 'bookmarks' | 'details');
+    setActiveFaqSection(section as 'general' | 'search' | 'filters' | 'cashflow' | 'portfolio' | 'details');
   };
   
   // --- Other UI Handlers ---
@@ -804,22 +735,20 @@ function App() {
                   </div>
                   <div className="header-actions">
                     <Button 
-                      variant="outlined" 
-                      onClick={handleOpenFaq}
-                      className="help-button"
-                      startIcon={<HelpOutlineIcon />}
-                      sx={{ mr: 2 }}
+                        color="inherit" 
+                        onClick={handleOpenFaq} // Change to open the modal
+                        startIcon={<HelpOutlineIcon />}
+                        sx={{ mr: 1 }}
                     >
-                       FAQ
+                        FAQ
                     </Button>
                     <Button 
-                      variant="outlined" 
-                      component="a"
-                      href="#/bookmarks"
-                      className="bookmarks-button"
-                      startIcon={<BookmarkIcon />}
+                        color="inherit" 
+                        onClick={() => navigate('/portfolio')}
+                        startIcon={<BusinessCenterIcon />} // Add the icon here
+                        sx={{ mr: 1 }}
                     >
-                      Bookmarks
+                        Portfolio
                     </Button>
                   </div>
                 </div>
@@ -1161,7 +1090,7 @@ function App() {
               <Tooltip title="Adjust mortgage and cashflow assumptions" placement="left">
                 <div 
                   className="assumptions-tab"
-                  onClick={() => setIsAssumptionsDrawerOpen(!isAssumptionsDrawerOpen)}
+                  onClick={() => setIsAssumptionsDrawerOpen(!isAssumptionsDrawerOpen)} // Ensure toggle logic
                   style={{
                     position: 'fixed',
                     right: isAssumptionsDrawerOpen ? 'var(--drawer-width, 300px)' : '0',
@@ -1424,7 +1353,8 @@ function App() {
                         // For now, we assume calculateCashflow passed down handles internal rent override.
                         rent_estimate: property.rent_estimate // Use the rent currently in displayedProperties
                       };
-                      const cashflow = calculateCashflow(propertyForCalculations);
+                      // Pass settings to calculateCashflow
+                      const cashflow = calculateCashflow(propertyForCalculations, defaultSettings);
                       
                       // Bundle current settings for the scoring function
                       const currentSettings: CashflowSettings = {
@@ -1446,7 +1376,7 @@ function App() {
                         key={property.property_id}
                         property={property}
                         overridePrice={overridePrice} 
-                  calculateCashflow={calculateCashflow}
+                        calculateCashflow={(p: Property) => calculateCashflow(p, currentSettings)}
                   formatCurrency={formatCurrency}
                   formatPercent={formatPercent}
                   vacancyPercent={vacancyPercent}
@@ -1532,10 +1462,10 @@ function App() {
                         Cashflow & Scoring
                       </div>
                       <div 
-                        className={`faq-nav-item ${activeFaqSection === 'bookmarks' ? 'active' : ''}`}
-                        onClick={() => handleFaqSectionChange('bookmarks')}
+                        className={`faq-nav-item ${activeFaqSection === 'portfolio' ? 'active' : ''}`}
+                        onClick={() => handleFaqSectionChange('portfolio')}
                       >
-                        Bookmarks
+                        Portfolio
                       </div>
                       <div 
                         className={`faq-nav-item ${activeFaqSection === 'details' ? 'active' : ''}`}
@@ -1705,47 +1635,54 @@ function App() {
                         </div>
                       )}
                       
-                      {/* Bookmarks FAQ Section */}
-                      {activeFaqSection === 'bookmarks' && (
+                      {/* Portfolio FAQ Section (replacing Bookmarks section) */}
+                      {activeFaqSection === 'portfolio' && (
                         <div>
                           <div className="faq-section">
-                            <div className="faq-question">How do I save properties I'm interested in?</div>
+                            <div className="faq-question">What is the Portfolio feature?</div>
                             <div className="faq-answer">
-                              Go to a property's detailed page (by clicking the address or "Deep Dive" link on a card). On the details page, click the "Bookmark" button in the header. This saves the property, including the specific assumptions and notes you had at that moment.
+                              The Portfolio feature allows you to collect multiple properties you're interested in and analyze them together. You can add properties to your portfolio, customize financial assumptions for each property individually, and see aggregated metrics across your entire portfolio.
                             </div>
                           </div>
                           
                           <div className="faq-section">
-                            <div className="faq-question">Where can I find my bookmarked properties?</div>
+                            <div className="faq-question">How do I add properties to my portfolio?</div>
                             <div className="faq-answer">
-                              Click the "Bookmarks" button in the top navigation bar. This page displays all your saved properties with the analysis based on the assumptions *at the time they were bookmarked*.
+                              While viewing a property on the details page, the property is automatically added to your portfolio. You can view your portfolio by clicking the "Portfolio" button in the main navigation bar.
                             </div>
                           </div>
                           
                           <div className="faq-section">
-                            <div className="faq-question">What information is saved in a bookmark?</div>
+                            <div className="faq-question">What does the Portfolio page show?</div>
                             <div className="faq-answer">
-                              Bookmarks save a snapshot of the property and your analysis at the time of saving:
+                              The Portfolio page displays:
                               <ul>
-                                <li>All core property details (price, address, beds, baths, etc.)</li>
-                                <li>Your custom rent estimate (if edited on the details page)</li>
-                                <li>The specific investment and projection assumptions used for that analysis</li>
-                                <li>Any notes you added on the details page</li>
+                                <li>A dashboard with aggregated metrics across all properties (total value, average cash flow, aggregate IRR, etc.)</li>
+                                <li>A map showing the location of all properties in your portfolio</li>
+                                <li>A table of all properties with key metrics</li>
+                                <li>Visual charts showing combined projections for your entire portfolio</li>
                               </ul>
                             </div>
                           </div>
                           
                           <div className="faq-section">
-                            <div className="faq-question">How do I remove a property from my bookmarks?</div>
+                            <div className="faq-question">Can I edit the purchase price of properties?</div>
                             <div className="faq-answer">
-                              From the Bookmarks page, click the "Remove" button on the property card.
+                              Yes, on both the Property Details page and in the Portfolio page, you can edit the purchase price. On the Property Details page, change the value in the price field and click the Save button next to it. In the Portfolio page, you can adjust the price for each property in the table by expanding the property row and using the assumption controls.
                             </div>
                           </div>
                           
                           <div className="faq-section">
-                            <div className="faq-question">Are my bookmarks saved if I close the browser?</div>
+                            <div className="faq-question">How do the per-property assumption controls work?</div>
                             <div className="faq-answer">
-                              Yes, bookmarks (and saved searches) are stored in your browser's local storage. They will persist unless you clear your browser data. They are specific to the browser and device you used.
+                              In the Portfolio page, each property row can be expanded to reveal custom assumption controls. These allow you to adjust financial parameters (interest rate, down payment, rehab amount, rent estimate, etc.) specifically for that property. After making changes, click the "Save Assumptions" button to apply them. These custom assumptions will be used in both the individual property calculations and the aggregated portfolio metrics.
+                            </div>
+                          </div>
+                          
+                          <div className="faq-section">
+                            <div className="faq-question">Is my portfolio saved if I close the browser?</div>
+                            <div className="faq-answer">
+                              Yes, your portfolio (and saved searches) are stored in your browser's local storage. They will persist unless you clear your browser data. They are specific to the browser and device you used.
                             </div>
                           </div>
                         </div>
@@ -1763,7 +1700,7 @@ function App() {
                                 <li>Detailed Cashflow Analysis (using assumptions adjustable via the side panel)</li>
                                 <li>Long-Term Projection Chart & Table (visualizing value, equity, cashflow over 30 years based on adjustable appreciation rates)</li>
                                 <li>Editable Notes Section</li>
-                                <li>Buttons to Bookmark and Share</li>
+                                <li>Button to Share</li>
                                 <li>Links to Zillow and RentCast</li>
                               </ul>
                             </div>
@@ -1779,7 +1716,7 @@ function App() {
                           <div className="faq-section">
                             <div className="faq-question">How do I use the Notes section on the details page?</div>
                             <div className="faq-answer">
-                              Type your observations or questions into the text box. Notes are saved automatically with Bookmarks and included in Shared URLs.
+                              Type your observations or questions into the text box. Notes are saved automatically with Portfolio entries and included in Shared URLs.
                             </div>
                           </div>
 
@@ -1798,7 +1735,7 @@ function App() {
                            <div className="faq-section">
                             <div className="faq-question">How do I adjust assumptions on the details page?</div>
                             <div className="faq-answer">
-                             Use the purple "Assumptions" tab on the right to open the drawer (adjusts analysis globally) or use the specific sliders below the long-term projection chart (adjusts *only* the projection assumptions: Rent Appreciation % and Property Value Increase %). Settings made here are saved with bookmarks/shared URLs.
+                             Use the purple "Assumptions" tab on the right to open the drawer (adjusts analysis globally) or use the specific sliders below the long-term projection chart (adjusts *only* the projection assumptions: Rent Appreciation % and Property Value Increase %). Settings made here are saved with portfolio entries and shared URLs.
                             </div>
                           </div>
                         </div>
@@ -1817,35 +1754,6 @@ function App() {
           element={
             <PropertyDetailsPage 
               properties={displayedProperties}
-              calculateCashflow={(property, settings) => {
-                  // Restore implementation
-                  const calculateCashflowWithSettings = (property: Property, settings: CashflowSettings): Cashflow => {
-                  const monthlyMortgage = calculateMortgageWithSettings(property.price, settings);
-                  const monthlyTaxInsurance = property.price * (settings.taxInsurancePercent / 100) / 12;
-                  const monthlyVacancy = property.rent_estimate * (settings.vacancyPercent / 100);
-                  const monthlyCapex = property.rent_estimate * (settings.capexPercent / 100);
-                  const monthlyPropertyManagement = property.rent_estimate * (settings.propertyManagementPercent / 100);
-                  const totalMonthlyExpenses = monthlyMortgage + monthlyTaxInsurance + monthlyVacancy + monthlyCapex + monthlyPropertyManagement;
-                  const monthlyCashflow = property.rent_estimate - totalMonthlyExpenses;
-                  const annualCashflow = monthlyCashflow * 12;
-                    const initialInvestment = (property.price * (settings.downPaymentPercent / 100)) + (property.price * 0.03) + settings.rehabAmount;
-                    const cashOnCashReturn = initialInvestment > 0 ? (annualCashflow / initialInvestment) * 100 : 0;
-                    return { monthlyMortgage, monthlyTaxInsurance, monthlyVacancy, monthlyCapex, monthlyPropertyManagement, totalMonthlyExpenses, monthlyCashflow, annualCashflow, cashOnCashReturn };
-                  };
-                function calculateMortgageWithSettings(price: number, settings: CashflowSettings): number {
-                  const downPayment = price * (settings.downPaymentPercent / 100);
-                  const loanAmount = price - downPayment;
-                  const monthlyRate = settings.interestRate / 100 / 12;
-                  const payments = settings.loanTerm * 12;
-                  if (monthlyRate === 0) return loanAmount / payments;
-                  const x = Math.pow(1 + monthlyRate, payments);
-                  return loanAmount * (monthlyRate * x) / (x - 1);
-                }
-                  const propertyForCashflow = { ...property, rent_source: property.rent_source ?? "calculated" };
-                return calculateCashflowWithSettings(propertyForCashflow, settings);
-              }}
-              formatCurrency={formatCurrency}
-              formatPercent={formatPercent}
               defaultSettings={defaultSettings}
               handlePriceOverrideChange={handlePriceOverrideChange} 
             />
@@ -1857,6 +1765,13 @@ function App() {
           path="/bookmarks" 
           element={<BookmarksPage />} 
         />
+
+        {/* Portfolio Route */}
+        <Route 
+          path="/portfolio" 
+          element={<PortfolioPage />} 
+        />
+
       </Routes> {/* Remove comment here */}
     </div>
   );
