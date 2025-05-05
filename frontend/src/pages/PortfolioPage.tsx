@@ -604,7 +604,7 @@ const MapEffect = ({ properties }: { properties: Record<string, any> }) => {
                             button.style.padding = '5px 10px';
                             button.style.cursor = 'pointer';
                             button.addEventListener('click', () => {
-                                window.location.href = `/property/${id}`;
+                                window.location.href = `/#/property/${id}`;
                             });
                             popupContent.appendChild(button);
                             
