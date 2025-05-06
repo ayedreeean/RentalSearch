@@ -1996,48 +1996,54 @@ const PortfolioPage: React.FC = () => {
                                         <Typography id="years-to-project-slider" gutterBottom>
                                             Years to Project: {yearsToProject}
                                         </Typography>
-                                        <Slider
-                                            value={yearsToProject}
-                                            onChange={(_, newValue) => setYearsToProject(newValue as number)}
-                                            aria-labelledby="years-to-project-slider"
-                                            valueLabelDisplay="auto"
-                                            step={1}
-                                            marks
-                                            min={5}
-                                            max={30}
-                                        />
+                                        <Box sx={{ width: '100%', height: 40, px: 1 }}>
+                                            <Slider
+                                                value={yearsToProject}
+                                                onChange={(_, newValue) => setYearsToProject(newValue as number)}
+                                                aria-labelledby="years-to-project-slider"
+                                                valueLabelDisplay="auto"
+                                                step={1}
+                                                min={5}
+                                                max={30}
+                                                sx={{ color: '#4f46e5' }}
+                                            />
+                                        </Box>
                                     </Grid>
                                     {/* @ts-ignore */}
                                     <Grid item xs={12} md={4}>
                                         <Typography id="rent-appreciation-slider" gutterBottom>
                                             Annual Rent Appreciation: {rentAppreciationRate}%
                                         </Typography>
-                                        <Slider
-                                            value={rentAppreciationRate}
-                                            onChange={(_, newValue) => setRentAppreciationRate(newValue as number)}
-                                            aria-labelledby="rent-appreciation-slider"
-                                            valueLabelDisplay="auto"
-                                            step={0.5}
-                                            marks
-                                            min={0}
-                                            max={10}
-                                        />
+                                        <Box sx={{ width: '100%', height: 40, px: 1 }}>
+                                            <Slider
+                                                value={rentAppreciationRate}
+                                                onChange={(_, newValue) => setRentAppreciationRate(newValue as number)}
+                                                aria-labelledby="rent-appreciation-slider"
+                                                valueLabelDisplay="auto"
+                                                step={0.5}
+                                                min={0}
+                                                max={10}
+                                                sx={{ color: '#4f46e5' }}
+                                            />
+                                        </Box>
                                     </Grid>
                                     {/* @ts-ignore */}
                                     <Grid item xs={12} md={4}>
                                         <Typography id="property-value-slider" gutterBottom>
                                             Annual Property Value Increase: {propertyValueIncreaseRate}%
                                         </Typography>
-                                        <Slider
-                                            value={propertyValueIncreaseRate}
-                                            onChange={(_, newValue) => setPropertyValueIncreaseRate(newValue as number)}
-                                            aria-labelledby="property-value-slider"
-                                            valueLabelDisplay="auto"
-                                            step={0.5}
-                                            marks
-                                            min={0}
-                                            max={10}
-                                        />
+                                        <Box sx={{ width: '100%', height: 40, px: 1 }}>
+                                            <Slider
+                                                value={propertyValueIncreaseRate}
+                                                onChange={(_, newValue) => setPropertyValueIncreaseRate(newValue as number)}
+                                                aria-labelledby="property-value-slider"
+                                                valueLabelDisplay="auto"
+                                                step={0.5}
+                                                min={0}
+                                                max={10}
+                                                sx={{ color: '#4f46e5' }}
+                                            />
+                                        </Box>
                                     </Grid>
                                 </Grid>
                             </Box>
