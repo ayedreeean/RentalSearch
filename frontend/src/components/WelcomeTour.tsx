@@ -14,6 +14,7 @@ import { useTheme } from '@mui/material/styles';
 interface WelcomeTourProps {
   open: boolean;
   onClose: () => void;
+  onSearchExample?: () => void;
 }
 
 const steps = [
