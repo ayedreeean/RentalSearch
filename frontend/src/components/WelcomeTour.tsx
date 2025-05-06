@@ -14,6 +14,8 @@ import { useTheme } from '@mui/material/styles';
 interface WelcomeTourProps {
   open: boolean;
   onClose: () => void;
+  onSearchExample?: () => void;
+  mapComponent?: React.ReactNode;
 }
 
 const steps = [

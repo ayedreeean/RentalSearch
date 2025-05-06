@@ -1,21 +1,24 @@
 // @ts-ignore - Suppressing persistent TS2305 error after trying multiple fixes
 import axios, { AxiosResponse } from 'axios';
+import { Property } from '../types'; // Import Property from types.ts
 
 // Define the property interface
-export interface Property {
-  property_id: string;
-  address: string;
-  price: number;
-  rent_estimate: number;
-  ratio: number;
-  thumbnail: string;
-  bedrooms: number;
-  bathrooms: number;
-  sqft: number;
-  url: string;
-  days_on_market: number | null;
-  rent_source: 'zillow' | 'calculated';
-}
+// export interface Property { // Remove local definition
+//   property_id: string;
+//   address: string;
+//   price: number;
+//   rent_estimate: number;
+//   ratio: number;
+//   thumbnail: string;
+//   bedrooms: number;
+//   bathrooms: number;
+//   sqft: number;
+//   url: string;
+//   days_on_market: number | null;
+//   rent_source: 'zillow' | 'calculated';
+//   latitude: number | null;
+//   longitude: number | null;
+// }
 
 // API key for Zillow RapidAPI - Use environment variable if available
 // This is a more secure approach than hardcoding the API key
@@ -291,6 +294,8 @@ interface ZillowPropertyItem {
     livingArea?: number; // Optional square footage
     detailUrl: string;
     daysOnZillow?: number; // Optional days on market
+    latitude: number | null;
+    longitude: number | null;
     // Add any other relevant fields you might use from the 'props' item
 }
 
@@ -491,7 +496,9 @@ export const searchProperties = async (
         sqft: item.livingArea || 0,
         url: `https://www.zillow.com${item.detailUrl}`,
         days_on_market: item.daysOnZillow || null,
-        rent_source: item.rentZestimate ? 'zillow' : 'calculated'
+        rent_source: item.rentZestimate ? 'zillow' : 'calculated',
+        latitude: item.latitude,
+        longitude: item.longitude
       };
     });
     
@@ -699,7 +706,8 @@ export const getPropertyDetailsByZpid = async (zpid: string): Promise<Property |
             url: details.hdpUrl ? `https://www.zillow.com${details.hdpUrl}` : '#', // Construct full URL
             days_on_market: details.daysOnZillow || null,
             rent_source: details.rentZestimate ? 'zillow' : 'calculated',
-            // homeStatus: details.homeStatus // Could add homeStatus if needed in the Property type
+            latitude: details.latitude,
+            longitude: details.longitude
         };
 
         console.log(`[getPropertyDetailsByZpid] Successfully fetched and formatted details for ZPID ${zpid}`);

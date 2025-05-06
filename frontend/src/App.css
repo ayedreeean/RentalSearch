@@ -624,3 +624,54 @@ a:hover {
   background-color: #e5e7eb; /* Neutral gray */
   color: #4b5563; 
 }
+
+/* Styles for the custom map pins */
+.cashflow-map-marker {
+  /* This class is on the parent div leaflet creates for the L.divIcon */
+  /* You might not need styles here if .cashflow-map-pin handles everything */
+  background-color: transparent !important; /* Ensure leaflet default background is overridden */
+  border: none !important; /* Ensure leaflet default border is overridden */
+}
+
+.cashflow-map-pin {
+  background-color: #4f46e5; /* Default to purple */
+  color: white;
+  padding: 5px 8px;
+  border-radius: 12px; /* Make all corners rounded */
+  font-size: 12px;
+  font-weight: bold;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  transform: translate(-50%, -100%); /* Center the pin horizontally and position its tip at the anchor */
+  position: relative; /* Needed for the triangle */
+}
+
+.cashflow-map-pin::after {
+  content: '';
+  position: absolute;
+  bottom: -5px; /* Position the triangle at the bottom */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #4f46e5; /* Same color as the pin background */
+}
+
+.cashflow-map-pin.positive {
+  background-color: #10b981; /* Green for positive cashflow */
+}
+
+.cashflow-map-pin.positive::after {
+  border-top-color: #10b981; /* Match positive background */
+}
+
+.cashflow-map-pin.negative {
+  background-color: #ef4444; /* Red for negative cashflow */
+}
+
+.cashflow-map-pin.negative::after {
+  border-top-color: #ef4444; /* Match negative background */
+}
