@@ -766,13 +766,13 @@ function App() {
 
     return (
       <Box sx={{ height: '600px', width: '100%', mt: 2, borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
-        {/* @ts-ignore - center, zoom, style are valid but cause TS errors with react-leaflet v4 */}
+        {/* @ts-expect-error - center, zoom, style are valid but cause TS errors with react-leaflet v4 */}
         <MapContainer 
           center={[39.8283, -98.5795]} 
           zoom={4} 
           style={{ height: '100%', width: '100%' }}
         >
-          {/* @ts-ignore - attribution is valid but causes TS errors with react-leaflet v4 */}
+          {/* @ts-expect-error - attribution is valid but causes TS errors with react-leaflet v4 */}
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -846,7 +846,7 @@ function App() {
               });
 
               return (
-                // @ts-ignore - icon prop with L.DivIcon can sometimes cause type issues with react-leaflet v4
+                // @ts-expect-error - icon prop with L.DivIcon can sometimes cause type issues with react-leaflet v4
                 <Marker 
                   key={property.property_id} 
                   position={[Number(property.latitude), Number(property.longitude)]}
