@@ -61,6 +61,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import AssumptionControls from '../components/AssumptionControls';
+import { useAnimatedCountUp } from '../hooks/useAnimatedCountUp'; // Import the new hook
 
 // Fix Leaflet's default icon path issues
 // This fixes the common broken icon issue in Leaflet
@@ -832,13 +833,22 @@ const PortfolioPage: React.FC = () => {
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
 
+    // Lifted hook calls for animated dashboard numbers
+    const numSelectedProps = Object.keys(selectedProperties).filter(id => selectedProperties[id]).length;
+    const animatedNumSelectedProps = useAnimatedCountUp(numSelectedProps, 1000);
+    const animatedTotalValue = useAnimatedCountUp(aggregatedMetrics.totalValue, 1500);
+    const animatedMonthlyCashflow = useAnimatedCountUp(Math.abs(aggregatedCashflowData.monthlyCashflow), 1500);
+    const animatedAnnualCashflow = useAnimatedCountUp(Math.abs(aggregatedCashflowData.monthlyCashflow * 12), 1500);
+    const animatedAvgCrunchScore = useAnimatedCountUp(aggregatedMetrics.avgCrunchScore, 1500);
+
+
     // --- Load portfolio from localStorage OR URL --- 
     useEffect(() => {
         let loadedData = false;
         try {
             // Check for shared data in URL first
             const hash = window.location.hash;
-            const params = new URLSearchParams(hash.substring(hash.indexOf('?')))
+            const params = new URLSearchParams(hash.substring(hash.indexOf('?'))) 
             const sharedDataParam = params.get('data');
 
             if (sharedDataParam) {
@@ -1055,7 +1065,7 @@ const PortfolioPage: React.FC = () => {
             const propData = entry.property;
             const assumptions = entry.portfolioAssumptions || {};
 
-            // --- Safer Parsing ---
+            // --- Safer Parsing --- 
             let price = 0;
             if (propData?.price) {
                 price = typeof propData.price === 'string' 
@@ -1199,13 +1209,13 @@ const PortfolioPage: React.FC = () => {
                          remainingLoanBalance -= Math.min(monthlyMortgagePayment * 12, remainingLoanBalance);
                      } else {
                          // Amortization for interest-bearing loan
-                         let yearlyInterestPaid = 0;
-                         let yearlyPrincipalPaid = 0;
+                         // let yearlyInterestPaid = 0; // Commented out as unused
+                         // let yearlyPrincipalPaid = 0; // Commented out as unused
                          for (let month = 0; month < 12; month++) {
                              const interestForMonth = remainingLoanBalance * monthlyRate;
                              const principalForMonth = Math.min(monthlyMortgagePayment - interestForMonth, remainingLoanBalance);
-                             yearlyInterestPaid += interestForMonth;
-                             yearlyPrincipalPaid += principalForMonth;
+                             // yearlyInterestPaid += interestForMonth;
+                             // yearlyPrincipalPaid += principalForMonth;
                              remainingLoanBalance -= principalForMonth;
                              if (remainingLoanBalance <= 0) {
                                  remainingLoanBalance = 0;
@@ -1227,8 +1237,8 @@ const PortfolioPage: React.FC = () => {
                  if (isNaN(yearlyCashflow)) yearlyCashflow = 0;
 
                 // Store cashflow for this property for this year
-                if (yearlyAggregatedCashflows[year - 1]) {
-                    yearlyAggregatedCashflows[year - 1].push(yearlyCashflow);
+                if (yearlyAggregatedCashflows[year - 1]) { // Should be year, not year - 1 for future years array access
+                    yearlyAggregatedCashflows[year].push(yearlyCashflow); // Corrected index to year
                 }
 
                 // Store terminal equity for IRR periods if this year matches
@@ -1251,8 +1261,8 @@ const PortfolioPage: React.FC = () => {
         const year0Data: ProjectionData = { 
             year: 0, 
             propertyValue: totalPropertyValueSum,
-            equity: totalDownPaymentSum,
-            cashflow: aggregatedCashflowData.monthlyCashflow * 12 // Use the exact same value as the dashboard tile
+            equity: totalDownPaymentSum, // Year 0 equity is the initial down payment sum
+            cashflow: aggregatedCashflow.monthlyCashflow * 12 // Use the exact same value as the dashboard tile for year 0
         };
         
         // Only add the manually created year 0 data, don't collect from property projections
@@ -1262,7 +1272,7 @@ const PortfolioPage: React.FC = () => {
         for (let year = 1; year <= yearsToProject; year++) {
             const yearData: ProjectionData = { year, propertyValue: 0, equity: 0, cashflow: 0 };
             propertyProjections.forEach(proj => {
-                const yearIndex = year; // year is already 1-based, but we need to match the 0-based array with projData[0] = year 0
+                const yearIndex = year; 
                 if (proj && yearIndex < proj.length) {
                     yearData.propertyValue += proj[yearIndex]?.propertyValue || 0;
                     yearData.equity += proj[yearIndex]?.equity || 0;
@@ -1272,10 +1282,9 @@ const PortfolioPage: React.FC = () => {
             aggregatedData.push(yearData);
         }
 
-        // --- Ensure year 0 data is consistent with dashboard ---
+        // --- Ensure year 0 data cashflow is consistent with dashboard values (using aggregatedCashflow.monthlyCashflow)
         if (aggregatedData.length > 0 && aggregatedData[0].year === 0) {
-            // Force year 0 to match dashboard exactly
-            aggregatedData[0].cashflow = aggregatedCashflowData.monthlyCashflow * 12;
+            aggregatedData[0].cashflow = aggregatedCashflow.monthlyCashflow * 12;
         }
 
         // --- Calculate Aggregated IRR ---
@@ -1287,18 +1296,18 @@ const PortfolioPage: React.FC = () => {
                  // Aggregate cashflows for the period
                  const cashflowsForPeriod = Array(holdingPeriod).fill(0);
                  for (let year = 0; year < holdingPeriod; year++) {
-                     // Sum cashflows from all selected properties for that year
-                     // Handle case where year is out of bounds
                      if (year === 0) {
-                         // Use the dashboard value for year 0 to ensure consistency
-                         cashflowsForPeriod[0] = aggregatedCashflowData.monthlyCashflow * 12;
-                     } else if (yearlyAggregatedCashflows[year]) {
+                         // Use the dashboard value for year 0 (current year) to ensure consistency
+                         cashflowsForPeriod[0] = aggregatedCashflow.monthlyCashflow * 12;
+                     } else if (yearlyAggregatedCashflows[year] && yearlyAggregatedCashflows[year].length > 0) { // Check array and its content
                          cashflowsForPeriod[year] = yearlyAggregatedCashflows[year].reduce((sum, cf) => sum + (cf || 0), 0);
+                     } else {
+                        cashflowsForPeriod[year] = 0; // Default to 0 if no cashflows for that year (e.g. if yearsToProject < holdingPeriod)
                      }
                  }
 
                  // Aggregate terminal equity for the period
-                 const terminalEquityForPeriod = propertyTerminalEquities[holdingPeriod].reduce((sum, eq) => sum + (eq || 0), 0);
+                 const terminalEquityForPeriod = propertyTerminalEquities[holdingPeriod]?.reduce((sum, eq) => sum + (eq || 0), 0) || 0;
                 
                  // Calculate IRR using the *total* initial investment sum and aggregated terminal equity
                  const irr = calculateIRR(totalInitialInvestmentSum, cashflowsForPeriod, terminalEquityForPeriod);
@@ -1307,12 +1316,10 @@ const PortfolioPage: React.FC = () => {
          });
 
         // --- Update State ---
-        // --- DEBUG LOG: Check the irrResults object before setting state ---
         console.log("[IRR Debug] Results before setting state:", JSON.stringify(irrResults));
-        console.log("[Year 0 Debug] Cashflow:", year0Data.cashflow, "Dashboard:", aggregatedCashflowData.monthlyCashflow * 12);
-        // --- END DEBUG LOG ---
+        console.log("[Year 0 Debug] Aggregated Cashflow Data Monthly:", aggregatedCashflow.monthlyCashflow, "Year 0 Proj Cashflow:", year0Data.cashflow);
         setAggregatedLongTermData(aggregatedData);
-        setAggregatedCashflowData(aggregatedCashflow);
+        setAggregatedCashflowData(aggregatedCashflow); // This contains the monthly components
         setIrrData(irrResults);
 
         // Update aggregated metrics state
@@ -1496,7 +1503,7 @@ const PortfolioPage: React.FC = () => {
                         <Box sx={{ mb: 4 }}>
                             <Typography variant="h5" sx={{ mb: 2, fontWeight: 'bold' }}>Portfolio Dashboard</Typography>
                             
-                            {/* Main Metrics - Use aggregatedMetrics state */}
+                            {/* Main Metrics - Use animated values */}
                             <Grid container spacing={2} sx={{ mb: 2 }}>
                                 {/* Properties Count */}
                                 {/* @ts-ignore - Ignore MUI v5 Grid prop errors */}
@@ -1504,7 +1511,9 @@ const PortfolioPage: React.FC = () => {
                                     <Tooltip title="Total number of properties currently selected in the portfolio analysis">
                                         <Paper elevation={2} sx={{ p: 2, height: '100%', background: 'linear-gradient(135deg, #4f46e5 0%, #7570ea 100%)', color: 'white', borderRadius: 2 }}>
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}><Typography variant="subtitle2" sx={{ opacity: 0.9 }}>PROPERTIES</Typography><HomeWorkIcon /></Box>
-                                            <Typography variant="h3" sx={{ fontWeight: 'bold' }}>{Object.keys(selectedProperties).filter(id => selectedProperties[id]).length}</Typography> 
+                                            <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
+                                                {Math.round(animatedNumSelectedProps)}
+                                            </Typography> 
                                             <Typography variant="body2" sx={{ opacity: 0.8 }}>Selected properties</Typography>
                                         </Paper>
                                     </Tooltip>
@@ -1517,7 +1526,7 @@ const PortfolioPage: React.FC = () => {
                                         <Paper elevation={2} sx={{ p: 2, height: '100%', background: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)', color: 'white', borderRadius: 2 }}>
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}><Typography variant="subtitle2" sx={{ opacity: 0.9 }}>TOTAL VALUE</Typography><BusinessCenterIcon /></Box>
                                             <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
-                                                {formatCurrency(aggregatedMetrics.totalValue)}
+                                                {formatCurrency(animatedTotalValue)}
                                             </Typography>
                                             <Typography variant="body2" sx={{ opacity: 0.8 }}>Combined property value</Typography>
                                         </Paper>
@@ -1529,9 +1538,14 @@ const PortfolioPage: React.FC = () => {
                                 <Grid item xs={12} sm={6} md={4} lg={2.4}> 
                                     <Tooltip title="Total estimated monthly cash flow (Income - Expenses) for all selected properties">
                                         <Paper elevation={2} sx={{ p: 2, height: '100%', background: aggregatedCashflowData.monthlyCashflow >= 0 ? 'linear-gradient(135deg, #10b981 0%, #34d399 100%)' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)', color: 'white', borderRadius: 2 }}>
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}><Typography variant="subtitle2" sx={{ opacity: 0.9 }}>MONTHLY CASHFLOW</Typography><Box component="span" sx={{ fontSize: '22px', fontWeight: 'bold', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{aggregatedCashflowData.monthlyCashflow >= 0 ? '+' : '-'}</Box></Box>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                                <Typography variant="subtitle2" sx={{ opacity: 0.9 }}>MONTHLY CASHFLOW</Typography>
+                                                <Box component="span" sx={{ fontSize: '22px', fontWeight: 'bold', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    {aggregatedCashflowData.monthlyCashflow >= 0 ? '+' : '-'}
+                                                </Box>
+                                            </Box>
                                             <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
-                                                {formatCurrency(Math.abs(aggregatedCashflowData.monthlyCashflow))}
+                                                {formatCurrency(animatedMonthlyCashflow)}
                                             </Typography>
                                             <Typography variant="body2" sx={{ opacity: 0.8 }}>{aggregatedCashflowData.monthlyCashflow >= 0 ? 'Monthly positive cashflow' : 'Monthly negative cashflow'}</Typography>
                                         </Paper>
@@ -1545,7 +1559,7 @@ const PortfolioPage: React.FC = () => {
                                         <Paper elevation={2} sx={{ p: 2, height: '100%', background: aggregatedCashflowData.monthlyCashflow >= 0 ? 'linear-gradient(135deg, #10b981 0%, #34d399 100%)' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)', color: 'white', borderRadius: 2 }}>
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}><Typography variant="subtitle2" sx={{ opacity: 0.9 }}>ANNUAL CASHFLOW</Typography><AttachMoneyIcon /></Box>
                                             <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
-                                                {formatCurrency(Math.abs(aggregatedCashflowData.monthlyCashflow * 12))}
+                                                {formatCurrency(animatedAnnualCashflow)}
                                             </Typography>
                                             <Typography variant="body2" sx={{ opacity: 0.8 }}>{aggregatedCashflowData.monthlyCashflow >= 0 ? 'Annual positive cashflow' : 'Annual negative cashflow'}</Typography>
                                         </Paper>
@@ -1559,8 +1573,7 @@ const PortfolioPage: React.FC = () => {
                                         <Paper elevation={2} sx={{ p: 2, height: '100%', background: 'linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)', color: 'white', borderRadius: 2 }}>
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}><Typography variant="subtitle2" sx={{ opacity: 0.9 }}>AVG CRUNCH SCORE</Typography><Box component="span" sx={{ fontSize: '19px', fontWeight: 'bold', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>#</Box></Box>
                                             <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
-                                                {/* Display score directly, rounded */}
-                                                {aggregatedMetrics.avgCrunchScore.toFixed(0)} 
+                                                {animatedAvgCrunchScore.toFixed(0)}
                                             </Typography>
                                             <Typography variant="body2" sx={{ opacity: 0.8 }}>Avg. Portfolio Quality Score</Typography>
                                         </Paper>
@@ -1808,7 +1821,7 @@ const PortfolioPage: React.FC = () => {
                                                             align="right"
                                                             sx={{ color: (cashflow && isFinite(cashflow.cashOnCashReturn)) ? (cashflow.cashOnCashReturn >= 0.08 ? 'success.main' : cashflow.cashOnCashReturn >= 0.05 ? 'warning.main' : 'error.main') : 'text.secondary' }}
                                                         >
-                                                             {cashflow && isFinite(cashflow.cashOnCashReturn) ? formatPercent(cashflow.cashOnCashReturn) : 'NaN%'} 
+                                                             {cashflow && isFinite(cashflow.cashOnCashReturn) ? formatPercent(cashflow.cashOnCashReturn * 100) : 'NaN%'}  {/* Multiply by 100 here as well for consistency if formatPercent expects whole numbers */}
                                                         </TableCell>
                                                         <TableCell align="right">
                                                              {/* Display Crunch Score directly, rounded */}
@@ -1982,8 +1995,8 @@ const PortfolioPage: React.FC = () => {
                                                 <TableCell align="right">
                                                     {aggregatedMetrics.totalValue > 0 
                                                         ? formatPercent(Math.min(
-                                                            ((aggregatedMetrics.totalValue - aggregatedMetrics.totalEquityYear0) / aggregatedMetrics.totalValue),
-                                                            1
+                                                            ((aggregatedMetrics.totalValue - aggregatedMetrics.totalEquityYear0) / aggregatedMetrics.totalValue) * 100,
+                                                            100
                                                           ))
                                                         : '0%'}
                                                 </TableCell>
