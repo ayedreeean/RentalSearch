@@ -39,6 +39,13 @@ import LightModeIcon from '@mui/icons-material/LightMode';
 // Import utility functions
 import { formatCurrency, formatPercent } from './utils/formatting';
 import { calculateCashflow } from './utils/calculations';
+// Add Leaflet imports
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'; // Keep useMap if MapEffect is used elsewhere, or remove
+import L, { Map as LeafletMap } from 'leaflet'; // Import Map type from leaflet
+import 'leaflet/dist/leaflet.css';
+// Import an icon for the map toggle button if desired, e.g., MapIcon
+import MapIcon from '@mui/icons-material/Map'; 
+import ListIcon from '@mui/icons-material/List';
 
 // Define possible sort keys
 type SortableKey = keyof Pick<Property, 'price' | 'rent_estimate' | 'bedrooms' | 'bathrooms' | 'sqft' | 'days_on_market'> | 'ratio' | 'cashflow' | 'crunchScore'; // Add crunchScore
@@ -53,6 +60,34 @@ interface SavedSearch {
   minBaths: string;
   // Add other filters if they exist and need saving
 }
+
+// Fix Leaflet's default icon path issues (if not already globally handled)
+// This can be placed once, e.g., near the top of App.tsx or in index.tsx
+if (typeof L !== 'undefined') {
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png', // Updated to 1.9.4
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png', // Updated to 1.9.4
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png', // Updated to 1.9.4
+  });
+}
+
+// Helper component to adjust map bounds
+const FitBoundsToMarkers = ({ bounds }: { bounds: L.LatLngBoundsExpression | undefined }) => {
+  const map = useMap();
+  useEffect(() => {
+    console.log('[FitBoundsToMarkers] Received bounds:', bounds);
+    if (bounds && map) { // Added map null check for safety
+      try {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      } catch (e) {
+        console.warn("Error fitting map bounds: ", e);
+        map.setView([39.8283, -98.5795], 4);
+      }
+    }
+  }, [map, bounds]);
+  return null;
+};
 
 function App() {
   // --- Define state variables ---
@@ -106,7 +141,7 @@ function App() {
   const [displayMaxPrice, setDisplayMaxPrice] = useState<string>('');
 
   // Add state for sorting
-  const [sortConfig, setSortConfig] = useState<{ key: SortableKey | null, direction: 'asc' | 'desc' }>({ key: 'crunchScore', direction: 'desc' }); // Default sort by crunchScore desc
+  const [sortConfig, setSortConfig] = useState<{ key: SortableKey | null, direction: 'asc' | 'desc' }>({ key: 'cashflow', direction: 'desc' }); // Default sort by cashflow desc
 
   // Ref for tracking search requests
   const currentSearchId = useRef<number>(0);
@@ -117,6 +152,9 @@ function App() {
   const navigate = useNavigate(); // Initialize useNavigate
 
   const [showWelcomeTour, setShowWelcomeTour] = useState(false); // State for welcome tour modal
+
+  // Add state for map view
+  const [mapView, setMapView] = useState(true); // Default to map view
 
   // --- Check for first visit on mount ---
   useEffect(() => {
@@ -698,11 +736,158 @@ function App() {
     setIsAssumptionsDrawerOpen(open);
   };
 
-  
+  // --- Current Cashflow Settings (derived from state) ---
+  const currentCashflowSettings: CashflowSettings = useMemo(() => ({
+    interestRate,
+    loanTerm,
+    downPaymentPercent,
+    taxInsurancePercent,
+    vacancyPercent,
+    capexPercent,
+    propertyManagementPercent,
+    rehabAmount
+  }), [
+    interestRate, loanTerm, downPaymentPercent, taxInsurancePercent, 
+    vacancyPercent, capexPercent, propertyManagementPercent, rehabAmount
+  ]);
+
+  // Component to render the map (can be defined inside App or as a separate component)
+  const SearchResultsMap = ({ sortKey }: { sortKey: SortableKey | null }) => { // Added sortKey prop
+    if (!displayedProperties || displayedProperties.length === 0) {
+      return <Typography sx={{ textAlign: 'center', my: 4 }}>No properties to display on map.</Typography>;
+    }
+    // console.log('[SearchResultsMap] displayedProperties:', displayedProperties); // Keep for debugging if needed
+
+    const validCoords = displayedProperties
+        .map(p => (p.latitude && p.longitude && !isNaN(Number(p.latitude)) && !isNaN(Number(p.longitude)) ? [Number(p.latitude), Number(p.longitude)] : null))
+        .filter(coord => coord !== null) as L.LatLngExpression[];
+    
+    const bounds = validCoords.length > 0 ? L.latLngBounds(validCoords) : undefined;
+
+    return (
+      <Box sx={{ height: '600px', width: '100%', mt: 2, borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
+        {/* @ts-ignore - center, zoom, style are valid but cause TS errors with react-leaflet v4 */}
+        <MapContainer 
+          center={[39.8283, -98.5795]} 
+          zoom={4} 
+          style={{ height: '100%', width: '100%' }}
+        >
+          {/* @ts-ignore - attribution is valid but causes TS errors with react-leaflet v4 */}
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          />
+          {bounds && <FitBoundsToMarkers bounds={bounds} />}
+          {displayedProperties.map(property => {
+            // ADD THIS LOG:
+            // console.log(`[SearchResultsMap] Checking property ${property.property_id}: lat=${property.latitude}, lng=${property.longitude}`);
+            if (property.latitude && property.longitude && !isNaN(Number(property.latitude)) && !isNaN(Number(property.longitude))) {
+              // console.log(`[SearchResultsMap] Rendering marker for ${property.property_id} at [${Number(property.latitude)}, ${Number(property.longitude)}]`);
+              
+              const cashflowResult = calculateCashflow(property, currentCashflowSettings);
+              const monthlyCashflow = cashflowResult.monthlyCashflow;
+              const isPositive = monthlyCashflow >= 0; // Define isPositive here for broader scope
+              const priceVal = overridePrices[property.property_id] !== undefined ? overridePrices[property.property_id] : property.price;
+              const rentEstimateVal = property.rent_estimate;
+
+              let pinText;
+              let pinColorClassSuffix;
+
+              switch (sortKey) {
+                case 'price':
+                  pinText = formatCurrency(priceVal);
+                  pinColorClassSuffix = 'neutral'; 
+                  break;
+                case 'rent_estimate':
+                  pinText = formatCurrency(rentEstimateVal);
+                  pinColorClassSuffix = 'neutral';
+                  break;
+                case 'ratio':
+                  pinText = priceVal > 0 ? formatPercent(rentEstimateVal / priceVal) : 'N/A';
+                  pinColorClassSuffix = 'neutral';
+                  break;
+                case 'bedrooms':
+                  pinText = `${property.bedrooms} Bed${property.bedrooms !== 1 ? 's' : ''}`;
+                  pinColorClassSuffix = 'neutral';
+                  break;
+                case 'bathrooms':
+                  pinText = `${property.bathrooms} Bath${property.bathrooms !== 1 ? 's' : ''}`;
+                  pinColorClassSuffix = 'neutral';
+                  break;
+                case 'sqft':
+                  pinText = property.sqft ? `${property.sqft.toLocaleString()} SqFt` : 'N/A';
+                  pinColorClassSuffix = 'neutral';
+                  break;
+                case 'days_on_market':
+                  pinText = property.days_on_market !== null ? `${property.days_on_market} DOM` : 'N/A';
+                  pinColorClassSuffix = 'neutral';
+                  break;
+                case 'cashflow':
+                case 'crunchScore': 
+                default: 
+                  const roundedCashflow = Math.round(monthlyCashflow);
+                  pinText = `${monthlyCashflow >= 0 ? '+' : ''}${formatCurrency(roundedCashflow)}`;
+                  pinColorClassSuffix = monthlyCashflow >= 0 ? 'positive' : 'negative';
+                  break;
+              }
+              
+              const iconHtml = `
+                <div class="cashflow-map-pin ${pinColorClassSuffix}">
+                  ${pinText}
+                </div>
+              `;
+              
+              const divIcon = L.divIcon({
+                html: iconHtml,
+                className: 'cashflow-map-marker', 
+                iconSize: undefined, 
+                iconAnchor: [15, 15], 
+                popupAnchor: [0, -15] 
+              });
+
+              return (
+                // @ts-ignore - icon prop with L.DivIcon can sometimes cause type issues with react-leaflet v4
+                <Marker 
+                  key={property.property_id} 
+                  position={[Number(property.latitude), Number(property.longitude)]}
+                  icon={divIcon} 
+                >
+                  <Popup>
+                    <Typography variant="subtitle2">{property.address}</Typography>
+                    <Typography variant="body2">Price: {formatCurrency(property.price)}</Typography>
+                    <Typography variant="body2">Rent: {formatCurrency(property.rent_estimate)}</Typography>
+                    <Typography variant="body2" sx={{ color: isPositive ? 'success.main' : 'error.main' }}>
+                      Cashflow: {formatCurrency(monthlyCashflow)}/mo
+                    </Typography>
+                    <Button size="small" onClick={() => navigate(`/property/${property.property_id}`)} sx={{mt:1}}>
+                        View Details
+                    </Button>
+                  </Popup>
+                </Marker>
+              );
+            }
+            return null;
+          })}
+        </MapContainer>
+      </Box>
+    );
+  };
+
   return (
     <div className="app-container"> 
       {/* --- Render Welcome Tour Modal --- */}
-      <WelcomeTour open={showWelcomeTour} onClose={handleCloseWelcomeTour} />
+      <WelcomeTour 
+        open={showWelcomeTour} 
+        onClose={handleCloseWelcomeTour} 
+        onSearchExample={() => {
+          setLocation('Austin, TX');
+          // Optionally trigger search directly or just fill values
+          // handleSearch(); 
+          handleCloseWelcomeTour();
+        }}
+        // Pass a default or null sortKey to satisfy the prop requirement
+        mapComponent={<SearchResultsMap sortKey={null} />} 
+      />
 
       {/* --- Header Removed from here --- */}
 
@@ -737,10 +922,10 @@ function App() {
                     <Button 
                         color="inherit" 
                         onClick={handleOpenFaq} // Change to open the modal
-                        startIcon={<HelpOutlineIcon />}
+                      startIcon={<HelpOutlineIcon />}
                         sx={{ mr: 1 }}
                     >
-                        FAQ
+                       FAQ
                     </Button>
                     <Button 
                         color="inherit" 
@@ -1307,7 +1492,20 @@ function App() {
                   <Typography variant="h6">
                       Showing {sortedProperties.length} of {totalProperties} Properties
                   </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}> {/* Added gap for spacing */}
+                      {/* Map/List Toggle Button */}
+                      <Tooltip title={mapView ? "Show List View" : "Show Map View"}>
+                        <Button 
+                          variant="outlined"
+                          size="small" // Keep size consistent with other controls if desired
+                          onClick={() => setMapView(!mapView)} 
+                          color="primary"
+                          startIcon={mapView ? <ListIcon /> : <MapIcon />}
+                          sx={{ textTransform: 'none' }} // Prevent uppercase text
+                        >
+                          {mapView ? "List View" : "Map View"}
+                        </Button>
+                      </Tooltip>
                       <FormControl sx={{ m: 1, minWidth: 120 }} size="small">
                         <InputLabel id="sort-by-label">Sort By</InputLabel>
                         <Select
@@ -1316,14 +1514,13 @@ function App() {
                           label="Sort By"
                           onChange={(e) => {
                             const newKey = e.target.value as SortableKey | '';
-                            handleSort(newKey === '' ? 'price' : newKey); // Use handleSort, default to price if empty
+                            handleSort(newKey === '' ? 'cashflow' : newKey); // Default to cashflow if empty
                           }}
                         >
-                          <MenuItem value="price">Price</MenuItem>
-                          <MenuItem value="crunchScore">Crunch Score</MenuItem> {/* Added Crunch Score */} 
-                          <MenuItem value="rent_estimate">Rent Estimate</MenuItem>
-                          <MenuItem value="ratio">Ratio</MenuItem>
                           <MenuItem value="cashflow">Monthly Cashflow</MenuItem>
+                          <MenuItem value="crunchScore">Crunch Score</MenuItem> 
+                          <MenuItem value="price">Price</MenuItem>
+                          <MenuItem value="rent_estimate">Rent Estimate</MenuItem>
                           <MenuItem value="bedrooms">Bedrooms</MenuItem>
                           <MenuItem value="bathrooms">Bathrooms</MenuItem>
                           <MenuItem value="sqft">Sq Ft</MenuItem>
@@ -1340,6 +1537,10 @@ function App() {
                   </Box>
                 </Box>
                 
+                {/* Conditional rendering for Map or List view */}
+                {mapView ? (
+                  <SearchResultsMap sortKey={sortConfig.key} />
+                ) : (
                   <div className="property-grid">
                     {sortedProperties.map((property) => {
                       // Calculate cashflow using current assumptions and potentially overridden price/rent
@@ -1389,8 +1590,9 @@ function App() {
                       );
                     })}
                   </div>
+                )}
                   
-                  {isProcessingBackground && (
+                  {isProcessingBackground && !mapView && ( // Only show loading spinner if not in map view and processing
                     <Box className="loading-container" sx={{ py: 2 }}>
                       <CircularProgress size={30} className="loading-spinner" />
                       <Typography className="loading-message">
@@ -1535,7 +1737,6 @@ function App() {
                                 <li><b>Crunch Score (Default):</b> Overall investment potential (higher is better).</li>
                                 <li>Price</li>
                                 <li>Rent Estimate</li>
-                                <li>Ratio (Rent-to-Price)</li>
                                 <li>Monthly Cashflow</li>
                                 <li>Bedrooms, Bathrooms, Sq Ft</li>
                                 <li>Days on Market</li>
