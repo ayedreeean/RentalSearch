@@ -1996,7 +1996,7 @@ const PortfolioPage: React.FC = () => {
                                         <Typography id="years-to-project-slider" gutterBottom>
                                             Years to Project: {yearsToProject}
                                         </Typography>
-                                        <Box sx={{ width: '100%', height: 40, px: 1 }}>
+                                        <Box sx={{ width: 250, height: 40, px: 1 }}>
                                             <Slider
                                                 value={yearsToProject}
                                                 onChange={(_, newValue) => setYearsToProject(newValue as number)}
@@ -2014,7 +2014,7 @@ const PortfolioPage: React.FC = () => {
                                         <Typography id="rent-appreciation-slider" gutterBottom>
                                             Annual Rent Appreciation: {rentAppreciationRate}%
                                         </Typography>
-                                        <Box sx={{ width: '100%', height: 40, px: 1 }}>
+                                        <Box sx={{ width: 250, height: 40, px: 1 }}>
                                             <Slider
                                                 value={rentAppreciationRate}
                                                 onChange={(_, newValue) => setRentAppreciationRate(newValue as number)}
@@ -2032,7 +2032,7 @@ const PortfolioPage: React.FC = () => {
                                         <Typography id="property-value-slider" gutterBottom>
                                             Annual Property Value Increase: {propertyValueIncreaseRate}%
                                         </Typography>
-                                        <Box sx={{ width: '100%', height: 40, px: 1 }}>
+                                        <Box sx={{ width: 250, height: 40, px: 1 }}>
                                             <Slider
                                                 value={propertyValueIncreaseRate}
                                                 onChange={(_, newValue) => setPropertyValueIncreaseRate(newValue as number)}
