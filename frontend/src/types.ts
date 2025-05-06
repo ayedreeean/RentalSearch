@@ -55,7 +55,7 @@ export interface YearlyProjection {
   equityGrowth: number;
   roi: number;
   roiWithEquity: number;
-}
+} 
 
 // Define the structure stored in localStorage
 // Export this interface so it can be imported elsewhere

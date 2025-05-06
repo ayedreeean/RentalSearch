@@ -1842,35 +1842,48 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
             <Typography variant="h5" gutterBottom>Monthly Cashflow Breakdown</Typography>
             <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
               <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Category</TableCell>
+                    <TableCell align="right">Monthly</TableCell>
+                    <TableCell align="right">Annual</TableCell>
+                  </TableRow>
+                </TableHead>
                 <TableBody>
                   <TableRow>
-                    <TableCell>Monthly Rental Income</TableCell>
+                    <TableCell>Rental Income</TableCell>
                     <TableCell align="right">{formatCurrency(customRentEstimate ?? property.rent_estimate)}</TableCell>
+                    <TableCell align="right">{formatCurrency((customRentEstimate ?? property.rent_estimate) * 12)}</TableCell>
                   </TableRow>
                   {cashflow && (
                     <>
                       <TableRow>
                         <TableCell>Mortgage (P&I)</TableCell>
                         <TableCell align="right">-{formatCurrency(cashflow.monthlyMortgage)}</TableCell>
+                        <TableCell align="right">-{formatCurrency(cashflow.monthlyMortgage * 12)}</TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell>Property Tax & Insurance ({localSettings.taxInsurancePercent}%)</TableCell>
                         <TableCell align="right">-{formatCurrency(cashflow.monthlyTaxInsurance)}</TableCell>
+                        <TableCell align="right">-{formatCurrency(cashflow.monthlyTaxInsurance * 12)}</TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell>Vacancy ({localSettings.vacancyPercent}%)</TableCell>
                         <TableCell align="right">-{formatCurrency(cashflow.monthlyVacancy)}</TableCell>
+                        <TableCell align="right">-{formatCurrency(cashflow.monthlyVacancy * 12)}</TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell>Capital Expenditures ({localSettings.capexPercent}%)</TableCell>
                         <TableCell align="right">-{formatCurrency(cashflow.monthlyCapex)}</TableCell>
+                        <TableCell align="right">-{formatCurrency(cashflow.monthlyCapex * 12)}</TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell>Property Management ({localSettings.propertyManagementPercent}%)</TableCell>
                         <TableCell align="right">-{formatCurrency(cashflow.monthlyPropertyManagement)}</TableCell>
+                        <TableCell align="right">-{formatCurrency(cashflow.monthlyPropertyManagement * 12)}</TableCell>
                       </TableRow>
                       <TableRow sx={{ '& td': { fontWeight: 'bold', borderTop: '2px solid #e0e0e0' } }}>
-                        <TableCell>Monthly Cashflow</TableCell>
+                        <TableCell>Total Cashflow</TableCell>
                         <TableCell 
                           align="right"
                           sx={{ 
@@ -1879,6 +1892,15 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
                           }}
                         >
                           {formatCurrency(cashflow.monthlyCashflow)}
+                        </TableCell>
+                        <TableCell 
+                          align="right"
+                          sx={{ 
+                            color: cashflow.monthlyCashflow >= 0 ? 'success.main' : 'error.main',
+                            fontSize: '1.1rem'
+                          }}
+                        >
+                          {formatCurrency(cashflow.monthlyCashflow * 12)}
                         </TableCell>
                       </TableRow>
                       <TableRow sx={{ '& td': { fontWeight: 'bold' } }}>
@@ -1892,6 +1914,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
                         >
                           {formatPercent(cashflow.cashOnCashReturn)}
                         </TableCell>
+                        <TableCell></TableCell>
                       </TableRow>
                     </>
                   )}

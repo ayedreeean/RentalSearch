@@ -737,10 +737,10 @@ function App() {
                     <Button 
                         color="inherit" 
                         onClick={handleOpenFaq} // Change to open the modal
-                        startIcon={<HelpOutlineIcon />}
+                      startIcon={<HelpOutlineIcon />}
                         sx={{ mr: 1 }}
                     >
-                        FAQ
+                       FAQ
                     </Button>
                     <Button 
                         color="inherit" 
