@@ -2162,26 +2162,7 @@ const PortfolioPage: React.FC = () => {
                                             max={30}
                                             sx={{ width: '100%', '& .MuiSlider-mark': { display: 'none' } }}
                                         />
-                                    </Grid> {/* Ensure this closes the first item properly */}
-                                    {/* Remove the duplicated/malformed Grid item that started around original line 2165 
-                                    <Grid item xs={12} md={4}>
-                                        <Typography id="years-to-project-slider" gutterBottom>
-                                            Years to Project: {yearsToProject}
-                                        </Typography>
-                                        <Box sx={{ width: 250, height: 40, px: 1 }}>
-                                            <Slider
-                                                value={yearsToProject}
-                                                onChange={(_, newValue) => setYearsToProject(newValue as number)}
-                                                aria-labelledby="years-to-project-slider"
-                                                valueLabelDisplay="auto"
-                                                step={1}
-                                                min={5}
-                                                max={30}
-                                                sx={{ color: '#4f46e5' }}
-                                            />
-                                        </Box>
                                     </Grid>
-                                    */}
                                     {/* @ts-ignore */}
                                     <Grid item component="div" xs={12} md={4}>
                                         <Typography gutterBottom>Rent Appreciation (%/yr)</Typography>

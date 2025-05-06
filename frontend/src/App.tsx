@@ -766,13 +766,13 @@ function App() {
 
     return (
       <Box sx={{ height: '600px', width: '100%', mt: 2, borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
-        {/* @ts-expect-error - center, zoom, style are valid but cause TS errors with react-leaflet v4 */}
+        {/* @ts-ignore - Suppressing for center/zoom which are standard but might hit type inference issues */}
         <MapContainer 
           center={[39.8283, -98.5795]} 
           zoom={4} 
           style={{ height: '100%', width: '100%' }}
         >
-          {/* @ts-expect-error - attribution is valid but causes TS errors with react-leaflet v4 */}
+          {/* @ts-ignore - Suppressing for attribution which is standard */}
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -796,14 +796,14 @@ function App() {
               switch (sortKey) {
                 case 'price':
                   pinText = formatCurrency(priceVal);
-                  pinColorClassSuffix = 'neutral'; 
+                  pinColorClassSuffix = 'neutral';
                   break;
                 case 'rent_estimate':
                   pinText = formatCurrency(rentEstimateVal);
                   pinColorClassSuffix = 'neutral';
                   break;
                 case 'ratio':
-                  pinText = priceVal > 0 ? formatPercent(rentEstimateVal / priceVal) : 'N/A';
+                  pinText = priceVal > 0 ? formatPercent(rentEstimateVal / priceVal) : 'N/A'; // Assumes formatPercent handles *100 and %
                   pinColorClassSuffix = 'neutral';
                   break;
                 case 'bedrooms':
@@ -823,8 +823,8 @@ function App() {
                   pinColorClassSuffix = 'neutral';
                   break;
                 case 'cashflow':
-                case 'crunchScore': 
-                default: 
+                case 'crunchScore': // Defaulting to cashflow display for Crunch Score sort
+                default: // Includes null sortKey
                   const roundedCashflow = Math.round(monthlyCashflow);
                   pinText = `${monthlyCashflow >= 0 ? '+' : ''}${formatCurrency(roundedCashflow)}`;
                   pinColorClassSuffix = monthlyCashflow >= 0 ? 'positive' : 'negative';
@@ -846,7 +846,7 @@ function App() {
               });
 
               return (
-                // @ts-expect-error - icon prop with L.DivIcon can sometimes cause type issues with react-leaflet v4
+                // @ts-ignore - icon prop with L.DivIcon can sometimes cause type issues with react-leaflet v4
                 <Marker 
                   key={property.property_id} 
                   position={[Number(property.latitude), Number(property.longitude)]}
