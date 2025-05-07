@@ -432,12 +432,14 @@ function App() {
       return;
     }
 
+    // Reset search-related states
     setIsProcessingBackground(false);
     setLoading(true);
     setDisplayedProperties([]);
     setSearchPerformed(true);
     setTotalProperties(0);
 
+    // Use a search ID to track the current search
     const searchId = currentSearchId.current + 1;
     currentSearchId.current = searchId;
 
@@ -525,17 +527,29 @@ function App() {
         
         // Function to fetch and process a single page, passing filters
       const fetchAndProcessPage = async (page: number) => {
-        if (searchId !== currentSearchId.current) return; // Abort if new search started
+        // Check if this fetch is still for the current search
+        if (searchId !== currentSearchId.current) {
+          console.log(`Aborting fetch for page ${page + 1} - search ID changed`);
+          return; // Abort if new search started
+        }
+        
         try {
             console.log(`Fetching page ${page + 1}/${totalPages} with filters...`);
             // Pass the parsed filters (minP, maxP, minBd, minBa) to searchProperties
             const results = await searchProperties(location, page, minP, maxP, minBd, minBa, propertyType, null);
             
+          // Double-check that search ID hasn't changed before updating state
           if (searchId === currentSearchId.current && results.allProperties.length > 0) {
             setDisplayedProperties(prev => {
-                const existingIds = new Set(prev.map(p => p.property_id));
-                const newProps = results.allProperties.filter(np => !existingIds.has(np.property_id));
-              return [...prev, ...newProps];
+                // Only use previous results from the SAME search
+                if (prev.length > 0) {
+                  const existingIds = new Set(prev.map(p => p.property_id));
+                  const newProps = results.allProperties.filter(np => !existingIds.has(np.property_id));
+                  return [...prev, ...newProps];
+                } else {
+                  // If prev is empty, just use the new results directly
+                  return [...results.allProperties];
+                }
             });
             if (!isProcessingBackground) setIsProcessingBackground(true); 
           }
@@ -747,7 +761,7 @@ function App() {
     
     setDisplayedProperties(prevProperties => {
       // --- Add Check: Only update if list isn't cleared by new search --- 
-      if (prevProperties.length === 0 && searchPerformed) { // Check searchPerformed flag
+      if (prevProperties.length === 0) {
         console.log('[handlePropertyUpdate] Ignoring update, list is empty (likely new search started).');
         return prevProperties; // Return unchanged state
       }
@@ -796,17 +810,27 @@ function App() {
        return currentProperties; 
     });
 
-  }, [sortConfig, totalProperties, overridePrices, sortProperties, defaultSettings]); // Add missing dependencies
+  }, [sortConfig, totalProperties, overridePrices, sortProperties, defaultSettings, initialLoading]); // Added initialLoading to dependencies
 
   // UseEffect to register for updates when component mounts
   useEffect(() => {
     console.log('Registering for property updates...');
-    registerForPropertyUpdates(handlePropertyUpdate);
+    
+    // Create a handler that checks the current search ID
+    const updateHandler = (updatedProperty: Property) => {
+      // Only process updates for the current search
+      console.log(`[PropertyUpdate] Received update for ${updatedProperty?.address}, current search ID: ${currentSearchId.current}`);
+      handlePropertyUpdate(updatedProperty);
+    };
+    
+    registerForPropertyUpdates(updateHandler);
 
     // Optional: Return a cleanup function if needed
-    // return () => {
-    //   unregisterForPropertyUpdates(); // Assuming an unregister function exists
-    // };
+    return () => {
+      // If an unregister function exists, call it here
+      console.log('Cleaning up property update listener');
+      // unregisterForPropertyUpdates();
+    };
   }, [handlePropertyUpdate]);
 
   // --- Sorting Logic ---

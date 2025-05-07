@@ -2161,7 +2161,7 @@ const PortfolioPage: React.FC = () => {
                                                             align="right"
                                                             sx={{ color: (cashflow && isFinite(cashflow.cashOnCashReturn)) ? (cashflow.cashOnCashReturn >= 0.08 ? 'success.main' : cashflow.cashOnCashReturn >= 0.05 ? 'warning.main' : 'error.main') : 'text.secondary' }}
                                                         >
-                                                             {cashflow && isFinite(cashflow.cashOnCashReturn) ? formatPercent(cashflow.cashOnCashReturn * 100) : 'NaN%'}  {/* Multiply by 100 here as well for consistency if formatPercent expects whole numbers */}
+                                                             {cashflow && isFinite(cashflow.cashOnCashReturn) ? formatPercent(cashflow.cashOnCashReturn) : 'NaN%'}
                                                         </TableCell>
                                                         <TableCell align="right">
                                                              {/* Display Crunch Score directly, rounded */}
