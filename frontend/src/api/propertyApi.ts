@@ -1,24 +1,26 @@
 // @ts-ignore - Suppressing persistent TS2305 error after trying multiple fixes
 import axios, { AxiosResponse } from 'axios';
-import { Property } from '../types'; // Import Property from types.ts
+// Remove this import since we define Property locally
+// import { Property } from '../types'; // Import Property from types.ts
 
 // Define the property interface
-// export interface Property { // Remove local definition
-//   property_id: string;
-//   address: string;
-//   price: number;
-//   rent_estimate: number;
-//   ratio: number;
-//   thumbnail: string;
-//   bedrooms: number;
-//   bathrooms: number;
-//   sqft: number;
-//   url: string;
-//   days_on_market: number | null;
-//   rent_source: 'zillow' | 'calculated';
-//   latitude: number | null;
-//   longitude: number | null;
-// }
+export interface Property {
+  property_id: string;
+  address: string;
+  price: number;
+  rent_estimate: number;
+  ratio: number;
+  thumbnail: string; // Main image (keep for backward compatibility)
+  images?: string[]; // Make images field optional for backward compatibility
+  bedrooms: number;
+  bathrooms: number;
+  sqft: number;
+  url: string;
+  days_on_market: number | null;
+  rent_source: 'zillow' | 'calculated';
+  latitude: number | null;
+  longitude: number | null;
+}
 
 // API key for Zillow RapidAPI - Use environment variable if available
 // This is a more secure approach than hardcoding the API key
@@ -484,6 +486,10 @@ export const searchProperties = async (
       // Use a robust way to generate property_id if zpid is missing or not unique
       const propertyId = item.zpid ? String(item.zpid) : `prop-${item.address.replace(/\\s+/g, '-')}-${item.price}`;
 
+      // Add images array (will populate with default thumbnail)
+      const images = item.imgSrc ? [item.imgSrc] : ['./placeholder-house.png'];
+
+      // Create property object with images array
       return {
         property_id: propertyId,
         address: item.address,
@@ -491,10 +497,11 @@ export const searchProperties = async (
         rent_estimate: item.rentZestimate || calculatedRent,
         ratio: (item.rentZestimate || calculatedRent) / item.price,
         thumbnail: item.imgSrc,
+        images: images, // Include the new images array
         bedrooms: item.bedrooms,
         bathrooms: item.bathrooms,
         sqft: item.livingArea || 0,
-        url: `https://www.zillow.com${item.detailUrl}`,
+        url: item.detailUrl ? `https://www.zillow.com${item.detailUrl}` : '#',
         days_on_market: item.daysOnZillow || null,
         rent_source: item.rentZestimate ? 'zillow' : 'calculated',
         latitude: item.latitude,
@@ -682,11 +689,31 @@ export const getPropertyDetailsByZpid = async (zpid: string): Promise<Property |
         const price = details.price || details.zestimate || 0; // Use listed price, fallback to zestimate
         const rentEstimate = details.rentZestimate || price * 0.007; // Use Zillow rent, fallback to 0.7% rule
         
-        // --- Use the correct image field from the response --- 
-        const thumbnail = details.image_url // Prioritize image_url
-                       || details.imgSrc    // Fallback to imgSrc
-                       || (details.photos && details.photos.length > 0 ? details.photos[0].url : null) // Fallback to photos array
-                       || './placeholder-house.png'; // Final fallback to a placeholder image
+        // --- Extract all images ---
+        const images: string[] = [];
+        
+        // Add main image if available
+        const mainImage = details.image_url || details.imgSrc;
+        if (mainImage) {
+            images.push(mainImage);
+        }
+        
+        // Add all photos from the photos array
+        if (details.photos && Array.isArray(details.photos) && details.photos.length > 0) {
+            details.photos.forEach(photo => {
+                if (photo.url && !images.includes(photo.url)) {
+                    images.push(photo.url);
+                }
+            });
+        }
+        
+        // Use placeholder if no images found
+        if (images.length === 0) {
+            images.push('./placeholder-house.png');
+        }
+
+        // --- Use the first image as the thumbnail ---
+        const thumbnail = images[0];
 
         if (price === 0) {
             console.warn(`[getPropertyDetailsByZpid] Price is zero for ZPID ${zpid}, skipping property.`);
@@ -700,6 +727,7 @@ export const getPropertyDetailsByZpid = async (zpid: string): Promise<Property |
             rent_estimate: rentEstimate,
             ratio: rentEstimate / price,
             thumbnail: thumbnail,
+            images: images,
             bedrooms: details.bedrooms || 0,
             bathrooms: details.bathrooms || 0,
             sqft: details.livingArea || 0,
@@ -715,10 +743,6 @@ export const getPropertyDetailsByZpid = async (zpid: string): Promise<Property |
 
     } catch (error) {
         console.error(`Error fetching property details for ZPID ${zpid}:`, error);
-        // Consider how to handle specific errors (e.g., 404 Not Found)
-        // if (axios.isAxiosError(error) && error.response?.status === 404) {
-        //     console.log(`Property with ZPID ${zpid} not found.`);
-        // }
         return null; // Return null on error
     }
 };

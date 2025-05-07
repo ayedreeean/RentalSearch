@@ -7,6 +7,7 @@ export interface Property {
   bathrooms: number;
   sqft: number;
   thumbnail: string;
+  images?: string[]; // Make images field optional for backward compatibility
   photo_url?: string;
   url: string;
   ratio: number;

@@ -25,6 +25,8 @@ import CashflowSankeyChart from '../components/CashflowSankeyChart';
 import { formatCurrency, formatPercent } from '../utils/formatting';
 import { calculateCashflow as calculateCashflowUtil } from '../utils/calculations';
 import { calculateCrunchScore } from '../utils/scoring';
+// Import the PropertyExtendedDetails component instead of (or alongside) PropertyImageGallery
+import PropertyExtendedDetails from '../components/PropertyExtendedDetails';
 
 // ---- Portfolio Data Structure (Define Outside Component) ----
 interface PortfolioAssumptionOverrides {
@@ -1239,33 +1241,32 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   
   // Generate shareable URL
   const generateShareableURL = useCallback(() => {
-    if (!property || currentAnalysisPrice === null) return window.location.href; // Use currentAnalysisPrice
-    
-    // Fix: Include the property ID in the path
-    const baseUrl = window.location.origin + "/#/property/" + property.property_id;    
-    const searchParams = new URLSearchParams();
-    
-    // Use the SharedProperty type to ensure consistent typing
-    const propertyData: SharedProperty = {
-      ...property,
-      price: currentAnalysisPrice, // Include currentAnalysisPrice
-      custom_rent: customRentEstimate,
-      notes: notes,
+    // Create a shareable property with only essential fields to keep URL short
+    const shareableProperty = {
+      id: property.property_id,
+      a: property.address,
+      p: effectivePrice,
+      r: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
+      b: property.bedrooms,
+      ba: property.bathrooms,
+      s: property.sqft,
+      t: property.thumbnail,
+      i: property.images || [property.thumbnail], // Include images array
+      u: property.url,
+      d: property.days_on_market,
+      rs: property.rent_source,
+      lat: property.latitude,
+      lng: property.longitude,
+      n: notes,
     };
-    const encodedProperty = btoa(JSON.stringify(propertyData));
-    searchParams.set('data', encodedProperty);
     
-    const settingsData = {
-      ...localSettings,
-      yearsToProject,
-      rentAppreciationRate,
-      propertyValueIncreaseRate
-    };
-    const encodedSettings = btoa(JSON.stringify(settingsData));
-    searchParams.set('settings', encodedSettings);
+    // Encode and create the URL
+    const encodedData = btoa(JSON.stringify(shareableProperty));
+    const baseUrl = window.location.origin;
+    const shareUrl = `${baseUrl}/#/property/shared/${encodedData}`;
     
-    return `${baseUrl}?${searchParams.toString()}`;
-  }, [property, currentAnalysisPrice, customRentEstimate, notes, localSettings, yearsToProject, rentAppreciationRate, propertyValueIncreaseRate]); // DEPEND ON currentAnalysisPrice
+    return shareUrl;
+  }, [property, effectivePrice, customRentEstimate, notes]);
   
   // Modal handlers
   const handleOpenPdfModal = () => setShowPdfModal(true);
@@ -1788,24 +1789,14 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
           </Grid>
         </Paper>
         
-        {/* Property Image */}
-        <Box sx={{ mb: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Box 
-            component="img"
-            src={property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'}
-            alt={property.address}
-                sx={{
-              width: '100%',
-              maxHeight: '500px',
-              objectFit: 'cover',
-              borderRadius: 2,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
-            }}
-          />
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-            Property image for {property.address}
-          </Typography>
-        </Box>
+        {/* Property Extended Details with Images */}
+        <PropertyExtendedDetails 
+          property={property} 
+          onDetailsLoaded={(updatedProperty) => {
+            // Optionally update property state with new details including images
+            setProperty(updatedProperty);
+          }}
+        />
         
         {/* Property Map */}
         <Typography variant="h5" gutterBottom sx={{ mt: 4, mb: 2 }}>Property Location</Typography>
