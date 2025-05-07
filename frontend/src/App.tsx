@@ -278,8 +278,17 @@ const SearchResultsMapComponent: React.FC<SearchResultsMapProps> = ({
   );
 };
 
-// Memoized version of the map component
-const MemoizedSearchResultsMap = React.memo(SearchResultsMapComponent);
+// Add a memoization wrapper around SearchResultsMapComponent to prevent unnecessary re-renders
+// that might cause zoom resets when opening/closing the assumptions drawer
+const MemoizedSearchResultsMap = React.memo(SearchResultsMapComponent, (prevProps, nextProps) => {
+  // Only re-render the map if the data fundamentally changes
+  // Ignore changes that shouldn't affect the map like assumptions drawer opening/closing
+  return (
+    prevProps.properties.length === nextProps.properties.length &&
+    prevProps.sortKey === nextProps.sortKey &&
+    prevProps.onMarkerClickNavigate === nextProps.onMarkerClickNavigate
+  );
+});
 
 function App() {
   // --- Define state variables ---
@@ -949,7 +958,15 @@ function App() {
     ) {
       return;
     }
-    setIsAssumptionsDrawerOpen(open);
+    
+    // When toggling the drawer, don't cause unnecessary re-renders of map components
+    setIsAssumptionsDrawerOpen((prev) => {
+      // Only update if actually changing to avoid unnecessary re-renders
+      if (prev !== open) {
+        return open;
+      }
+      return prev;
+    });
   };
 
   // --- Current Cashflow Settings (derived from state) ---

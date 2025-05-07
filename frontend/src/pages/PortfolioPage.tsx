@@ -1157,7 +1157,30 @@ const FitBoundsToMarkers = ({ bounds }: { bounds: L.LatLngBoundsExpression | und
 };
 
 // Memoized version of the Portfolio map component
-const MemoizedPortfolioMap = React.memo(PortfolioMapComponent);
+const MemoizedPortfolioMap = React.memo(PortfolioMapComponent, (prevProps, nextProps) => {
+  // Custom comparison to prevent unnecessary re-renders
+  // Only re-render if portfolio data or selections change
+  if (Object.keys(prevProps.portfolio).length !== Object.keys(nextProps.portfolio).length) {
+    return false;
+  }
+  
+  // Check if selection state has changed
+  const prevSelectedCount = Object.values(prevProps.selectedProperties).filter(s => s).length;
+  const nextSelectedCount = Object.values(nextProps.selectedProperties).filter(s => s).length;
+  
+  if (prevSelectedCount !== nextSelectedCount) {
+    return false;
+  }
+  
+  // Only update when settings change significantly
+  const significantSettingChange = 
+    prevProps.settings.downPaymentPercent !== nextProps.settings.downPaymentPercent ||
+    prevProps.settings.interestRate !== nextProps.settings.interestRate ||
+    prevProps.settings.loanTerm !== nextProps.settings.loanTerm;
+  
+  // Always return a boolean - if significant changes, return false to allow re-render
+  return !significantSettingChange;
+});
 
 const PortfolioPage: React.FC = () => {
     const navigate = useNavigate();
@@ -2428,11 +2451,11 @@ const PortfolioPage: React.FC = () => {
                             <Typography variant="h5" gutterBottom>Portfolio Map</Typography>
                             <Box sx={{ height: 400, width: '100%', position: 'relative' }}>
                                 <PortfolioMap 
-                                    portfolio={portfolio}
-                                    settings={cashflowSettings}
-                                    selectedProperties={selectedProperties}
-                                    onPropertyClick={handlePropertyClick}
-                                    height={400}
+                                  portfolio={portfolio}
+                                  settings={cashflowSettings}
+                                  selectedProperties={selectedProperties}
+                                  onPropertyClick={handlePropertyClick}
+                                  height={400}
                                 />
                             </Box>
                         </Paper>
