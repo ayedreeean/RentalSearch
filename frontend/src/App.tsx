@@ -258,9 +258,36 @@ const SearchResultsMapComponent: React.FC<SearchResultsMapProps> = ({
                 icon={divIcon}
               >
                 <Popup>
+                  {/* Add property thumbnail image */}
+                  {property.thumbnail && (
+                    <Box sx={{ mb: 2, borderRadius: 1, overflow: 'hidden', maxHeight: 120 }}>
+                      <img 
+                        src={property.thumbnail} 
+                        alt={property.address} 
+                        style={{ width: '100%', objectFit: 'cover' }} 
+                      />
+                    </Box>
+                  )}
                   <Typography variant="subtitle2">{property.address}</Typography>
                   <Typography variant="body2">Price: {formatCurrencyFn(property.price)}</Typography>
-                  <Typography variant="body2">Rent: {formatCurrencyFn(property.rent_estimate)}</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2">Rent est: {formatCurrencyFn(property.rent_estimate)}</Typography>
+                    {/* Add Zillow source pill */}
+                    <Box 
+                      component="span"
+                      sx={{ 
+                        bgcolor: '#6a1b9a', 
+                        color: 'white', 
+                        fontSize: '0.7rem', 
+                        px: 0.8, 
+                        py: 0.2, 
+                        borderRadius: 1,
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      via Zillow
+                    </Box>
+                  </Box>
                   <Typography variant="body2" sx={{ color: isPositive ? 'success.main' : 'error.main' }}>
                     Cashflow: {formatCurrencyFn(monthlyCashflow)}/mo
                   </Typography>
