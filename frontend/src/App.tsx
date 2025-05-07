@@ -260,7 +260,7 @@ const SearchResultsMapComponent: React.FC<SearchResultsMapProps> = ({
                 <Popup>
                   {/* Add property thumbnail image */}
                   {property.thumbnail && (
-                    <Box sx={{ mb: 2, borderRadius: 1, overflow: 'hidden', maxHeight: 120 }}>
+                    <Box sx={{ mb: 1, borderRadius: 1, overflow: 'hidden', maxHeight: 120 }}>
                       <img 
                         src={property.thumbnail} 
                         alt={property.address} 
@@ -268,9 +268,9 @@ const SearchResultsMapComponent: React.FC<SearchResultsMapProps> = ({
                       />
                     </Box>
                   )}
-                  <Typography variant="subtitle2">{property.address}</Typography>
-                  <Typography variant="body2">Price: {formatCurrencyFn(property.price)}</Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 0.5 }}>{property.address}</Typography>
+                  <Typography variant="body2" sx={{ mb: 0.5 }}>Price: {formatCurrencyFn(property.price)}</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                     <Typography variant="body2">Rent est: {formatCurrencyFn(property.rent_estimate)}</Typography>
                     {/* Add Zillow source pill */}
                     <Box 
@@ -288,12 +288,25 @@ const SearchResultsMapComponent: React.FC<SearchResultsMapProps> = ({
                       via Zillow
                     </Box>
                   </Box>
-                  <Typography variant="body2" sx={{ color: isPositive ? 'success.main' : 'error.main' }}>
+                  <Typography variant="body2" sx={{ color: isPositive ? 'success.main' : 'error.main', mb: 1 }}>
                     Cashflow: {formatCurrencyFn(monthlyCashflow)}/mo
                   </Typography>
-                  <Button size="small" onClick={() => onMarkerClickNavigate(property.property_id)} sx={{ mt: 1 }}>
-                    View Details
-                  </Button>
+                  <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                    <Button 
+                      variant="contained" 
+                      size="small" 
+                      onClick={() => onMarkerClickNavigate(property.property_id)} 
+                      sx={{ 
+                        width: '100%',
+                        bgcolor: '#4f46e5',
+                        '&:hover': {
+                          bgcolor: '#3730a3'
+                        }
+                      }}
+                    >
+                      VIEW DETAILS
+                    </Button>
+                  </Box>
                 </Popup>
               </Marker>
             );
