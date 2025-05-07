@@ -199,12 +199,16 @@ const SearchResultsMapComponent: React.FC<SearchResultsMapProps> = ({
                 pinColorClassSuffix = isPositive ? 'positive' : 'negative';
             }
 
-            const divIcon = useMemo(() => L.divIcon({
-              html: `<div class="cashflow-map-pin ${pinColorClassSuffix}">${pinText}</div>`,
+            // Create the divIcon HTML string without useMemo
+            const iconHtml = `<div class="cashflow-map-pin ${pinColorClassSuffix}">${pinText}</div>`;
+            
+            // Create divIcon separately from useMemo
+            const divIcon = L.divIcon({
+              html: iconHtml,
               className: 'cashflow-map-marker',
               iconSize: [60, 25],
               iconAnchor: [30, 25]
-            }), [pinText, pinColorClassSuffix]);
+            });
 
             return (
               <Marker

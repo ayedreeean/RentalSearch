@@ -1023,13 +1023,14 @@ const PortfolioMapComponent: React.FC<{
             const pinColorClassSuffix = isPositive ? 'positive' : 'negative';
             const isSelected = selectedProperties[id];
             
-            // Create a custom div icon for the marker
-            const divIcon = useMemo(() => L.divIcon({
-              html: `<div class="cashflow-map-pin ${pinColorClassSuffix} ${isSelected ? 'selected' : ''}">${pinText}</div>`,
+            // Create a custom div icon for the marker - without useMemo
+            const iconHtml = `<div class="cashflow-map-pin ${pinColorClassSuffix} ${isSelected ? 'selected' : ''}">${pinText}</div>`;
+            const divIcon = L.divIcon({
+              html: iconHtml,
               className: 'cashflow-map-marker',
               iconSize: [60, 25],
               iconAnchor: [30, 25]
-            }), [pinText, pinColorClassSuffix, isSelected]);
+            });
                           
             return (
               <Marker 
