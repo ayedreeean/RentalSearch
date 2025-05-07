@@ -291,7 +291,8 @@ const SimpleChart = ({
     ctx.textAlign = 'center'; ctx.font = 'bold 11px Arial'; ctx.fillStyle = '#555';
     ctx.save(); ctx.translate(padding.left - 60, padding.top + chartHeight / 2); ctx.rotate(-Math.PI / 2); ctx.fillText('Property Value & Equity ($)', 0, 0); ctx.restore();
     ctx.save(); ctx.translate(canvasWidth - padding.right + 60, padding.top + chartHeight / 2); ctx.rotate(Math.PI / 2); ctx.fillText('Annual Cashflow ($)', 0, 0); ctx.restore();
-    ctx.fillText('Year', padding.left + chartWidth / 2, canvasHeight - 10);
+    // Remove the Year label
+    // ctx.fillText('Year', padding.left + chartWidth / 2, canvasHeight - 10);
     
     // Draw property value line
     if (data.propertyValues.length > 1) {
