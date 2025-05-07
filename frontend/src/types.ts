@@ -7,7 +7,6 @@ export interface Property {
   bathrooms: number;
   sqft: number;
   thumbnail: string;
-  images?: string[]; // Make images field optional for backward compatibility
   photo_url?: string;
   url: string;
   ratio: number;
@@ -16,6 +15,7 @@ export interface Property {
   latitude?: number;
   longitude?: number;
   notes?: string;
+  zpid?: string | number;
 }
 
 export interface Cashflow {

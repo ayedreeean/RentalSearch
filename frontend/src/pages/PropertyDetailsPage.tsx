@@ -21,12 +21,11 @@ import L from 'leaflet';
 import { usePDF } from 'react-to-pdf';
 import { QRCodeSVG } from 'qrcode.react';
 import CashflowSankeyChart from '../components/CashflowSankeyChart';
+import PropertyImageGallery from '../components/PropertyImageGallery';
 // Import utility functions
 import { formatCurrency, formatPercent } from '../utils/formatting';
 import { calculateCashflow as calculateCashflowUtil } from '../utils/calculations';
 import { calculateCrunchScore } from '../utils/scoring';
-// Import the PropertyExtendedDetails component instead of (or alongside) PropertyImageGallery
-import PropertyExtendedDetails from '../components/PropertyExtendedDetails';
 
 // ---- Portfolio Data Structure (Define Outside Component) ----
 interface PortfolioAssumptionOverrides {
@@ -697,11 +696,6 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   const { propertyId } = useParams<{ propertyId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  
-  // Add useState hook for property
-  const [propertyState, setPropertyState] = useState<Property | null>(null);
-
-  // Rest of the existing state declarations...
   const [customRentEstimate, setCustomRentEstimate] = useState<number | null>(null);
   const [isInPortfolio, setIsInPortfolio] = useState<boolean>(false);
   const theme = useTheme();
@@ -823,15 +817,8 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     }
     
     // Otherwise, return the found property or the first property or the shared property or null
-    const result = foundProperty || (propertyId ? sharedPropertyData : properties[0]) || null;
-    
-    // Update the propertyState whenever the derived property changes
-    if (result !== propertyState) {
-      setPropertyState(result);
-    }
-    
-    return result;
-  }, [properties, propertyId, sharedPropertyData, propertyState]);
+    return foundProperty || (propertyId ? sharedPropertyData : properties[0]) || null;
+  }, [properties, propertyId, sharedPropertyData]);
 
   // PDF Hook - MOVED AFTER property definition
   const { toPDF, targetRef: pdfTargetRef } = usePDF({
@@ -1253,37 +1240,33 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   
   // Generate shareable URL
   const generateShareableURL = useCallback(() => {
-    // Handle the case when property is null
-    if (!property) {
-      return window.location.href;
-    }
+    if (!property || currentAnalysisPrice === null) return window.location.href; // Use currentAnalysisPrice
     
-    // Create a shareable property with only essential fields to keep URL short
-    const shareableProperty = {
-      id: property.property_id,
-      a: property.address,
-      p: effectivePrice,
-      r: customRentEstimate !== null ? customRentEstimate : property.rent_estimate,
-      b: property.bedrooms,
-      ba: property.bathrooms,
-      s: property.sqft,
-      t: property.thumbnail,
-      i: property.images || [property.thumbnail], // Include images array
-      u: property.url,
-      d: property.days_on_market,
-      rs: property.rent_source,
-      lat: property.latitude,
-      lng: property.longitude,
-      n: notes,
+    // Fix: Include the property ID in the path
+    const baseUrl = window.location.origin + "/#/property/" + property.property_id;    
+    const searchParams = new URLSearchParams();
+    
+    // Use the SharedProperty type to ensure consistent typing
+    const propertyData: SharedProperty = {
+      ...property,
+      price: currentAnalysisPrice, // Include currentAnalysisPrice
+      custom_rent: customRentEstimate,
+      notes: notes,
     };
+    const encodedProperty = btoa(JSON.stringify(propertyData));
+    searchParams.set('data', encodedProperty);
     
-    // Encode and create the URL
-    const encodedData = btoa(JSON.stringify(shareableProperty));
-    const baseUrl = window.location.origin;
-    const shareUrl = `${baseUrl}/#/property/shared/${encodedData}`;
+    const settingsData = {
+      ...localSettings,
+      yearsToProject,
+      rentAppreciationRate,
+      propertyValueIncreaseRate
+    };
+    const encodedSettings = btoa(JSON.stringify(settingsData));
+    searchParams.set('settings', encodedSettings);
     
-    return shareUrl;
-  }, [property, effectivePrice, customRentEstimate, notes]);
+    return `${baseUrl}?${searchParams.toString()}`;
+  }, [property, currentAnalysisPrice, customRentEstimate, notes, localSettings, yearsToProject, rentAppreciationRate, propertyValueIncreaseRate]); // DEPEND ON currentAnalysisPrice
   
   // Modal handlers
   const handleOpenPdfModal = () => setShowPdfModal(true);
@@ -1806,16 +1789,40 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
           </Grid>
         </Paper>
         
-        {/* Property Extended Details with Images */}
-        {property && (
-          <PropertyExtendedDetails 
-            property={property} 
-            onDetailsLoaded={(updatedProperty) => {
-              // Update the property state with the new details
-              setPropertyState(updatedProperty);
-            }}
-          />
-        )}
+        {/* Property Image */}
+        <Box my={2}>
+          {/* Use propertyId from URL as fallback for zpid */}
+          {(property.zpid || propertyId) ? (
+            <>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Property Images (Zillow zpid: {property.zpid || propertyId})
+              </Typography>
+              <PropertyImageGallery 
+                zpid={String(property.zpid || propertyId)} 
+                fallbackImage={property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'} 
+              />
+            </>
+          ) : (
+            <>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Property Image (No gallery available - missing zpid)
+              </Typography>
+              <Box
+                component="img"
+                sx={{
+                  width: '100%',
+                  height: 'auto',
+                  maxHeight: '400px',
+                  objectFit: 'cover',
+                  borderRadius: 1,
+                  mb: 2
+                }}
+                src={property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'}
+                alt={`Property image for ${property.address}`}
+              />
+            </>
+          )}
+        </Box>
         
         {/* Property Map */}
         <Typography variant="h5" gutterBottom sx={{ mt: 4, mb: 2 }}>Property Location</Typography>

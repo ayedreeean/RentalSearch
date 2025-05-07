@@ -1,318 +1,105 @@
-import React, { useState } from 'react';
-import { 
-  Box, 
-  IconButton, 
-  Paper, 
-  Typography,
-  useTheme,
-  useMediaQuery,
-  Modal
-} from '@mui/material';
-import { 
-  NavigateBefore as PrevIcon, 
-  NavigateNext as NextIcon,
-  ZoomIn as ZoomInIcon,
-  Close as CloseIcon
-} from '@mui/icons-material';
+import React, { useState, useEffect } from 'react';
+import { Box, CircularProgress, Typography } from '@mui/material';
+import { getPropertyImages } from '../api/propertyApi';
+import ImageGallery from 'react-image-gallery';
+import 'react-image-gallery/styles/css/image-gallery.css';
 
 interface PropertyImageGalleryProps {
-  images: string[];
-  address: string;
+  zpid: string;
+  fallbackImage?: string;
 }
 
-const PropertyImageGallery: React.FC<PropertyImageGalleryProps> = ({ images, address }) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [showModal, setShowModal] = useState(false);
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+const PropertyImageGallery: React.FC<PropertyImageGalleryProps> = ({ 
+  zpid, 
+  fallbackImage = 'https://via.placeholder.com/800x500?text=No+Property+Image+Available' 
+}) => {
+  const [images, setImages] = useState<Array<{original: string; thumbnail: string}>>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  // Handle empty images array
-  if (!images || images.length === 0) {
+  useEffect(() => {
+    const fetchImages = async () => {
+      console.log(`[PropertyImageGallery] Attempting to fetch images for zpid: ${zpid}`);
+      try {
+        setLoading(true);
+        setError(false);
+        
+        if (!zpid) {
+          console.error('[PropertyImageGallery] No zpid provided');
+          setError(true);
+          setLoading(false);
+          return;
+        }
+
+        const propertyImages = await getPropertyImages(zpid);
+        console.log(`[PropertyImageGallery] Received ${propertyImages?.length || 0} images from API`);
+        
+        if (propertyImages && propertyImages.length > 0) {
+          // Format images for react-image-gallery
+          const formattedImages = propertyImages.map(imageUrl => ({
+            original: imageUrl,
+            thumbnail: imageUrl,
+          }));
+          setImages(formattedImages);
+          console.log('[PropertyImageGallery] Successfully formatted images for gallery');
+        } else {
+          console.warn('[PropertyImageGallery] No images returned from API');
+          setError(true);
+        }
+      } catch (err) {
+        console.error('[PropertyImageGallery] Error fetching property images:', err);
+        setError(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchImages();
+  }, [zpid]);
+
+  if (loading) {
     return (
-      <Paper 
-        sx={{ 
-          height: 400, 
-          width: '100%', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          bgcolor: 'grey.100' 
-        }}
+      <Box 
+        display="flex" 
+        justifyContent="center" 
+        alignItems="center" 
+        height="400px" 
+        bgcolor="background.paper"
       >
-        <Typography variant="h6" color="text.secondary">
-          No images available
-        </Typography>
-      </Paper>
+        <CircularProgress />
+      </Box>
     );
   }
 
-  const handlePrevImage = () => {
-    setCurrentIndex((prevIndex) => (prevIndex === 0 ? images.length - 1 : prevIndex - 1));
-  };
-
-  const handleNextImage = () => {
-    setCurrentIndex((prevIndex) => (prevIndex === images.length - 1 ? 0 : prevIndex + 1));
-  };
-
-  const handleOpenModal = () => {
-    setShowModal(true);
-  };
-
-  const handleCloseModal = () => {
-    setShowModal(false);
-  };
+  if (error || images.length === 0) {
+    console.log(`[PropertyImageGallery] Showing fallback image due to error=${error} or empty images array (length=${images.length})`);
+    return (
+      <Box 
+        component="img"
+        src={fallbackImage}
+        alt="Property image not available"
+        sx={{
+          width: '100%',
+          height: '400px',
+          objectFit: 'cover',
+          borderRadius: 1
+        }}
+      />
+    );
+  }
 
   return (
-    <>
-      <Paper sx={{ position: 'relative', overflow: 'hidden' }}>
-        {/* Main Image */}
-        <Box
-          sx={{
-            position: 'relative',
-            paddingTop: '56.25%', // 16:9 aspect ratio
-            backgroundImage: `url(${images[currentIndex]})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            cursor: 'pointer',
-          }}
-          onClick={handleOpenModal}
-        >
-          {/* Zoom icon */}
-          <IconButton
-            sx={{
-              position: 'absolute',
-              bottom: 8,
-              right: 8,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-              color: 'white',
-              '&:hover': {
-                backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              },
-            }}
-            onClick={handleOpenModal}
-          >
-            <ZoomInIcon />
-          </IconButton>
-        </Box>
-
-        {/* Navigation controls */}
-        {images.length > 1 && (
-          <>
-            <IconButton
-              sx={{
-                position: 'absolute',
-                top: '50%',
-                left: 8,
-                transform: 'translateY(-50%)',
-                backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                color: 'white',
-                '&:hover': {
-                  backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                },
-              }}
-              onClick={handlePrevImage}
-            >
-              <PrevIcon />
-            </IconButton>
-            <IconButton
-              sx={{
-                position: 'absolute',
-                top: '50%',
-                right: 8,
-                transform: 'translateY(-50%)',
-                backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                color: 'white',
-                '&:hover': {
-                  backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                },
-              }}
-              onClick={handleNextImage}
-            >
-              <NextIcon />
-            </IconButton>
-          </>
-        )}
-
-        {/* Image counter */}
-        {images.length > 1 && (
-          <Box
-            sx={{
-              position: 'absolute',
-              bottom: 8,
-              left: 8,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-              color: 'white',
-              padding: '4px 8px',
-              borderRadius: 1,
-              fontSize: '0.875rem',
-            }}
-          >
-            {currentIndex + 1} / {images.length}
-          </Box>
-        )}
-
-        {/* Property address overlay */}
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            color: 'white',
-            padding: '8px 16px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <Typography variant="body1">{address}</Typography>
-        </Box>
-
-        {/* Image thumbnails for desktop */}
-        {!isMobile && images.length > 1 && (
-          <Box
-            sx={{
-              display: 'flex',
-              flexWrap: 'nowrap',
-              overflowX: 'auto',
-              p: 1,
-              gap: 1,
-              backgroundColor: 'grey.100',
-            }}
-          >
-            {images.map((image, index) => (
-              <Box
-                key={index}
-                sx={{
-                  width: 80,
-                  height: 60,
-                  flexShrink: 0,
-                  backgroundImage: `url(${image})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  cursor: 'pointer',
-                  border: index === currentIndex ? `2px solid ${theme.palette.primary.main}` : 'none',
-                  opacity: index === currentIndex ? 1 : 0.7,
-                  '&:hover': {
-                    opacity: 1,
-                  },
-                }}
-                onClick={() => setCurrentIndex(index)}
-              />
-            ))}
-          </Box>
-        )}
-      </Paper>
-
-      {/* Fullscreen modal */}
-      <Modal
-        open={showModal}
-        onClose={handleCloseModal}
-        aria-labelledby="image-modal"
-        aria-describedby="fullscreen-property-image"
-      >
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.9)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          {/* Close button */}
-          <IconButton
-            sx={{
-              position: 'absolute',
-              top: 16,
-              right: 16,
-              backgroundColor: 'rgba(255, 255, 255, 0.3)',
-              color: 'white',
-              '&:hover': {
-                backgroundColor: 'rgba(255, 255, 255, 0.5)',
-              },
-            }}
-            onClick={handleCloseModal}
-          >
-            <CloseIcon />
-          </IconButton>
-
-          {/* Fullscreen image */}
-          <Box
-            sx={{
-              position: 'relative',
-              width: '90%',
-              height: '80%',
-              backgroundImage: `url(${images[currentIndex]})`,
-              backgroundSize: 'contain',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
-            }}
-          />
-
-          {/* Modal navigation controls */}
-          {images.length > 1 && (
-            <>
-              <IconButton
-                sx={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: 16,
-                  transform: 'translateY(-50%)',
-                  backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                  color: 'white',
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                  },
-                }}
-                onClick={handlePrevImage}
-              >
-                <PrevIcon fontSize="large" />
-              </IconButton>
-              <IconButton
-                sx={{
-                  position: 'absolute',
-                  top: '50%',
-                  right: 16,
-                  transform: 'translateY(-50%)',
-                  backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                  color: 'white',
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                  },
-                }}
-                onClick={handleNextImage}
-              >
-                <NextIcon fontSize="large" />
-              </IconButton>
-            </>
-          )}
-
-          {/* Image counter in modal */}
-          {images.length > 1 && (
-            <Box
-              sx={{
-                position: 'absolute',
-                bottom: 16,
-                left: 0,
-                right: 0,
-                textAlign: 'center',
-                color: 'white',
-                fontSize: '1rem',
-              }}
-            >
-              {currentIndex + 1} / {images.length}
-            </Box>
-          )}
-        </Box>
-      </Modal>
-    </>
+    <Box sx={{ '& .image-gallery': { borderRadius: 1, overflow: 'hidden' } }}>
+      <ImageGallery
+        items={images}
+        showPlayButton={false}
+        showFullscreenButton={true}
+        showNav={true}
+        thumbnailPosition="bottom"
+        useBrowserFullscreen={true}
+        lazyLoad={true}
+      />
+    </Box>
   );
 };
 

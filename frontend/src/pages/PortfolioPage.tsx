@@ -1159,9 +1159,10 @@ const FitBoundsToMarkers = ({ bounds }: { bounds: L.LatLngBoundsExpression | und
 // Memoized version of the Portfolio map component
 const MemoizedPortfolioMap = React.memo(PortfolioMapComponent, (prevProps, nextProps) => {
   // Custom comparison to prevent unnecessary re-renders
-  // Only re-render if portfolio data or selections change
+  
+  // Check if portfolio data fundamentally changed
   if (Object.keys(prevProps.portfolio).length !== Object.keys(nextProps.portfolio).length) {
-    return false;
+    return false; // Portfolio size changed
   }
   
   // Check if selection state has changed
@@ -1169,17 +1170,23 @@ const MemoizedPortfolioMap = React.memo(PortfolioMapComponent, (prevProps, nextP
   const nextSelectedCount = Object.values(nextProps.selectedProperties).filter(s => s).length;
   
   if (prevSelectedCount !== nextSelectedCount) {
-    return false;
+    return false; // Selection changed
   }
   
-  // Only update when settings change significantly
-  const significantSettingChange = 
-    prevProps.settings.downPaymentPercent !== nextProps.settings.downPaymentPercent ||
+  // Check if important settings that affect pin values have changed
+  if (
     prevProps.settings.interestRate !== nextProps.settings.interestRate ||
-    prevProps.settings.loanTerm !== nextProps.settings.loanTerm;
+    prevProps.settings.downPaymentPercent !== nextProps.settings.downPaymentPercent ||
+    prevProps.settings.taxInsurancePercent !== nextProps.settings.taxInsurancePercent ||
+    prevProps.settings.vacancyPercent !== nextProps.settings.vacancyPercent ||
+    prevProps.settings.capexPercent !== nextProps.settings.capexPercent ||
+    prevProps.settings.propertyManagementPercent !== nextProps.settings.propertyManagementPercent
+  ) {
+    return false; // Settings changed that affect pin values
+  }
   
-  // Always return a boolean - if significant changes, return false to allow re-render
-  return !significantSettingChange;
+  // Default: No significant changes, don't re-render
+  return true;
 });
 
 const PortfolioPage: React.FC = () => {
