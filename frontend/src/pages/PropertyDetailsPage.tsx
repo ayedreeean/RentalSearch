@@ -1789,48 +1789,51 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
           </Grid>
         </Paper>
         
-        {/* Property Image */}
-        <Box my={2}>
-          {/* Use propertyId from URL as fallback for zpid */}
-          {(property.zpid || propertyId) ? (
-            <>
-              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                Property Images (Zillow zpid: {property.zpid || propertyId})
-              </Typography>
-              <PropertyImageGallery 
-                zpid={String(property.zpid || propertyId)} 
-                fallbackImage={property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'} 
-              />
-            </>
-          ) : (
-            <>
-              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                Property Image (No gallery available - missing zpid)
-              </Typography>
-              <Box
-                component="img"
-                sx={{
-                  width: '100%',
-                  height: 'auto',
-                  maxHeight: '400px',
-                  objectFit: 'cover',
-                  borderRadius: 1,
-                  mb: 2
-                }}
-                src={property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'}
-                alt={`Property image for ${property.address}`}
-              />
-            </>
-          )}
-        </Box>
-        
-        {/* Property Map */}
-        <Typography variant="h5" gutterBottom sx={{ mt: 4, mb: 2 }}>Property Location</Typography>
-          <PropertyMap 
-            address={property.address} 
-            lat={property.latitude || null} 
-            lng={property.longitude || null} 
-          />
+        {/* Grid layout for gallery and map */}
+        <Grid container spacing={3} sx={{ mb: 3 }}>
+          {/* Left column - Property Image Gallery */}
+          <Grid size={{ xs: 12, md: 6, lg: 7 }}>
+            <Box>
+              {/* Use propertyId from URL as fallback for zpid */}
+              {(property.zpid || propertyId) ? (
+                <>
+                  <Typography variant="h5" gutterBottom>Property Images</Typography>
+                  <PropertyImageGallery 
+                    zpid={String(property.zpid || propertyId)} 
+                    fallbackImage={property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'} 
+                  />
+                </>
+              ) : (
+                <>
+                  <Typography variant="h5" gutterBottom>Property Image</Typography>
+                  <Box
+                    component="img"
+                    sx={{
+                      width: '100%',
+                      height: 'auto',
+                      maxHeight: '400px',
+                      objectFit: 'cover',
+                      borderRadius: 1,
+                      mb: 2
+                    }}
+                    src={property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'}
+                    alt={`Property image for ${property.address}`}
+                  />
+                </>
+              )}
+            </Box>
+          </Grid>
+          
+          {/* Right column - Property Map */}
+          <Grid size={{ xs: 12, md: 6, lg: 5 }}>
+            <Typography variant="h5" gutterBottom>Property Location</Typography>
+            <PropertyMap 
+              address={property.address} 
+              lat={property.latitude || null} 
+              lng={property.longitude || null} 
+            />
+          </Grid>
+        </Grid>
 
         {/* Sankey Chart for Cashflow Visualization */}
         {cashflow && (
