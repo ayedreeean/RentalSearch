@@ -2661,7 +2661,11 @@ const PortfolioPage: React.FC = () => {
                                 <Box sx={{ mt: 4 }}> 
                                     <Typography variant="h6" gutterBottom>Monthly Cash Flow Breakdown</Typography>
                                      {aggregatedCashflowData.rentalIncome > 0 ? (
-                                        <Box sx={{ height: 400 }}>
+                                        <Box sx={{ 
+                                            height: 'auto', 
+                                            maxWidth: '100%', 
+                                            overflow: 'hidden'
+                                        }}>
                                             <CashflowSankeyChart 
                                                 data={aggregatedCashflowData} 
                                                 formatCurrency={formatCurrency} // Pass the formatting function

@@ -192,26 +192,26 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
         Cashflow Breakdown
       </Typography>
       {/* Replace SVG with ResponsiveSankey */}
-      <Box sx={{ width: '100%', height: 400 }}>
+      <Box sx={{ width: '100%', height: 400, overflow: 'hidden' }}>
         <ResponsiveSankey
           data={nivoData}
           margin={isMobile ? 
-            { top: 20, right: 50, bottom: 20, left: 50 } : 
-            { top: 20, right: 120, bottom: 20, left: 120 }
+            { top: 20, right: 40, bottom: 20, left: 40 } : 
+            { top: 20, right: 100, bottom: 20, left: 100 }
           }
           align="justify" // Or "start", "end", "center"
           colors={getNodeColor} // Use the color function
           nodeOpacity={1}
           nodeHoverOpacity={1}
-          nodeThickness={18}
+          nodeThickness={isMobile ? 14 : 18}
           nodeInnerPadding={3}
-          nodeSpacing={10} // Spacing between nodes in the same column
+          nodeSpacing={isMobile ? 6 : 10} // Reduce spacing on mobile
           nodeBorderWidth={0}
           // nodeBorderColor={{ from: 'color', modifiers: [['darker', 0.8]] }}
           nodeBorderRadius={3}
           linkOpacity={0.6}
           linkHoverOpacity={0.8}
-          linkContract={3}
+          linkContract={isMobile ? 1 : 3}
           // enableLinkGradient={true}
 
           // Always show labels but adapt format for mobile
@@ -223,7 +223,7 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
 
           labelPosition="outside"
           labelOrientation="horizontal"
-          labelPadding={isMobile ? 6 : 16} // Reduce padding on mobile
+          labelPadding={isMobile ? 4 : 12} // Reduce padding on all screens
           labelTextColor={{ from: 'color', modifiers: [['darker', 1]] }}
           valueFormat={value => formatCurrency(value)} // Format tooltip values
 
