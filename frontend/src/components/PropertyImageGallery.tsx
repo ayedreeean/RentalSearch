@@ -63,8 +63,11 @@ const PropertyImageGallery: React.FC<PropertyImageGalleryProps> = ({
         display="flex" 
         justifyContent="center" 
         alignItems="center" 
-        height="400px" 
-        bgcolor="background.paper"
+        sx={{ 
+          height: '100%', 
+          minHeight: '300px',
+          bgcolor: 'background.paper' 
+        }}
       >
         <CircularProgress />
       </Box>
@@ -80,7 +83,7 @@ const PropertyImageGallery: React.FC<PropertyImageGalleryProps> = ({
         alt="Property image not available"
         sx={{
           width: '100%',
-          height: '400px',
+          height: '100%',
           objectFit: 'cover',
           borderRadius: 1
         }}
@@ -89,7 +92,33 @@ const PropertyImageGallery: React.FC<PropertyImageGalleryProps> = ({
   }
 
   return (
-    <Box sx={{ '& .image-gallery': { borderRadius: 1, overflow: 'hidden' } }}>
+    <Box sx={{ 
+      height: '100%', 
+      '& .image-gallery': { 
+        borderRadius: 1, 
+        overflow: 'hidden',
+        height: '100%'
+      },
+      '& .image-gallery-content': {
+        height: '100%'
+      },
+      '& .image-gallery-slide-wrapper': {
+        height: 'calc(100% - 80px)'
+      },
+      '& .image-gallery-swipe': {
+        height: '100%'
+      },
+      '& .image-gallery-slides': {
+        height: '100%'
+      },
+      '& .image-gallery-slide': {
+        height: '100%'
+      },
+      '& .image-gallery-image': {
+        objectFit: 'contain',
+        height: '100%'
+      }
+    }}>
       <ImageGallery
         items={images}
         showPlayButton={false}

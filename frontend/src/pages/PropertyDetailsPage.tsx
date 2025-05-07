@@ -464,11 +464,11 @@ const PropertyMap = ({
     geocodeAddress();
   }, [address, coordinates]);
   
-  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}><CircularProgress /></Box>;
-  if (error || !coordinates) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300, bgcolor: '#f5f5f5', borderRadius: 2 }}><Typography color="error">{error || 'Map could not be loaded'}</Typography></Box>;
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: 300 }}><CircularProgress /></Box>;
+  if (error || !coordinates) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: 300, bgcolor: '#f5f5f5', borderRadius: 2 }}><Typography color="error">{error || 'Map could not be loaded'}</Typography></Box>;
   
     return (
-    <Box sx={{ height: 400, width: '100%', borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0', mb: 3 }}>
+    <Box sx={{ height: '100%', minHeight: 400, width: '100%', borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
       <MapContainer center={coordinates} zoom={15} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} {...({} as any)}>
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <Marker position={coordinates}><Popup>{address}</Popup></Marker>
@@ -1793,15 +1793,17 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
         <Grid container spacing={3} sx={{ mb: 3 }}>
           {/* Left column - Property Image Gallery */}
           <Grid size={{ xs: 12, md: 6, lg: 7 }}>
-            <Box>
+            <Box sx={{ height: { md: 500 }, display: 'flex', flexDirection: 'column' }}>
               {/* Use propertyId from URL as fallback for zpid */}
               {(property.zpid || propertyId) ? (
                 <>
                   <Typography variant="h5" gutterBottom>Property Images</Typography>
-                  <PropertyImageGallery 
-                    zpid={String(property.zpid || propertyId)} 
-                    fallbackImage={property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'} 
-                  />
+                  <Box sx={{ flexGrow: 1 }}>
+                    <PropertyImageGallery 
+                      zpid={String(property.zpid || propertyId)} 
+                      fallbackImage={property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'} 
+                    />
+                  </Box>
                 </>
               ) : (
                 <>
@@ -1826,12 +1828,16 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
           
           {/* Right column - Property Map */}
           <Grid size={{ xs: 12, md: 6, lg: 5 }}>
-            <Typography variant="h5" gutterBottom>Property Location</Typography>
-            <PropertyMap 
-              address={property.address} 
-              lat={property.latitude || null} 
-              lng={property.longitude || null} 
-            />
+            <Box sx={{ height: { md: 500 }, display: 'flex', flexDirection: 'column' }}>
+              <Typography variant="h5" gutterBottom>Property Location</Typography>
+              <Box sx={{ flexGrow: 1 }}>
+                <PropertyMap 
+                  address={property.address} 
+                  lat={property.latitude || null} 
+                  lng={property.longitude || null} 
+                />
+              </Box>
+            </Box>
           </Grid>
         </Grid>
 
