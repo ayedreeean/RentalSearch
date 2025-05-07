@@ -738,6 +738,9 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   // Add sharedPropertyData state
   const [sharedPropertyData, setSharedPropertyData] = useState<SharedProperty | null>(null);
 
+  // Add state to track if settings have changed from saved/initial values
+  const [settingsChanged, setSettingsChanged] = useState(false);
+
   // Add a useEffect to scroll to top on page load
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -894,13 +897,15 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     }
   }, [property, defaultSettings]);
 
-  // Generic handler for slider changes
+  // Generic handler for slider changes with change tracking
   const handleSettingChange = (settingKey: keyof CashflowSettings) => (_: Event | React.SyntheticEvent, newValue: number | number[]) => {
     const value = typeof newValue === 'number' ? newValue : newValue[0];
     setLocalSettings(prev => ({
       ...prev,
       [settingKey]: value
     }));
+    // Mark settings as changed
+    setSettingsChanged(true);
   };
 
   // NEW: Handler to save the edited price
@@ -940,7 +945,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
 
   }, [editablePriceString, property, isInPortfolio]);
 
-  // Save current settings to portfolio
+  // Save current settings to portfolio with change tracking reset
   const saveSettingsToPortfolio = () => {
     if (!property || currentAnalysisPrice === null) return; // Check currentAnalysisPrice
 
@@ -990,7 +995,10 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
       
       // Update portfolio status
       setIsInPortfolio(true);
-      } catch (error) {
+      
+      // Reset the changed state
+      setSettingsChanged(false);
+    } catch (error) {
       console.error('Error saving settings to portfolio:', error);
     }
   };
@@ -1410,26 +1418,27 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
         className="assumptions-drawer"
               sx={{
                 '& .MuiDrawer-paper': {
-            width: drawerWidth,
-            maxWidth: '80vw',
-                  boxSizing: 'border-box',
-                  padding: 3,
-                  borderTopLeftRadius: 0,
-                  borderBottomLeftRadius: 0,
-            overflowY: 'auto',
-                },
-                '& .MuiBackdrop-root': {
-                  backgroundColor: 'rgba(0, 0, 0, 0.2)'
-                }
-              }}
-              transitionDuration={225}
-              SlideProps={{
-                easing: {
-                  enter: 'cubic-bezier(0, 0, 0.2, 1)',
-                  exit: 'cubic-bezier(0.4, 0, 0.6, 1)'
-                }
-              }}
-            >
+          width: drawerWidth,
+          maxWidth: '80vw',
+          boxSizing: 'border-box',
+          padding: 3,
+          paddingBottom: settingsChanged ? 10 : 3, // Add padding at bottom when button is fixed
+          borderTopLeftRadius: 0,
+          borderBottomLeftRadius: 0,
+          overflowY: 'auto',
+        },
+        '& .MuiBackdrop-root': {
+          backgroundColor: 'rgba(0, 0, 0, 0.2)'
+        }
+      }}
+      transitionDuration={225}
+      SlideProps={{
+        easing: {
+          enter: 'cubic-bezier(0, 0, 0.2, 1)',
+          exit: 'cubic-bezier(0.4, 0, 0.6, 1)'
+        }
+      }}
+    >
         {/* Header with close button */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h6" fontWeight="medium">
@@ -1667,24 +1676,37 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
                 />
               </Box>
         
-        <Button 
-          variant="contained" 
-          color="primary" 
-                fullWidth
-          onClick={saveSettingsToPortfolio}
-                sx={{
-            mt: 2,
-            height: '48px',
-            fontWeight: 'bold',
-            boxShadow: 2,
-            bgcolor: '#4f46e5',
-            '&:hover': {
-              bgcolor: '#4338ca',
-            }
-          }}
-        >
-          Save Settings to Property
-        </Button>
+        {/* New sticky save button container - only shown when settings have changed */}
+        {settingsChanged && (
+          <Box 
+            sx={{ 
+              position: 'fixed',
+              bottom: 0,
+              right: 0,
+              width: drawerWidth,
+              maxWidth: '80vw',
+              p: 2,
+              bgcolor: 'background.paper',
+              borderTop: '1px solid rgba(0, 0, 0, 0.12)',
+              zIndex: 1300,
+              display: 'flex',
+              justifyContent: 'center'
+            }}
+          >
+            <Button 
+              variant="contained" 
+              color="primary" 
+              onClick={saveSettingsToPortfolio}
+              sx={{
+                height: '48px',
+                fontWeight: 'bold',
+                boxShadow: 2
+              }}
+            >
+              Save Settings to Property
+            </Button>
+          </Box>
+        )}
             </Drawer>
       
       <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
