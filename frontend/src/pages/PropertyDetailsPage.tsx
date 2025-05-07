@@ -697,6 +697,11 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   const { propertyId } = useParams<{ propertyId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // Add useState hook for property
+  const [propertyState, setPropertyState] = useState<Property | null>(null);
+
+  // Rest of the existing state declarations...
   const [customRentEstimate, setCustomRentEstimate] = useState<number | null>(null);
   const [isInPortfolio, setIsInPortfolio] = useState<boolean>(false);
   const theme = useTheme();
@@ -818,8 +823,15 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
     }
     
     // Otherwise, return the found property or the first property or the shared property or null
-    return foundProperty || (propertyId ? sharedPropertyData : properties[0]) || null;
-  }, [properties, propertyId, sharedPropertyData]);
+    const result = foundProperty || (propertyId ? sharedPropertyData : properties[0]) || null;
+    
+    // Update the propertyState whenever the derived property changes
+    if (result !== propertyState) {
+      setPropertyState(result);
+    }
+    
+    return result;
+  }, [properties, propertyId, sharedPropertyData, propertyState]);
 
   // PDF Hook - MOVED AFTER property definition
   const { toPDF, targetRef: pdfTargetRef } = usePDF({
@@ -1241,6 +1253,11 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
   
   // Generate shareable URL
   const generateShareableURL = useCallback(() => {
+    // Handle the case when property is null
+    if (!property) {
+      return window.location.href;
+    }
+    
     // Create a shareable property with only essential fields to keep URL short
     const shareableProperty = {
       id: property.property_id,
@@ -1795,7 +1812,7 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
             property={property} 
             onDetailsLoaded={(updatedProperty) => {
               // Update the property state with the new details
-              setProperty(updatedProperty);
+              setPropertyState(updatedProperty);
             }}
           />
         )}

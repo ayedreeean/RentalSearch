@@ -342,6 +342,18 @@ interface PropertyExSearchResponse {
     [key: string]: any;
 }
 
+// Define an interface for the alternate property details API response
+interface PropertyDetailsResponse {
+    data: {
+        photos?: Array<{
+            url?: string;
+            large?: string; 
+        }>;
+        [key: string]: any; // Allow other properties
+    };
+    [key: string]: any;
+}
+
 // Function to get total properties count for pagination
 export const getTotalPropertiesCount = async (
   location: string,
@@ -660,15 +672,47 @@ const getPropertyWithRentEstimate = async (property: Property, isPriority: boole
 export const getPropertyDetailsByZpid = async (zpid: string): Promise<Property | null> => {
     try {
         console.log(`[getPropertyDetailsByZpid] Fetching details for ZPID ${zpid}`);
-        const token = process.env.REACT_APP_ZILLOW_API_KEY;
-        if (!token) {
-            throw new Error('Zillow API key not found');
+        
+        // Check if API URL exists
+        const apiUrl = process.env.REACT_APP_API_URL;
+        console.log(`[getPropertyDetailsByZpid] API URL: ${apiUrl}`);
+        
+        if (!apiUrl) {
+            console.error('[getPropertyDetailsByZpid] Missing API URL in environment variables');
+            throw new Error('API URL not found in environment variables');
         }
 
-        // First, try to use the property extended search API
-        const response = await axios.get<PropertyExSearchResponse>(`${process.env.REACT_APP_API_URL}/api/propertyExSearch?zpid=${zpid}`);
-        if (response.data && response.data.data) {
-            console.log(`[getPropertyDetailsByZpid] Got response: ${JSON.stringify(response.data).substring(0, 200)}...`);
+        // Log the full API URL being used
+        const fullUrl = `${apiUrl}/api/propertyExSearch?zpid=${zpid}`;
+        console.log(`[getPropertyDetailsByZpid] Making request to: ${fullUrl}`);
+
+        // Try to use the property extended search API with error handling
+        try {
+            const response = await axios.get<PropertyExSearchResponse>(fullUrl);
+            console.log(`[getPropertyDetailsByZpid] Response status: ${response.status}`);
+            
+            if (!response.data) {
+                console.error('[getPropertyDetailsByZpid] Empty response data');
+                throw new Error('Empty response data');
+            }
+            
+            if (!response.data.data) {
+                console.error('[getPropertyDetailsByZpid] Missing data in response', response.data);
+                throw new Error('Missing data in response');
+            }
+            
+            // Log the data structure to help debug
+            console.log(`[getPropertyDetailsByZpid] Response data structure:`, 
+                Object.keys(response.data.data).join(', '));
+            
+            // If we have images, log their presence
+            if (response.data.data.images) {
+                console.log(`[getPropertyDetailsByZpid] Found ${response.data.data.images.length} images in response`);
+            }
+            
+            if (response.data.data.hdpPhotos) {
+                console.log(`[getPropertyDetailsByZpid] Found ${response.data.data.hdpPhotos.length} hdpPhotos in response`);
+            }
             
             const data = response.data.data;
             
@@ -676,21 +720,65 @@ export const getPropertyDetailsByZpid = async (zpid: string): Promise<Property |
             // Check various places where images might be stored in the API response
             let allImages: string[] = [];
             
-            // Try to find images in the main images array
+            // Try to find images in multiple possible locations in the API response
+            
+            // Check for images array
             if (data.images && Array.isArray(data.images)) {
+                console.log(`[getPropertyDetailsByZpid] Adding ${data.images.length} images from images array`);
                 allImages = [...data.images];
             } 
-            // Also check the hdpPhotos array which might contain HD images
+            // Check for hdpPhotos array (high-def photos)
             else if (data.hdpPhotos && Array.isArray(data.hdpPhotos)) {
+                console.log(`[getPropertyDetailsByZpid] Adding images from hdpPhotos array`);
                 allImages = data.hdpPhotos.map((photo) => photo.url || photo.highResUrl || photo.standard || '');
+            }
+            // Check for hugePhotos array
+            else if (data.hugePhotos && Array.isArray(data.hugePhotos)) {
+                console.log(`[getPropertyDetailsByZpid] Adding images from hugePhotos array`);
+                allImages = data.hugePhotos.map((photo: any) => photo.url || '');
+            }
+            // Check for photoUrls array
+            else if (data.photoUrls && Array.isArray(data.photoUrls)) {
+                console.log(`[getPropertyDetailsByZpid] Adding images from photoUrls array`);
+                allImages = [...data.photoUrls];
             }
             // Check for a single main image
             else if (data.imgSrc) {
+                console.log(`[getPropertyDetailsByZpid] Adding single imgSrc`);
                 allImages = [data.imgSrc];
+            }
+            
+            // If Zillow API fails, try using a different property API endpoint for images
+            if (allImages.length <= 1) {
+                console.log(`[getPropertyDetailsByZpid] Not enough images found, trying alternate API endpoint`);
+                try {
+                    // Try an alternative endpoint that might have more images
+                    const altResponse = await axios.get<PropertyDetailsResponse>(`${apiUrl}/api/propertyDetails?zpid=${zpid}`);
+                    if (altResponse.data && altResponse.data.data) {
+                        const altData = altResponse.data.data;
+                        console.log(`[getPropertyDetailsByZpid] Alt API response structure:`, 
+                            Object.keys(altData).join(', '));
+                        
+                        // Check for images in the alternate API
+                        if (altData.photos && Array.isArray(altData.photos)) {
+                            console.log(`[getPropertyDetailsByZpid] Adding ${altData.photos.length} images from altAPI photos`);
+                            altData.photos.forEach((photo) => {
+                                const photoUrl = photo.url || photo.large || '';
+                                if (photoUrl && !allImages.includes(photoUrl)) {
+                                    allImages.push(photoUrl);
+                                }
+                            });
+                        }
+                    }
+                } catch (altError) {
+                    console.warn(`[getPropertyDetailsByZpid] Alternate API endpoint failed`, altError);
+                    // Continue with what we have - don't throw
+                }
             }
             
             // Filter out any empty strings or undefined values
             allImages = allImages.filter(img => img && img.trim() !== '');
+            console.log(`[getPropertyDetailsByZpid] Final image count after filtering: ${allImages.length}`);
             
             // If no images were found, use a placeholder
             if (allImages.length === 0 && data.imgSrc) {
@@ -718,9 +806,10 @@ export const getPropertyDetailsByZpid = async (zpid: string): Promise<Property |
             };
             
             return property;
+        } catch (apiError) {
+            console.error('[getPropertyDetailsByZpid] API request failed:', apiError);
+            throw apiError;
         }
-        
-        return null;
     } catch (error) {
         console.error('[getPropertyDetailsByZpid] Error fetching property details:', error);
         return null;
