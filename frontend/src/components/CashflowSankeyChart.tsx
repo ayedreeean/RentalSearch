@@ -196,7 +196,7 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
         <ResponsiveSankey
           data={nivoData}
           margin={isMobile ? 
-            { top: 20, right: 30, bottom: 20, left: 30 } : 
+            { top: 20, right: 50, bottom: 20, left: 50 } : 
             { top: 20, right: 120, bottom: 20, left: 120 }
           }
           align="justify" // Or "start", "end", "center"
@@ -214,15 +214,19 @@ const CashflowSankeyChart: React.FC<CashflowSankeyChartProps> = ({ data, formatC
           linkContract={3}
           // enableLinkGradient={true}
 
-          // Conditionally set label based on screen size
-          label={isMobile ? () => '' : node => `${node.id}: ${formatCurrency(node.value)}`}
+          // Always show labels but adapt format for mobile
+          label={node => {
+            // Customize label based on screen size
+            const value = formatCurrency(node.value);
+            return isMobile ? value : `${node.id}: ${value}`;
+          }}
 
           labelPosition="outside"
           labelOrientation="horizontal"
-          labelPadding={16}
+          labelPadding={isMobile ? 6 : 16} // Reduce padding on mobile
           labelTextColor={{ from: 'color', modifiers: [['darker', 1]] }}
           valueFormat={value => formatCurrency(value)} // Format tooltip values
-          
+
           // Add custom node tooltip
           nodeTooltip={({ node }) => (
             <div style={{
