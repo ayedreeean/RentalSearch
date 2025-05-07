@@ -76,17 +76,58 @@ if (typeof L !== 'undefined') {
 // Helper component to adjust map bounds
 const FitBoundsToMarkers = ({ bounds }: { bounds: L.LatLngBoundsExpression | undefined }) => {
   const map = useMap();
+  // Add a ref to track if user has interacted with the map
+  const userInteractedRef = React.useRef(false);
+  // Add ref to store previous bounds for comparison
+  const previousBoundsRef = React.useRef<L.LatLngBoundsExpression | null>(null);
+  
+  // Track user interactions (zoom, drag, etc.)
   useEffect(() => {
-    console.log('[FitBoundsToMarkers] Received bounds:', bounds);
-    if (bounds && map) { // Added map null check for safety
-      try {
+    if (!map) return;
+    
+    const handleInteraction = () => {
+      userInteractedRef.current = true;
+      console.log('User has interacted with map, auto-fit disabled');
+    };
+    
+    // Add event listeners for user interactions
+    map.on('zoomstart', handleInteraction);
+    map.on('dragstart', handleInteraction);
+    
+    return () => {
+      // Clean up event listeners
+      map.off('zoomstart', handleInteraction);
+      map.off('dragstart', handleInteraction);
+    };
+  }, [map]);
+  
+  useEffect(() => {
+    if (!bounds || !map) return;
+    
+    try {
+      // Convert bounds to string for comparison
+      const boundsStr = JSON.stringify(bounds);
+      const prevBoundsStr = previousBoundsRef.current ? JSON.stringify(previousBoundsRef.current) : null;
+      
+      // Only fitBounds if:
+      // 1. User hasn't interacted with the map yet, OR
+      // 2. This is the first time bounds are set
+      if (!userInteractedRef.current || !prevBoundsStr) {
+        console.log('Fitting map to bounds - initial load or significant change');
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
-      } catch (e) {
-        console.warn("Error fitting map bounds: ", e);
+        previousBoundsRef.current = bounds;
+      } else {
+        console.log('User has zoomed/moved map - preserving view');
+      }
+    } catch (e) {
+      console.warn("Error fitting map bounds: ", e);
+      // Only reset to default view if user hasn't interacted
+      if (!userInteractedRef.current) {
         map.setView([39.8283, -98.5795], 4);
       }
     }
   }, [map, bounds]);
+  
   return null;
 };
 

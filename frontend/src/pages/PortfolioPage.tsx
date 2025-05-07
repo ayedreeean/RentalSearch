@@ -670,6 +670,29 @@ const MapEffect = ({ properties }: { properties: Record<string, any> }) => {
 const BackupGeocodeEffect: React.FC<{ portfolio: Record<string, any> }> = ({ portfolio }) => {
   const map = useMap();
   
+  // Add ref to track user interactions, shared with FitBoundsToMarkers
+  const userInteractedRef = React.useRef(false);
+  
+  // Set up event listeners to track user interaction
+  useEffect(() => {
+    if (!map) return;
+    
+    const handleInteraction = () => {
+      userInteractedRef.current = true;
+      console.log('[BackupGeocodeEffect] User has interacted with map, auto-fit disabled');
+    };
+    
+    // Add event listeners for user interactions
+    map.on('zoomstart', handleInteraction);
+    map.on('dragstart', handleInteraction);
+    
+    return () => {
+      // Clean up event listeners
+      map.off('zoomstart', handleInteraction);
+      map.off('dragstart', handleInteraction);
+    };
+  }, [map]);
+  
   useEffect(() => {
     // Find properties without coordinates but with addresses
     const propertiesNeedingGeocode = Object.entries(portfolio).filter(([_, entry]) => {
@@ -710,6 +733,9 @@ const BackupGeocodeEffect: React.FC<{ portfolio: Record<string, any> }> = ({ por
             if (coords) {
               const [lat, lng] = coords;
               console.log(`[BackupGeocodeEffect] Geocoded ${address} to ${lat},${lng}`);
+              
+              // Only add markers if the map exists and hasn't been unmounted
+              if (!map) return;
               
               // Create a marker for the geocoded location
               const price = property?.price || property?.property?.price || 0;
@@ -1075,16 +1101,58 @@ const PortfolioMapComponent: React.FC<{
 // Helper component to adjust map bounds - same as in App.tsx
 const FitBoundsToMarkers = ({ bounds }: { bounds: L.LatLngBoundsExpression | undefined }) => {
   const map = useMap();
+  // Add a ref to track if user has interacted with the map
+  const userInteractedRef = React.useRef(false);
+  // Add ref to store previous bounds for comparison
+  const previousBoundsRef = React.useRef<L.LatLngBoundsExpression | null>(null);
+  
+  // Track user interactions (zoom, drag, etc.)
   useEffect(() => {
-    if (bounds && map) {
-      try {
+    if (!map) return;
+    
+    const handleInteraction = () => {
+      userInteractedRef.current = true;
+      console.log('User has interacted with map, auto-fit disabled');
+    };
+    
+    // Add event listeners for user interactions
+    map.on('zoomstart', handleInteraction);
+    map.on('dragstart', handleInteraction);
+    
+    return () => {
+      // Clean up event listeners
+      map.off('zoomstart', handleInteraction);
+      map.off('dragstart', handleInteraction);
+    };
+  }, [map]);
+  
+  useEffect(() => {
+    if (!bounds || !map) return;
+    
+    try {
+      // Convert bounds to string for comparison
+      const boundsStr = JSON.stringify(bounds);
+      const prevBoundsStr = previousBoundsRef.current ? JSON.stringify(previousBoundsRef.current) : null;
+      
+      // Only fitBounds if:
+      // 1. User hasn't interacted with the map yet, OR
+      // 2. This is the first time bounds are set
+      if (!userInteractedRef.current || !prevBoundsStr) {
+        console.log('Fitting map to bounds - initial load or significant change');
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
-      } catch (e) {
-        console.warn("Error fitting map bounds: ", e);
+        previousBoundsRef.current = bounds;
+      } else {
+        console.log('User has zoomed/moved map - preserving view');
+      }
+    } catch (e) {
+      console.warn("Error fitting map bounds: ", e);
+      // Only reset to default view if user hasn't interacted
+      if (!userInteractedRef.current) {
         map.setView([39.8283, -98.5795], 4);
       }
     }
   }, [map, bounds]);
+  
   return null;
 };
 
