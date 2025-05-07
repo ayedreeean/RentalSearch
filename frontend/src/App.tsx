@@ -1636,11 +1636,25 @@ function App() {
                 </Typography>
             ) : displayedProperties.length > 0 ? (
               <>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, mt: 4 }}>
+                  <Box sx={{ 
+                    display: 'flex', 
+                    flexDirection: { xs: 'column', sm: 'row' }, 
+                    justifyContent: 'space-between', 
+                    alignItems: { xs: 'flex-start', sm: 'center' }, 
+                    gap: { xs: 2, sm: 0 },
+                    mb: 2, 
+                    mt: 4 
+                  }}>
                   <Typography variant="h6">
                       Showing {sortedProperties.length} of {totalProperties} Properties
                   </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}> {/* Added gap for spacing */}
+                    <Box sx={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 1,
+                      width: { xs: '100%', sm: 'auto' },
+                      justifyContent: { xs: 'space-between', sm: 'flex-end' }
+                    }}> 
                       {/* Map/List Toggle Button */}
                       <Tooltip title={mapView ? "Show List View" : "Show Map View"}>
                         <Button 
