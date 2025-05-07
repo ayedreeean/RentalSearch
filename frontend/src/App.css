@@ -675,3 +675,19 @@ a:hover {
 .cashflow-map-pin.negative::after {
   border-top-color: #ef4444; /* Match negative background */
 }
+
+/* Highlighted pins for selected portfolio properties */
+.cashflow-map-pin.selected {
+  box-shadow: 0 0 0 2px white, 0 0 0 4px #4f46e5;
+  z-index: 1000;
+  transform: translate(-50%, -100%) scale(1.1);
+}
+
+/* Medium score color */
+.cashflow-map-pin.medium {
+  background-color: #fbbf24; /* Yellow/amber for medium scores */
+}
+
+.cashflow-map-pin.medium::after {
+  border-top-color: #fbbf24; /* Match medium background */
+}

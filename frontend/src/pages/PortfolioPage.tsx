@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Container,
@@ -57,11 +57,14 @@ import { calculateCrunchScore } from '../utils/scoring';
 import { formatCurrency, formatPercent } from '../utils/formatting';
 import { calculateCashflow as calculateCashflowUtil } from '../utils/calculations';
 import CashflowSankeyChart from '../components/CashflowSankeyChart';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvent } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import AssumptionControls from '../components/AssumptionControls';
 import { useAnimatedCountUp } from '../hooks/useAnimatedCountUp'; // Import the new hook
+// Import LeafletMap type for proper typings
+import { Map as LeafletMap, TileLayer as LeafletTileLayer, Marker as LeafletMarker } from 'leaflet';
+import PortfolioMap from '../components/PortfolioMap'; // Import the new component
 
 // Fix Leaflet's default icon path issues
 // This fixes the common broken icon issue in Leaflet
@@ -663,6 +666,122 @@ const MapEffect = ({ properties }: { properties: Record<string, any> }) => {
     return <></>;
 };
 
+// Custom effect for emergency geocoding of properties without coordinates
+const BackupGeocodeEffect: React.FC<{ portfolio: Record<string, any> }> = ({ portfolio }) => {
+  const map = useMap();
+  
+  useEffect(() => {
+    // Find properties without coordinates but with addresses
+    const propertiesNeedingGeocode = Object.entries(portfolio).filter(([_, entry]) => {
+      const property = entry?.property || entry;
+      
+      // Try to find coordinates in all the expected places
+      const hasLat = property?.latitude || property?.lat || 
+                      property?.property?.latitude || property?.property?.lat ||
+                      property?.address?.latitude || property?.address?.lat;
+                        
+      const hasLng = property?.longitude || property?.lng || property?.lon ||
+                      property?.property?.longitude || property?.property?.lng || property?.property?.lon ||
+                      property?.address?.longitude || property?.address?.lng || property?.address?.lon;
+                        
+      // Check if we have a valid address but no coordinates                
+      const hasValidCoords = hasLat && hasLng && 
+                            !isNaN(Number(hasLat)) && !isNaN(Number(hasLng)) &&
+                            Math.abs(Number(hasLat)) <= 90 && Math.abs(Number(hasLng)) <= 180;
+                              
+      const address = property?.address || property?.property?.address;
+      
+      return !hasValidCoords && typeof address === 'string' && address.length > 0;
+    });
+    
+    console.log(`[BackupGeocodeEffect] Found ${propertiesNeedingGeocode.length} properties that need geocoding`);
+    
+    // If we have properties that need geocoding, try to geocode them
+    if (propertiesNeedingGeocode.length > 0) {
+      // For each property, geocode the address
+      propertiesNeedingGeocode.forEach(async ([id, entry]) => {
+        const property = entry?.property || entry;
+        const address = property?.address || property?.property?.address;
+        
+        if (address) {
+          console.log(`[BackupGeocodeEffect] Attempting to geocode ${address}`);
+          try {
+            const coords = await geocodeAddress(address);
+            if (coords) {
+              const [lat, lng] = coords;
+              console.log(`[BackupGeocodeEffect] Geocoded ${address} to ${lat},${lng}`);
+              
+              // Create a marker for the geocoded location
+              const price = property?.price || property?.property?.price || 0;
+              const rent_estimate = property?.rent_estimate || property?.rentEstimate || 
+                                     property?.property?.rent_estimate || property?.property?.rentEstimate || 0;
+              
+              // Calculate cashflow using the default cashflow settings
+              const cashflowResult = calculateCashflowUtil(
+                { ...property, price, rent_estimate }, 
+                defaultSettingsPlaceholder
+              );
+              
+              const monthlyCashflow = cashflowResult?.monthlyCashflow || 0;
+              const isPositive = monthlyCashflow >= 0;
+              
+              // Format pin text and determine color
+              const pinText = new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+              }).format(monthlyCashflow);
+              const pinColorClassSuffix = isPositive ? 'positive' : 'negative';
+              
+              // Create a custom div icon for the marker
+              const divIcon = L.divIcon({
+                html: `<div class="cashflow-map-pin ${pinColorClassSuffix}">${pinText}</div>`,
+                className: 'cashflow-map-marker',
+                iconSize: [60, 25],
+                iconAnchor: [30, 25]
+              });
+              
+              // Add the marker to the map
+              const marker = L.marker([lat, lng], { icon: divIcon }).addTo(map);
+              
+              // Create popup content
+              const popupContent = document.createElement('div');
+              popupContent.innerHTML = `
+                <div style="font-size: 14px; font-weight: bold; margin-bottom: 5px;">${address}</div>
+                <div style="margin-bottom: 5px;">Price: ${new Intl.NumberFormat('en-US', {style: 'currency', currency: 'USD'}).format(price)}</div>
+                <div style="margin-bottom: 5px;">Rent: ${new Intl.NumberFormat('en-US', {style: 'currency', currency: 'USD'}).format(rent_estimate)}</div>
+                <div style="margin-bottom: 10px; color: ${isPositive ? '#10b981' : '#ef4444'}">Cashflow: ${pinText}/mo</div>
+              `;
+              
+              // Add button to popup
+              const button = document.createElement('button');
+              button.textContent = 'View Details';
+              button.style.padding = '5px 10px';
+              button.style.cursor = 'pointer';
+              button.style.background = '#4f46e5';
+              button.style.color = 'white';
+              button.style.border = 'none';
+              button.style.borderRadius = '4px';
+              button.addEventListener('click', () => {
+                window.location.href = `/#/property/${id}`;
+              });
+              popupContent.appendChild(button);
+              
+              // Attach popup to marker
+              marker.bindPopup(popupContent);
+            }
+          } catch (e) {
+            console.error(`[BackupGeocodeEffect] Error geocoding ${address}:`, e);
+          }
+        }
+      });
+    }
+  }, [portfolio, map]);
+  
+  return null;
+};
+
 // Calculate IRR (Internal Rate of Return) function
 const calculateIRR = (initialInvestment: number, cashFlows: number[], finalEquity?: number): number => {
   // Basic validation
@@ -762,6 +881,215 @@ const defaultSettingsPlaceholder: CashflowSettings = {
     rehabAmount: 0
 };
 
+// PortfolioMapComponent - Enhanced map for portfolio page
+const PortfolioMapComponent: React.FC<{
+  portfolio: Record<string, any>;
+  settings: CashflowSettings;
+  formatCurrency: (amount: number) => string;
+  formatPercent: (percent: number) => string;
+  calculateCashflow: (property: any, settings: CashflowSettings) => any;
+  selectedProperties: Record<string, boolean>;
+  onPropertyClick: (propertyId: string) => void;
+}> = ({
+  portfolio,
+  settings,
+  formatCurrency,
+  formatPercent,
+  calculateCashflow,
+  selectedProperties,
+  onPropertyClick
+}) => {
+  // Debug: Count total properties and log
+  const totalProperties = Object.keys(portfolio).length;
+  console.log(`[Portfolio Map] Total properties in portfolio: ${totalProperties}`);
+
+  // Generate valid coordinates list
+  const validCoords = useMemo(() => {
+    const validCoordinates = Object.entries(portfolio).map(([id, propertyEntry]) => {
+      // Get the property data, handling possible nesting
+      const property = propertyEntry?.property || propertyEntry;
+        
+      // Extract coordinates directly - try multiple possible locations
+      let latitude = property?.latitude || property?.lat;
+      let longitude = property?.longitude || property?.lng || property?.lon;
+        
+      // Try nested properties if direct ones don't exist
+      if (!latitude || !longitude) {
+          latitude = property?.property?.latitude || property?.property?.lat;
+          longitude = property?.property?.longitude || property?.property?.lng || property?.property?.lon;
+      }
+
+      // Also check for an address object which might contain coordinates
+      if (!latitude || !longitude) {
+          latitude = property?.address?.latitude || property?.address?.lat;
+          longitude = property?.address?.longitude || property?.address?.lng || property?.address?.lon;
+      }
+        
+      // Parse string coordinates
+      if (typeof latitude === 'string') latitude = parseFloat(latitude);
+      if (typeof longitude === 'string') longitude = parseFloat(longitude);
+        
+      // Only include valid coordinates
+      const validCoord = 
+          latitude && longitude && 
+          !isNaN(latitude) && !isNaN(longitude) &&
+          Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+
+      // Debug - log each property's coordinates status
+      console.log(`[Portfolio Map] Property ${id}: Address=${property?.address}, Coords valid=${validCoord}, Lat=${latitude}, Long=${longitude}`);
+            
+      return validCoord ? [latitude, longitude] : null;
+    }).filter(coord => coord !== null) as L.LatLngExpression[];
+
+    // Debug: Log valid coordinates count
+    console.log(`[Portfolio Map] Found ${validCoordinates.length} properties with valid coordinates out of ${totalProperties}`);
+    
+    return validCoordinates;
+  }, [portfolio, totalProperties]);
+
+  // Calculate map bounds
+  const bounds = useMemo(() =>
+    validCoords.length > 0 ? L.latLngBounds(validCoords) : undefined,
+    [validCoords]
+  );
+
+  // Only render MapContainer if we have properties
+  if (Object.keys(portfolio).length === 0) {
+    return <Typography sx={{ textAlign: 'center', my: 4 }}>No properties in your portfolio to display.</Typography>;
+  }
+
+  return (
+    <Box sx={{ height: 400, width: '100%', position: 'relative', borderRadius: 1, overflow: 'hidden' }}>
+      {/* Debug logging happens before return */}
+      
+      <MapContainer 
+        {...{
+          center: [39.8283, -98.5795], // Center of US
+          zoom: 4,
+          style: { height: '100%', width: '100%' }
+        } as any}
+      >
+        <TileLayer
+          {...{
+            url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          } as any}
+        />
+        
+        {/* Use FitBoundsToMarkers to adjust map view */}
+        {bounds && <FitBoundsToMarkers bounds={bounds} />}
+        
+        {/* Add custom MapEffect for backup geocoding */}
+        <BackupGeocodeEffect portfolio={portfolio} />
+        
+        {/* Render markers for properties with valid coordinates */}
+        {Object.entries(portfolio).map(([id, propertyEntry]) => {
+          // Get the property data, handling possible nesting
+          const property = propertyEntry?.property || propertyEntry;
+          
+          // Extract coordinates directly
+          let latitude = property?.latitude;
+          let longitude = property?.longitude;
+          
+          // Try nested properties if direct ones don't exist
+          if (!latitude || !longitude) {
+              latitude = property?.property?.latitude;
+              longitude = property?.property?.longitude;
+          }
+          
+          // Parse string coordinates
+          if (typeof latitude === 'string') latitude = parseFloat(latitude);
+          if (typeof longitude === 'string') longitude = parseFloat(longitude);
+          
+          // Only show markers for properties with valid coordinates
+          const validCoords = 
+              latitude && longitude && 
+              !isNaN(latitude) && !isNaN(longitude) &&
+              Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+                  
+          if (validCoords) {
+            // Get property values needed for display
+            const price = property?.price || property?.property?.price || 0;
+            const rent_estimate = property?.rent_estimate || property?.rentEstimate || property?.property?.rent_estimate || 0;
+            const address = property?.address || property?.property?.address || 'Unknown';
+            
+            // Calculate cashflow based on property's specific settings
+            const cashflowResult = calculateCashflow(property, settings);
+            const monthlyCashflow = cashflowResult?.monthlyCashflow || 0;
+            const isPositive = monthlyCashflow >= 0;
+                          
+            // Format pin text and determine color
+            const pinText = formatCurrency(monthlyCashflow);
+            const pinColorClassSuffix = isPositive ? 'positive' : 'negative';
+            const isSelected = selectedProperties[id];
+            
+            // Create a custom div icon for the marker
+            const divIcon = useMemo(() => L.divIcon({
+              html: `<div class="cashflow-map-pin ${pinColorClassSuffix} ${isSelected ? 'selected' : ''}">${pinText}</div>`,
+              className: 'cashflow-map-marker',
+              iconSize: [60, 25],
+              iconAnchor: [30, 25]
+            }), [pinText, pinColorClassSuffix, isSelected]);
+                          
+            return (
+              <Marker 
+                {...{
+                  key: id,
+                  position: [latitude, longitude],
+                  icon: divIcon
+                } as any}
+              >
+                <Popup>
+                  <Typography variant="subtitle1">
+                    {address}
+                  </Typography>
+                  <Typography variant="body2">
+                    Price: {formatCurrency(price)}
+                  </Typography>
+                  <Typography variant="body2">
+                    Rent: {formatCurrency(rent_estimate)}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: isPositive ? 'success.main' : 'error.main' }}>
+                    Cashflow: {formatCurrency(monthlyCashflow)}/mo
+                  </Typography>
+                  <Button 
+                    size="small" 
+                    variant="outlined" 
+                    onClick={() => onPropertyClick(id)}
+                    sx={{ mt: 1 }}
+                  >
+                    View Details
+                  </Button>
+                </Popup>
+              </Marker>
+            );
+          }
+          return null;
+        })}
+      </MapContainer>
+    </Box>
+  );
+};
+
+// Helper component to adjust map bounds - same as in App.tsx
+const FitBoundsToMarkers = ({ bounds }: { bounds: L.LatLngBoundsExpression | undefined }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (bounds && map) {
+      try {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      } catch (e) {
+        console.warn("Error fitting map bounds: ", e);
+        map.setView([39.8283, -98.5795], 4);
+      }
+    }
+  }, [map, bounds]);
+  return null;
+};
+
+// Memoized version of the Portfolio map component
+const MemoizedPortfolioMap = React.memo(PortfolioMapComponent);
+
 const PortfolioPage: React.FC = () => {
     const navigate = useNavigate();
     const [portfolio, setPortfolio] = useState<Record<string, any>>({});
@@ -841,6 +1169,17 @@ const PortfolioPage: React.FC = () => {
     const animatedAnnualCashflow = useAnimatedCountUp(Math.abs(aggregatedCashflowData.monthlyCashflow * 12), 1500);
     const animatedAvgCrunchScore = useAnimatedCountUp(aggregatedMetrics.avgCrunchScore, 1500);
 
+    // Add cashflow settings state to the component - with the same defaults as in App.tsx
+    const [cashflowSettings, setCashflowSettings] = useState<CashflowSettings>({
+      interestRate: 7.5,
+      loanTerm: 30,
+      downPaymentPercent: 20,
+      taxInsurancePercent: 3,
+      vacancyPercent: 8,
+      capexPercent: 5,
+      propertyManagementPercent: 0,
+      rehabAmount: 0
+    });
 
     // --- Load portfolio from localStorage OR URL --- 
     useEffect(() => {
@@ -2015,92 +2354,17 @@ const PortfolioPage: React.FC = () => {
                             </Grid>
                         </Grid>
 
-                        {/* Properties Map - Now Below Table */}
+                        {/* Properties Map - Enhanced Version */}
                         <Paper sx={{ p: 2, mb: 4 }}>
                             <Typography variant="h5" gutterBottom>Portfolio Map</Typography>
                             <Box sx={{ height: 400, width: '100%', position: 'relative' }}>
-                                {/* @ts-ignore - Ignoring TypeScript errors for react-leaflet components */}
-                                <MapContainer 
-                                    // @ts-ignore
-                                    center={[39.8283, -98.5795]} // Center of US
-                                    zoom={4} 
-                                    style={{ height: '100%', width: '100%' }}
-                                >
-                                    {/* @ts-ignore */}
-                                    <TileLayer
-                                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                        // @ts-ignore
-                                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                    />
-                                    {/* Add MapEffect to help with initial loading and bounds */}
-                                    <MapEffect properties={portfolio} />
-                                    
-                                    {/* Render markers for properties with valid coordinates */}
-                                    {Object.entries(portfolio).map(([id, propertyEntry]) => {
-                                        // Get the property data, handling possible nesting
-                                        const property = propertyEntry?.property || propertyEntry;
-                                        
-                                        // Extract coordinates directly
-                                        let latitude = property?.latitude;
-                                        let longitude = property?.longitude;
-                                        
-                                        // Try nested properties if direct ones don't exist
-                                        if (!latitude || !longitude) {
-                                            latitude = property?.property?.latitude;
-                                            longitude = property?.property?.longitude;
-                                        }
-                                        
-                                        // Parse string coordinates
-                                        if (typeof latitude === 'string') latitude = parseFloat(latitude);
-                                        if (typeof longitude === 'string') longitude = parseFloat(longitude);
-                                        
-                                        // Only show markers for properties with valid coordinates
-                                        const validCoords = 
-                                            latitude && longitude && 
-                                            !isNaN(latitude) && !isNaN(longitude) &&
-                                            Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
-                                            
-                                        // Debug individual marker rendering
-                                        console.log(`Property ${id} marker check:`, { 
-                                            latitude, 
-                                            longitude, 
-                                            validCoords, 
-                                            address: property?.address || 'Unknown' 
-                                        });
-                                        
-                                        if (validCoords) {
-                                            return (
-                                                <Marker 
-                                                    key={id}
-                                                    position={[latitude, longitude]}
-                                                    // @ts-ignore - React-Leaflet v3/v4 has incorrect typings for the icon prop
-                                                    icon={customMarkerIcon}
-                                                >
-                                                    <Popup>
-                                                        <Typography variant="subtitle1">
-                                                            {property?.address || property?.property?.address || 'Property ' + id}
-                                                        </Typography>
-                                                        <Typography variant="body2">
-                                                            {property?.price || property?.property?.price || 'N/A'}
-                                                        </Typography>
-                                                        <Typography variant="body2">
-                                                            Rent: {property?.rentEstimate || property?.rent_estimate || 
-                                                            property?.property?.rentEstimate || 'N/A'}
-                                                        </Typography>
-                                                        <Button 
-                                                            size="small" 
-                                                            variant="outlined" 
-                                                            onClick={() => handlePropertyClick(id)}
-                                                        >
-                                                            View Details
-                                                        </Button>
-                                                    </Popup>
-                                                </Marker>
-                                            );
-                                        }
-                                        return null;
-                                    })}
-                                </MapContainer>
+                                <PortfolioMap 
+                                    portfolio={portfolio}
+                                    settings={cashflowSettings}
+                                    selectedProperties={selectedProperties}
+                                    onPropertyClick={handlePropertyClick}
+                                    height={400}
+                                />
                             </Box>
                         </Paper>
                         
@@ -2320,7 +2584,7 @@ const PortfolioPage: React.FC = () => {
                 )}
             </Container>
 
-            {/* PDF Modal */} 
+            {/* PDF Modal */}
             <Dialog
                 open={pdfModalOpen}
                 onClose={handleClosePdfModal}

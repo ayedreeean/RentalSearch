@@ -90,6 +90,152 @@ const FitBoundsToMarkers = ({ bounds }: { bounds: L.LatLngBoundsExpression | und
   return null;
 };
 
+// Props interface for our new map component
+interface SearchResultsMapProps {
+  properties: Property[];
+  cashflowSettings: CashflowSettings;
+  priceOverrides: Record<string, number>;
+  sortKey: SortableKey | null;
+  formatCurrencyFn: (amount: number) => string;
+  formatPercentFn: (percent: number) => string;
+  calculateCashflowFn: (property: Property, settings: CashflowSettings) => Cashflow;
+  calculateCrunchScoreFn: (property: Property, settings: CashflowSettings, cashflow: Cashflow) => number;
+  onMarkerClickNavigate: (propertyId: string) => void;
+}
+
+// The actual map component implementation (defined outside App)
+const SearchResultsMapComponent: React.FC<SearchResultsMapProps> = ({
+  properties,
+  cashflowSettings,
+  priceOverrides,
+  sortKey,
+  formatCurrencyFn,
+  formatPercentFn,
+  calculateCashflowFn,
+  calculateCrunchScoreFn,
+  onMarkerClickNavigate,
+}) => {
+  const validCoords = useMemo(() =>
+    properties
+      .map(p => (p.latitude && p.longitude && !isNaN(Number(p.latitude)) && !isNaN(Number(p.longitude)) ? [Number(p.latitude), Number(p.longitude)] : null))
+      .filter(coord => coord !== null) as L.LatLngExpression[],
+    [properties]
+  );
+
+  const bounds = useMemo(() =>
+    validCoords.length > 0 ? L.latLngBounds(validCoords) : undefined,
+    [validCoords]
+  );
+
+  if (!properties || properties.length === 0) {
+    return <Typography sx={{ textAlign: 'center', my: 4 }}>No properties to display on map.</Typography>;
+  }
+
+  return (
+    <Box sx={{ height: '600px', width: '100%', mt: 2, borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
+      <MapContainer
+        center={[39.8283, -98.5795]}
+        zoom={4}
+        style={{ height: '100%', width: '100%' }}
+      >
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        />
+        {bounds && <FitBoundsToMarkers bounds={bounds} />}
+        {properties.map(property => {
+          if (property.latitude && property.longitude && !isNaN(Number(property.latitude)) && !isNaN(Number(property.longitude))) {
+            const cashflowResult = calculateCashflowFn(property, cashflowSettings);
+            const monthlyCashflow = cashflowResult.monthlyCashflow;
+            const isPositive = monthlyCashflow >= 0;
+            const priceVal = priceOverrides[property.property_id] !== undefined ? priceOverrides[property.property_id] : property.price;
+            const rentEstimateVal = property.rent_estimate;
+
+            let pinText;
+            let pinColorClassSuffix;
+
+            switch (sortKey) {
+              case 'price':
+                pinText = formatCurrencyFn(priceVal);
+                pinColorClassSuffix = 'neutral';
+                break;
+              case 'rent_estimate':
+                pinText = formatCurrencyFn(rentEstimateVal);
+                pinColorClassSuffix = 'neutral';
+                break;
+              case 'ratio':
+                pinText = priceVal > 0 ? formatPercentFn(rentEstimateVal / priceVal) : 'N/A';
+                pinColorClassSuffix = 'neutral';
+                break;
+              case 'bedrooms':
+                pinText = `${property.bedrooms} Bed${property.bedrooms !== 1 ? 's' : ''}`;
+                pinColorClassSuffix = 'neutral';
+                break;
+              case 'bathrooms':
+                pinText = `${property.bathrooms} Bath${property.bathrooms !== 1 ? 's' : ''}`;
+                pinColorClassSuffix = 'neutral';
+                break;
+              case 'sqft':
+                pinText = property.sqft ? `${property.sqft.toLocaleString()} SqFt` : 'N/A';
+                pinColorClassSuffix = 'neutral';
+                break;
+              case 'days_on_market':
+                pinText = property.days_on_market !== null ? `${property.days_on_market} DOM` : 'N/A';
+                pinColorClassSuffix = 'neutral';
+                break;
+              case 'cashflow':
+                pinText = formatCurrencyFn(monthlyCashflow);
+                pinColorClassSuffix = isPositive ? 'positive' : 'negative';
+                break;
+              case 'crunchScore':
+                const score = calculateCrunchScoreFn(property, cashflowSettings, cashflowResult);
+                pinText = `${score}`;
+                if (score >= 65) pinColorClassSuffix = 'positive';
+                else if (score >= 45) pinColorClassSuffix = 'medium';
+                else pinColorClassSuffix = 'negative';
+                break;
+              default:
+                pinText = formatCurrencyFn(monthlyCashflow);
+                pinColorClassSuffix = isPositive ? 'positive' : 'negative';
+            }
+
+            const divIcon = useMemo(() => L.divIcon({
+              html: `<div class="cashflow-map-pin ${pinColorClassSuffix}">${pinText}</div>`,
+              className: 'cashflow-map-marker',
+              iconSize: [60, 25],
+              iconAnchor: [30, 25]
+            }), [pinText, pinColorClassSuffix]);
+
+            return (
+              <Marker
+                key={property.property_id}
+                position={[Number(property.latitude), Number(property.longitude)]}
+                icon={divIcon}
+              >
+                <Popup>
+                  <Typography variant="subtitle2">{property.address}</Typography>
+                  <Typography variant="body2">Price: {formatCurrencyFn(property.price)}</Typography>
+                  <Typography variant="body2">Rent: {formatCurrencyFn(property.rent_estimate)}</Typography>
+                  <Typography variant="body2" sx={{ color: isPositive ? 'success.main' : 'error.main' }}>
+                    Cashflow: {formatCurrencyFn(monthlyCashflow)}/mo
+                  </Typography>
+                  <Button size="small" onClick={() => onMarkerClickNavigate(property.property_id)} sx={{ mt: 1 }}>
+                    View Details
+                  </Button>
+                </Popup>
+              </Marker>
+            );
+          }
+          return null;
+        })}
+      </MapContainer>
+    </Box>
+  );
+};
+
+// Memoized version of the map component
+const MemoizedSearchResultsMap = React.memo(SearchResultsMapComponent);
+
 function App() {
   // --- Define state variables ---
   const [location, setLocation] = useState('');
@@ -752,127 +898,9 @@ function App() {
     vacancyPercent, capexPercent, propertyManagementPercent, rehabAmount
   ]);
 
-  // Component to render the map (can be defined inside App or as a separate component)
-  const SearchResultsMap = ({ sortKey }: { sortKey: SortableKey | null }) => { // Added sortKey prop
-    if (!displayedProperties || displayedProperties.length === 0) {
-      return <Typography sx={{ textAlign: 'center', my: 4 }}>No properties to display on map.</Typography>;
-    }
-    // console.log('[SearchResultsMap] displayedProperties:', displayedProperties); // Keep for debugging if needed
-
-    const validCoords = displayedProperties
-        .map(p => (p.latitude && p.longitude && !isNaN(Number(p.latitude)) && !isNaN(Number(p.longitude)) ? [Number(p.latitude), Number(p.longitude)] : null))
-        .filter(coord => coord !== null) as L.LatLngExpression[];
-    
-    const bounds = validCoords.length > 0 ? L.latLngBounds(validCoords) : undefined;
-
-    return (
-      <Box sx={{ height: '600px', width: '100%', mt: 2, borderRadius: 2, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
-        {/* @ts-ignore - Suppressing for center/zoom which are standard but might hit type inference issues */}
-        <MapContainer 
-          center={[39.8283, -98.5795]} 
-          zoom={4} 
-          style={{ height: '100%', width: '100%' }}
-        >
-          {/* @ts-ignore - Suppressing for attribution which is standard */}
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          />
-          {bounds && <FitBoundsToMarkers bounds={bounds} />}
-          {displayedProperties.map(property => {
-            // ADD THIS LOG:
-            // console.log(`[SearchResultsMap] Checking property ${property.property_id}: lat=${property.latitude}, lng=${property.longitude}`);
-            if (property.latitude && property.longitude && !isNaN(Number(property.latitude)) && !isNaN(Number(property.longitude))) {
-              // console.log(`[SearchResultsMap] Rendering marker for ${property.property_id} at [${Number(property.latitude)}, ${Number(property.longitude)}]`);
-              
-              const cashflowResult = calculateCashflow(property, currentCashflowSettings);
-              const monthlyCashflow = cashflowResult.monthlyCashflow;
-              const isPositive = monthlyCashflow >= 0; // Define isPositive here for broader scope
-              const priceVal = overridePrices[property.property_id] !== undefined ? overridePrices[property.property_id] : property.price;
-              const rentEstimateVal = property.rent_estimate;
-
-              let pinText;
-              let pinColorClassSuffix;
-
-              switch (sortKey) {
-                case 'price':
-                  pinText = formatCurrency(priceVal);
-                  pinColorClassSuffix = 'neutral';
-                  break;
-                case 'rent_estimate':
-                  pinText = formatCurrency(rentEstimateVal);
-                  pinColorClassSuffix = 'neutral';
-                  break;
-                case 'ratio':
-                  pinText = priceVal > 0 ? formatPercent(rentEstimateVal / priceVal) : 'N/A'; // Assumes formatPercent handles *100 and %
-                  pinColorClassSuffix = 'neutral';
-                  break;
-                case 'bedrooms':
-                  pinText = `${property.bedrooms} Bed${property.bedrooms !== 1 ? 's' : ''}`;
-                  pinColorClassSuffix = 'neutral';
-                  break;
-                case 'bathrooms':
-                  pinText = `${property.bathrooms} Bath${property.bathrooms !== 1 ? 's' : ''}`;
-                  pinColorClassSuffix = 'neutral';
-                  break;
-                case 'sqft':
-                  pinText = property.sqft ? `${property.sqft.toLocaleString()} SqFt` : 'N/A';
-                  pinColorClassSuffix = 'neutral';
-                  break;
-                case 'days_on_market':
-                  pinText = property.days_on_market !== null ? `${property.days_on_market} DOM` : 'N/A';
-                  pinColorClassSuffix = 'neutral';
-                  break;
-                case 'cashflow':
-                case 'crunchScore': // Defaulting to cashflow display for Crunch Score sort
-                default: // Includes null sortKey
-                  const roundedCashflow = Math.round(monthlyCashflow);
-                  pinText = `${monthlyCashflow >= 0 ? '+' : ''}${formatCurrency(roundedCashflow)}`;
-                  pinColorClassSuffix = monthlyCashflow >= 0 ? 'positive' : 'negative';
-                  break;
-              }
-              
-              const iconHtml = `
-                <div class="cashflow-map-pin ${pinColorClassSuffix}">
-                  ${pinText}
-                </div>
-              `;
-              
-              const divIcon = L.divIcon({
-                html: iconHtml,
-                className: 'cashflow-map-marker', 
-                iconSize: undefined, 
-                iconAnchor: [15, 15], 
-                popupAnchor: [0, -15] 
-              });
-
-              return (
-                // @ts-ignore - icon prop with L.DivIcon can sometimes cause type issues with react-leaflet v4
-                <Marker 
-                  key={property.property_id} 
-                  position={[Number(property.latitude), Number(property.longitude)]}
-                  icon={divIcon} 
-                >
-                  <Popup>
-                    <Typography variant="subtitle2">{property.address}</Typography>
-                    <Typography variant="body2">Price: {formatCurrency(property.price)}</Typography>
-                    <Typography variant="body2">Rent: {formatCurrency(property.rent_estimate)}</Typography>
-                    <Typography variant="body2" sx={{ color: isPositive ? 'success.main' : 'error.main' }}>
-                      Cashflow: {formatCurrency(monthlyCashflow)}/mo
-                    </Typography>
-                    <Button size="small" onClick={() => navigate(`/property/${property.property_id}`)} sx={{mt:1}}>
-                        View Details
-                    </Button>
-                  </Popup>
-                </Marker>
-              );
-            }
-            return null;
-          })}
-        </MapContainer>
-      </Box>
-    );
-  };
+  const handleMarkerNavigate = useCallback((propertyId: string) => {
+    navigate(`/property/${propertyId}`);
+  }, [navigate]);
 
   return (
     <div className="app-container"> 
@@ -882,12 +910,19 @@ function App() {
         onClose={handleCloseWelcomeTour} 
         onSearchExample={() => {
           setLocation('Austin, TX');
-          // Optionally trigger search directly or just fill values
-          // handleSearch(); 
           handleCloseWelcomeTour();
         }}
-        // Pass a default or null sortKey to satisfy the prop requirement
-        mapComponent={<SearchResultsMap sortKey={null} />} 
+        mapComponent={<MemoizedSearchResultsMap
+          properties={[]} // Pass empty or sample for welcome tour
+          cashflowSettings={currentCashflowSettings}
+          priceOverrides={{}}
+          sortKey={null}
+          formatCurrencyFn={formatCurrency}
+          formatPercentFn={formatPercent}
+          calculateCashflowFn={calculateCashflow}
+          calculateCrunchScoreFn={calculateCrunchScore}
+          onMarkerClickNavigate={handleMarkerNavigate}
+        />}
       />
 
       {/* --- Header Removed from here --- */}
@@ -1540,7 +1575,17 @@ function App() {
                 
                 {/* Conditional rendering for Map or List view */}
                 {mapView ? (
-                  <SearchResultsMap sortKey={sortConfig.key} />
+                  <MemoizedSearchResultsMap
+                    properties={sortedProperties} // Use sortedProperties
+                    cashflowSettings={currentCashflowSettings}
+                    priceOverrides={overridePrices}
+                    sortKey={sortConfig.key}
+                    formatCurrencyFn={formatCurrency}
+                    formatPercentFn={formatPercent}
+                    calculateCashflowFn={calculateCashflow} // Pass the imported function
+                    calculateCrunchScoreFn={calculateCrunchScore} // Pass the imported function
+                    onMarkerClickNavigate={handleMarkerNavigate} // Pass the callback
+                  />
                 ) : (
                   <div className="property-grid">
                     {sortedProperties.map((property) => {

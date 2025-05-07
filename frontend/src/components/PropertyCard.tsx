@@ -285,7 +285,7 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
             <Typography variant="body2" fontWeight="medium">
               Rent Est: {formatCurrency(property.rent_estimate)}
               {property.rent_source === 'zillow' && (
-                <span className="rent-source">Zillow</span>
+                <span className="rent-source">via Zillow</span>
               )}
             </Typography>
           </div>
@@ -431,15 +431,12 @@ Generated with CashflowCrunch - https://ayedreeean.github.io/CashflowCrunch/
               onClick={handleOpenDeepDive} 
               className="quick-link"
               style={{ 
-                background: 'none', 
                 border: 'none', 
                 padding: '4px 8px',
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
-                color: 'inherit',
-                fontFamily: 'inherit',
-                fontSize: 'inherit'
+                fontFamily: 'inherit'
               }}
             >
               <HomeWorkIcon sx={{ fontSize: 16, mr: 0.5, color: '#4F46E5' }} /> Deep Dive
