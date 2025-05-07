@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { Box, CircularProgress } from '@mui/material';
 import { getPropertyImages } from '../api/propertyApi';
 import ImageGallery from 'react-image-gallery';
 import 'react-image-gallery/styles/css/image-gallery.css';
@@ -19,114 +19,122 @@ const PropertyImageGallery: React.FC<PropertyImageGalleryProps> = ({
 
   useEffect(() => {
     const fetchImages = async () => {
-      console.log(`[PropertyImageGallery] Attempting to fetch images for zpid: ${zpid}`);
-      try {
-        setLoading(true);
-        setError(false);
-        
-        if (!zpid) {
-          console.error('[PropertyImageGallery] No zpid provided');
-          setError(true);
-          setLoading(false);
-          return;
-        }
+      if (!zpid) {
+        console.log('No ZPID provided for PropertyImageGallery');
+        setLoading(false);
+        setError(true);
+        return;
+      }
 
-        const propertyImages = await getPropertyImages(zpid);
-        console.log(`[PropertyImageGallery] Received ${propertyImages?.length || 0} images from API`);
+      try {
+        console.log(`[PropertyImageGallery] Fetching images for ZPID: ${zpid}`);
+        const imageUrls = await getPropertyImages(zpid);
+        console.log(`[PropertyImageGallery] Received ${imageUrls.length} images`);
         
-        if (propertyImages && propertyImages.length > 0) {
-          // Format images for react-image-gallery
-          const formattedImages = propertyImages.map(imageUrl => ({
-            original: imageUrl,
-            thumbnail: imageUrl,
+        if (imageUrls.length > 0) {
+          const formattedImages = imageUrls.map(url => ({
+            original: url,
+            thumbnail: url
           }));
           setImages(formattedImages);
-          console.log('[PropertyImageGallery] Successfully formatted images for gallery');
         } else {
-          console.warn('[PropertyImageGallery] No images returned from API');
-          setError(true);
+          // Use fallback image if no images returned
+          setImages([{
+            original: fallbackImage,
+            thumbnail: fallbackImage
+          }]);
+          console.log(`[PropertyImageGallery] No images found, using fallback image`);
         }
-      } catch (err) {
-        console.error('[PropertyImageGallery] Error fetching property images:', err);
+      } catch (error) {
+        console.error('[PropertyImageGallery] Error fetching images:', error);
         setError(true);
+        // Use fallback image on error
+        setImages([{
+          original: fallbackImage,
+          thumbnail: fallbackImage
+        }]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchImages();
-  }, [zpid]);
+  }, [zpid, fallbackImage]);
 
+  // If loading show spinner
   if (loading) {
     return (
-      <Box 
-        display="flex" 
-        justifyContent="center" 
-        alignItems="center" 
-        sx={{ 
-          height: '100%', 
-          minHeight: '300px',
-          bgcolor: 'background.paper' 
-        }}
-      >
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        height: '100%',
+        minHeight: 300
+      }}>
         <CircularProgress />
       </Box>
     );
   }
 
+  // If error or no images, show fallback
   if (error || images.length === 0) {
-    console.log(`[PropertyImageGallery] Showing fallback image due to error=${error} or empty images array (length=${images.length})`);
     return (
-      <Box 
+      <Box
         component="img"
         src={fallbackImage}
-        alt="Property image not available"
+        alt="Property Image"
         sx={{
           width: '100%',
-          height: '100%',
-          objectFit: 'cover',
+          height: 'auto',
+          maxHeight: '100%',
+          objectFit: 'contain',
           borderRadius: 1
         }}
       />
     );
   }
 
+  // Custom styles to ensure gallery fits in the container
+  const galleryStyles = {
+    '.image-gallery': {
+      height: '100%',
+      overflow: 'hidden'
+    },
+    '.image-gallery-content': {
+      height: '100%'
+    },
+    '.image-gallery-slide-wrapper': {
+      height: 'calc(100% - 80px)'  // Subtract thumbnail height
+    },
+    '.image-gallery-swipe': {
+      height: '100%'
+    },
+    '.image-gallery-slides': {
+      height: '100%'
+    },
+    '.image-gallery-slide': {
+      height: '100%'
+    },
+    '.image-gallery-image': {
+      objectFit: 'contain',
+      height: '100%'
+    }
+  };
+
   return (
     <Box sx={{ 
       height: '100%', 
-      '& .image-gallery': { 
-        borderRadius: 1, 
-        overflow: 'hidden',
-        height: '100%'
-      },
-      '& .image-gallery-content': {
-        height: '100%'
-      },
-      '& .image-gallery-slide-wrapper': {
-        height: 'calc(100% - 80px)'
-      },
-      '& .image-gallery-swipe': {
-        height: '100%'
-      },
-      '& .image-gallery-slides': {
-        height: '100%'
-      },
-      '& .image-gallery-slide': {
-        height: '100%'
-      },
-      '& .image-gallery-image': {
-        objectFit: 'contain',
-        height: '100%'
-      }
+      width: '100%',
+      ...galleryStyles 
     }}>
       <ImageGallery
         items={images}
         showPlayButton={false}
         showFullscreenButton={true}
         showNav={true}
+        showBullets={images.length > 1}
         thumbnailPosition="bottom"
         useBrowserFullscreen={true}
-        lazyLoad={true}
       />
     </Box>
   );

@@ -1793,44 +1793,53 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
         <Grid container spacing={3} sx={{ mb: 3 }}>
           {/* Left column - Property Image Gallery */}
           <Grid size={{ xs: 12, md: 6, lg: 7 }}>
-            <Box sx={{ height: { md: 500 }, display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ 
+              height: { xs: 'auto', md: 500 }, 
+              display: 'flex', 
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}>
               {/* Use propertyId from URL as fallback for zpid */}
               {(property.zpid || propertyId) ? (
-                <>
+                <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                   <Typography variant="h5" gutterBottom>Property Images</Typography>
-                  <Box sx={{ flexGrow: 1 }}>
+                  <Box sx={{ flexGrow: 1, overflow: 'hidden', maxHeight: { md: 450 } }}>
                     <PropertyImageGallery 
                       zpid={String(property.zpid || propertyId)} 
                       fallbackImage={property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'} 
                     />
                   </Box>
-                </>
+                </Box>
               ) : (
-                <>
+                <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                   <Typography variant="h5" gutterBottom>Property Image</Typography>
-                  <Box
-                    component="img"
-                    sx={{
-                      width: '100%',
-                      height: 'auto',
-                      maxHeight: '400px',
-                      objectFit: 'cover',
-                      borderRadius: 1,
-                      mb: 2
-                    }}
-                    src={property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'}
-                    alt={`Property image for ${property.address}`}
-                  />
-                </>
+                  <Box sx={{ 
+                    flexGrow: 1, 
+                    backgroundImage: `url(${property.thumbnail || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    borderRadius: 1,
+                    minHeight: { xs: 300, md: 450 }
+                  }} />
+                </Box>
               )}
             </Box>
           </Grid>
           
           {/* Right column - Property Map */}
           <Grid size={{ xs: 12, md: 6, lg: 5 }}>
-            <Box sx={{ height: { md: 500 }, display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ 
+              height: { xs: 'auto', md: 500 },
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
               <Typography variant="h5" gutterBottom>Property Location</Typography>
-              <Box sx={{ flexGrow: 1 }}>
+              <Box sx={{ 
+                flexGrow: 1, 
+                height: { xs: 300, md: 450 }, 
+                borderRadius: 1, 
+                overflow: 'hidden'
+              }}>
                 <PropertyMap 
                   address={property.address} 
                   lat={property.latitude || null} 
