@@ -282,12 +282,38 @@ const SearchResultsMapComponent: React.FC<SearchResultsMapProps> = ({
 // that might cause zoom resets when opening/closing the assumptions drawer
 const MemoizedSearchResultsMap = React.memo(SearchResultsMapComponent, (prevProps, nextProps) => {
   // Only re-render the map if the data fundamentally changes
-  // Ignore changes that shouldn't affect the map like assumptions drawer opening/closing
-  return (
-    prevProps.properties.length === nextProps.properties.length &&
-    prevProps.sortKey === nextProps.sortKey &&
-    prevProps.onMarkerClickNavigate === nextProps.onMarkerClickNavigate
-  );
+  // BUT do allow updates when settings change to update pin values
+  
+  // First check if properties collection changed
+  if (prevProps.properties.length !== nextProps.properties.length) {
+    return false; // properties changed, re-render
+  }
+  
+  // Check if important settings that affect pin values have changed
+  if (
+    prevProps.cashflowSettings.interestRate !== nextProps.cashflowSettings.interestRate ||
+    prevProps.cashflowSettings.downPaymentPercent !== nextProps.cashflowSettings.downPaymentPercent ||
+    prevProps.cashflowSettings.taxInsurancePercent !== nextProps.cashflowSettings.taxInsurancePercent ||
+    prevProps.cashflowSettings.vacancyPercent !== nextProps.cashflowSettings.vacancyPercent ||
+    prevProps.cashflowSettings.capexPercent !== nextProps.cashflowSettings.capexPercent ||
+    prevProps.cashflowSettings.propertyManagementPercent !== nextProps.cashflowSettings.propertyManagementPercent ||
+    prevProps.cashflowSettings.rehabAmount !== nextProps.cashflowSettings.rehabAmount
+  ) {
+    return false; // settings changed, re-render but preserve zoom
+  }
+  
+  // Check if sort key changed
+  if (prevProps.sortKey !== nextProps.sortKey) {
+    return false; // sort key changed, re-render
+  }
+  
+  // Check if price overrides changed
+  if (JSON.stringify(prevProps.priceOverrides) !== JSON.stringify(nextProps.priceOverrides)) {
+    return false; // price overrides changed, re-render
+  }
+  
+  // Default case - no significant change, don't re-render
+  return true;
 });
 
 function App() {
