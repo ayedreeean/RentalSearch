@@ -39,3 +39,13 @@ code {
     color: #1976d2;
   }
 }
+
+/* Override default Leaflet popup margins */
+.leaflet-popup-content p {
+  margin: 0 !important;
+}
+
+.leaflet-popup-content {
+  margin: 10px !important;
+  line-height: 1.2 !important;
+}
