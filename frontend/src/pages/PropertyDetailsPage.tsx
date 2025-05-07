@@ -1790,13 +1790,15 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
         </Paper>
         
         {/* Property Extended Details with Images */}
-        <PropertyExtendedDetails 
-          property={property} 
-          onDetailsLoaded={(updatedProperty) => {
-            // Optionally update property state with new details including images
-            setProperty(updatedProperty);
-          }}
-        />
+        {property && (
+          <PropertyExtendedDetails 
+            property={property} 
+            onDetailsLoaded={(updatedProperty) => {
+              // Update the property state with the new details
+              setProperty(updatedProperty);
+            }}
+          />
+        )}
         
         {/* Property Map */}
         <Typography variant="h5" gutterBottom sx={{ mt: 4, mb: 2 }}>Property Location</Typography>

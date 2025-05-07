@@ -318,28 +318,29 @@ interface ZillowRentEstimateResponseData {
     // Add other potential fields if needed
 }
 
-// Interface for the Property Details endpoint response
-interface ZillowPropertyDetailsData {
-    zpid: string | number;
-    address: {
-      streetAddress: string;
-      city: string;
-      state: string;
-      zipcode: string;
+// Define an interface for the propertyExSearch API response
+interface PropertyExSearchResponse {
+    data: {
+        imgSrc?: string;
+        images?: string[];
+        hdpPhotos?: Array<{
+            url?: string;
+            highResUrl?: string;
+            standard?: string;
+        }>;
+        address?: string;
+        price?: number;
+        rentZestimate?: number;
+        bedrooms?: number;
+        bathrooms?: number;
+        livingArea?: number;
+        daysOnZillow?: number;
+        latitude?: number;
+        longitude?: number;
+        [key: string]: any; // Allow for additional properties
     };
-    price: number;
-    rentZestimate?: number;
-    zestimate?: number; // Zillow's estimated market value
-    bedrooms?: number;
-    bathrooms?: number;
-    livingArea?: number; // Square footage
-    photos?: { url: string }[]; // Array of photos, take the first?
-    hdpUrl?: string; // Relative URL to Zillow details page
-    daysOnZillow?: number;
-    homeStatus?: string; // e.g., FOR_SALE, SOLD
-    // Add other potentially useful fields from the details endpoint
+    [key: string]: any;
 }
-// --- End Zillow API Response Type Definitions ---
 
 // Function to get total properties count for pagination
 export const getTotalPropertiesCount = async (
@@ -658,92 +659,71 @@ const getPropertyWithRentEstimate = async (property: Property, isPriority: boole
 // Function to get property details by ZPID
 export const getPropertyDetailsByZpid = async (zpid: string): Promise<Property | null> => {
     try {
-        console.log(`[getPropertyDetailsByZpid] Fetching details for ZPID: ${zpid}`);
-        const detailsResponse = await rateLimiter.enqueue<AxiosResponse<ZillowPropertyDetailsData>>(async () => {
-            return await axios.request<ZillowPropertyDetailsData>({
-                method: 'GET',
-                url: 'https://zillow-com1.p.rapidapi.com/property', // Use the correct endpoint
-                params: { zpid: zpid },
-                headers: {
-                    'X-RapidAPI-Key': RAPIDAPI_KEY,
-                    'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
-                },
-                timeout: 15000 // Increased timeout for potentially slower detail requests
-            });
-        }, 2); // Higher priority than standard search
-
-        if (!detailsResponse.data || !detailsResponse.data.zpid) {
-            console.warn(`[getPropertyDetailsByZpid] Invalid or empty response for ZPID ${zpid}:`, detailsResponse.data);
-            return null;
+        console.log(`[getPropertyDetailsByZpid] Fetching details for ZPID ${zpid}`);
+        const token = process.env.REACT_APP_ZILLOW_API_KEY;
+        if (!token) {
+            throw new Error('Zillow API key not found');
         }
 
-        const details = detailsResponse.data;
-        
-        // --- Format the response into our Property type ---
-        const street = details.address?.streetAddress || '';
-        const city = details.address?.city || '';
-        const state = details.address?.state || '';
-        const zip = details.address?.zipcode || '';
-        const fullAddress = `${street}, ${city}, ${state} ${zip}`.replace(/^, |, $/g, '').trim(); // Clean up address string
-
-        const price = details.price || details.zestimate || 0; // Use listed price, fallback to zestimate
-        const rentEstimate = details.rentZestimate || price * 0.007; // Use Zillow rent, fallback to 0.7% rule
-        
-        // --- Extract all images ---
-        const images: string[] = [];
-        
-        // Add main image if available
-        const mainImage = details.image_url || details.imgSrc;
-        if (mainImage) {
-            images.push(mainImage);
+        // First, try to use the property extended search API
+        const response = await axios.get<PropertyExSearchResponse>(`${process.env.REACT_APP_API_URL}/api/propertyExSearch?zpid=${zpid}`);
+        if (response.data && response.data.data) {
+            console.log(`[getPropertyDetailsByZpid] Got response: ${JSON.stringify(response.data).substring(0, 200)}...`);
+            
+            const data = response.data.data;
+            
+            // Extract all available images from the response
+            // Check various places where images might be stored in the API response
+            let allImages: string[] = [];
+            
+            // Try to find images in the main images array
+            if (data.images && Array.isArray(data.images)) {
+                allImages = [...data.images];
+            } 
+            // Also check the hdpPhotos array which might contain HD images
+            else if (data.hdpPhotos && Array.isArray(data.hdpPhotos)) {
+                allImages = data.hdpPhotos.map((photo) => photo.url || photo.highResUrl || photo.standard || '');
+            }
+            // Check for a single main image
+            else if (data.imgSrc) {
+                allImages = [data.imgSrc];
+            }
+            
+            // Filter out any empty strings or undefined values
+            allImages = allImages.filter(img => img && img.trim() !== '');
+            
+            // If no images were found, use a placeholder
+            if (allImages.length === 0 && data.imgSrc) {
+                allImages = [data.imgSrc];
+            }
+            
+            // Create the property object with all available details
+            const property: Property = {
+                property_id: zpid,
+                address: data.address || 'Unknown address',
+                price: data.price || 0,
+                // Get rent estimate from the rentZestimate if available
+                rent_estimate: data.rentZestimate || 0,
+                ratio: data.rentZestimate && data.price ? data.rentZestimate / data.price : 0,
+                bedrooms: data.bedrooms || 0,
+                bathrooms: data.bathrooms || 0,
+                sqft: data.livingArea || 0,
+                thumbnail: data.imgSrc || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available',
+                images: allImages.length > 0 ? allImages : [data.imgSrc || 'https://via.placeholder.com/800x500?text=No+Property+Image+Available'],
+                url: `https://www.zillow.com/homes/${zpid}_zpid/`,
+                days_on_market: data.daysOnZillow || 0,
+                rent_source: 'zillow',
+                latitude: data.latitude || null,
+                longitude: data.longitude || null
+            };
+            
+            return property;
         }
         
-        // Add all photos from the photos array
-        if (details.photos && Array.isArray(details.photos) && details.photos.length > 0) {
-            details.photos.forEach(photo => {
-                if (photo.url && !images.includes(photo.url)) {
-                    images.push(photo.url);
-                }
-            });
-        }
-        
-        // Use placeholder if no images found
-        if (images.length === 0) {
-            images.push('./placeholder-house.png');
-        }
-
-        // --- Use the first image as the thumbnail ---
-        const thumbnail = images[0];
-
-        if (price === 0) {
-            console.warn(`[getPropertyDetailsByZpid] Price is zero for ZPID ${zpid}, skipping property.`);
-            return null; // Cannot calculate ratio if price is zero
-        }
-
-        const property: Property = {
-            property_id: String(details.zpid),
-            address: fullAddress,
-            price: price,
-            rent_estimate: rentEstimate,
-            ratio: rentEstimate / price,
-            thumbnail: thumbnail,
-            images: images,
-            bedrooms: details.bedrooms || 0,
-            bathrooms: details.bathrooms || 0,
-            sqft: details.livingArea || 0,
-            url: details.hdpUrl ? `https://www.zillow.com${details.hdpUrl}` : '#', // Construct full URL
-            days_on_market: details.daysOnZillow || null,
-            rent_source: details.rentZestimate ? 'zillow' : 'calculated',
-            latitude: details.latitude,
-            longitude: details.longitude
-        };
-
-        console.log(`[getPropertyDetailsByZpid] Successfully fetched and formatted details for ZPID ${zpid}`);
-        return property;
-
+        return null;
     } catch (error) {
-        console.error(`Error fetching property details for ZPID ${zpid}:`, error);
-        return null; // Return null on error
+        console.error('[getPropertyDetailsByZpid] Error fetching property details:', error);
+        return null;
     }
 };
 
