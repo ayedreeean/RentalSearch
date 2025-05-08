@@ -10,7 +10,7 @@ import {
   Typography, Container, TextField, Button, Box, CircularProgress, 
   Paper, IconButton, Alert,
   Slider, Modal, Select, MenuItem, FormControl, InputLabel, Tooltip,
-  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Menu, Snackbar
+  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Menu, Snackbar, FormControlLabel
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -47,6 +47,7 @@ import 'leaflet/dist/leaflet.css';
 // Import an icon for the map toggle button if desired, e.g., MapIcon
 import MapIcon from '@mui/icons-material/Map'; 
 import ListIcon from '@mui/icons-material/List';
+import Switch from '@mui/material/Switch'; // Import Switch
 
 // Define possible sort keys
 type SortableKey = keyof Pick<Property, 'price' | 'rent_estimate' | 'bedrooms' | 'bathrooms' | 'sqft' | 'days_on_market'> | 'ratio' | 'cashflow' | 'crunchScore'; // Add crunchScore
@@ -422,6 +423,7 @@ function App() {
 
   // Add state for map view
   const [mapView, setMapView] = useState(true); // Default to map view
+  const [showCashflowPositiveOnly, setShowCashflowPositiveOnly] = useState(false); // New state for cashflow filter
 
   // --- Check for first visit on mount ---
   useEffect(() => {
@@ -806,11 +808,25 @@ function App() {
     key: SortableKey | null, 
     direction: 'asc' | 'desc', 
     priceOverrides: Record<string, number>,
-    settings: CashflowSettings // Add settings parameter
+    settings: CashflowSettings, // Add settings parameter
+    cashflowFilterActive: boolean // New parameter for cashflow filter
   ): Property[] => {
-      if (!key) return properties;
+      if (!key && !cashflowFilterActive) return properties; // Return early if no sorting or filtering
 
-      const sorted = [...properties].sort((a, b) => {
+      let filteredProperties = properties;
+
+      // Apply cashflow filter first if active
+      if (cashflowFilterActive) {
+        filteredProperties = properties.filter(p => {
+          const price = priceOverrides[p.property_id] !== undefined ? priceOverrides[p.property_id] : p.price;
+          const cashflowResult = calculateCashflow({ ...p, price }, settings);
+          return cashflowResult.monthlyCashflow >= 0;
+        });
+      }
+
+      if (!key) return filteredProperties; // Return if only filtering was applied
+
+      const sorted = [...filteredProperties].sort((a, b) => {
           let valA: number | string | null | undefined = null;
           let valB: number | string | null | undefined = null;
           
@@ -898,7 +914,7 @@ function App() {
           // Sort based on current config, passing current settings
           if (sortConfig.key) {
             const currentSettings: CashflowSettings = defaultSettings; // Get current settings
-            return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, overridePrices, currentSettings);
+            return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, overridePrices, currentSettings, showCashflowPositiveOnly);
           } else {
             return newPropertyList;
           }
@@ -926,7 +942,7 @@ function App() {
        return currentProperties; 
     });
 
-  }, [sortConfig, totalProperties, overridePrices, sortProperties, defaultSettings, initialLoading]); // Added initialLoading to dependencies
+  }, [sortConfig, totalProperties, overridePrices, sortProperties, defaultSettings, initialLoading, showCashflowPositiveOnly]); // Added initialLoading to dependencies
 
   // UseEffect to register for updates when component mounts
   useEffect(() => {
@@ -962,9 +978,10 @@ function App() {
   const sortedProperties = useMemo(() => {
       // Pass overridePrices and current settings to the sort function
       const currentSettings: CashflowSettings = defaultSettings; // Get current settings
-      return sortProperties(displayedProperties, sortConfig.key, sortConfig.direction, overridePrices, currentSettings);
+      // Pass showCashflowPositiveOnly to the sortProperties function
+      return sortProperties(displayedProperties, sortConfig.key, sortConfig.direction, overridePrices, currentSettings, showCashflowPositiveOnly);
   // Update dependencies for useMemo
-  }, [displayedProperties, sortConfig, overridePrices, sortProperties, defaultSettings]); 
+  }, [displayedProperties, sortConfig, overridePrices, sortProperties, defaultSettings, showCashflowPositiveOnly]); 
 
   // --- Rent Estimate Handling ---
   const handleRentEstimateChange = useCallback((propertyId: string, newRentString: string) => {
@@ -1695,6 +1712,15 @@ function App() {
                       width: { xs: '100%', sm: 'auto' },
                       justifyContent: { xs: 'space-between', sm: 'flex-end' }
                     }}> 
+                      {/* Cashflow Positive Only Toggle - NEW */}
+                      <Tooltip title="Show only properties with positive cashflow">
+                        <FormControlLabel
+                          control={<Switch checked={showCashflowPositiveOnly} onChange={(e) => setShowCashflowPositiveOnly(e.target.checked)} />}
+                          labelPlacement="start"
+                          label={<Typography variant="caption" sx={{ color: 'text.secondary', mr: 0.5 }}>Cashflow+</Typography>}
+                          sx={{ mr: 1, ml: 0 }} // Adjust margins
+                        />
+                      </Tooltip>
                       {/* Map/List Toggle Button */}
                       <Tooltip title={mapView ? "Show List View" : "Show Map View"}>
                         <Button 
