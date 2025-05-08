@@ -423,7 +423,8 @@ function App() {
 
   // Add state for map view
   const [mapView, setMapView] = useState(true); // Default to map view
-  const [showCashflowPositiveOnly, setShowCashflowPositiveOnly] = useState(false); // New state for cashflow filter
+  const [cashflowFilterActive, setCashflowFilterActive] = useState(false); // Renamed state for the main toggle
+  const [minCashflowThreshold, setMinCashflowThreshold] = useState(0); // New state for slider, default $0
 
   // --- Check for first visit on mount ---
   useEffect(() => {
@@ -808,8 +809,9 @@ function App() {
     key: SortableKey | null, 
     direction: 'asc' | 'desc', 
     priceOverrides: Record<string, number>,
-    settings: CashflowSettings, // Add settings parameter
-    cashflowFilterActive: boolean // New parameter for cashflow filter
+    settings: CashflowSettings,
+    cashflowFilterActive: boolean, // Use this to check if filtering is enabled
+    cashflowThreshold: number // Use this as the minimum cashflow value
   ): Property[] => {
       if (!key && !cashflowFilterActive) return properties; // Return early if no sorting or filtering
 
@@ -820,7 +822,8 @@ function App() {
         filteredProperties = properties.filter(p => {
           const price = priceOverrides[p.property_id] !== undefined ? priceOverrides[p.property_id] : p.price;
           const cashflowResult = calculateCashflow({ ...p, price }, settings);
-          return cashflowResult.monthlyCashflow >= 0;
+          // Filter based on the threshold value from the slider
+          return cashflowResult.monthlyCashflow >= cashflowThreshold; 
         });
       }
 
@@ -914,7 +917,7 @@ function App() {
           // Sort based on current config, passing current settings
           if (sortConfig.key) {
             const currentSettings: CashflowSettings = defaultSettings; // Get current settings
-            return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, overridePrices, currentSettings, showCashflowPositiveOnly);
+            return sortProperties(newPropertyList, sortConfig.key, sortConfig.direction, overridePrices, currentSettings, cashflowFilterActive, minCashflowThreshold);
           } else {
             return newPropertyList;
           }
@@ -942,7 +945,7 @@ function App() {
        return currentProperties; 
     });
 
-  }, [sortConfig, totalProperties, overridePrices, sortProperties, defaultSettings, initialLoading, showCashflowPositiveOnly]); // Added initialLoading to dependencies
+  }, [sortConfig, totalProperties, overridePrices, sortProperties, defaultSettings, initialLoading, cashflowFilterActive, minCashflowThreshold]); // Added initialLoading to dependencies
 
   // UseEffect to register for updates when component mounts
   useEffect(() => {
@@ -978,10 +981,10 @@ function App() {
   const sortedProperties = useMemo(() => {
       // Pass overridePrices and current settings to the sort function
       const currentSettings: CashflowSettings = defaultSettings; // Get current settings
-      // Pass showCashflowPositiveOnly to the sortProperties function
-      return sortProperties(displayedProperties, sortConfig.key, sortConfig.direction, overridePrices, currentSettings, showCashflowPositiveOnly);
+      // Pass both cashflowFilterActive and minCashflowThreshold to the sortProperties function
+      return sortProperties(displayedProperties, sortConfig.key, sortConfig.direction, overridePrices, currentSettings, cashflowFilterActive, minCashflowThreshold);
   // Update dependencies for useMemo
-  }, [displayedProperties, sortConfig, overridePrices, sortProperties, defaultSettings, showCashflowPositiveOnly]); 
+  }, [displayedProperties, sortConfig, overridePrices, sortProperties, defaultSettings, cashflowFilterActive, minCashflowThreshold]); 
 
   // --- Rent Estimate Handling ---
   const handleRentEstimateChange = useCallback((propertyId: string, newRentString: string) => {
@@ -1712,58 +1715,84 @@ function App() {
                       width: { xs: '100%', sm: 'auto' },
                       justifyContent: { xs: 'space-between', sm: 'flex-end' }
                     }}> 
-                      {/* Cashflow Positive Only Toggle - NEW */}
-                      <Tooltip title="Show only properties with positive cashflow">
-                        <FormControlLabel
-                          control={<Switch checked={showCashflowPositiveOnly} onChange={(e) => setShowCashflowPositiveOnly(e.target.checked)} />}
-                          labelPlacement="start"
-                          label={<Typography variant="caption" sx={{ color: 'text.secondary', mr: 0.5 }}>Cashflow+</Typography>}
-                          sx={{ mr: 1, ml: 0 }} // Adjust margins
-                        />
-                      </Tooltip>
-                      {/* Map/List Toggle Button */}
-                      <Tooltip title={mapView ? "Show List View" : "Show Map View"}>
-                        <Button 
-                          variant="outlined"
-                          size="small" // Keep size consistent with other controls if desired
-                          onClick={() => setMapView(!mapView)} 
-                          color="primary"
-                          startIcon={mapView ? <ListIcon /> : <MapIcon />}
-                          sx={{ textTransform: 'none' }} // Prevent uppercase text
+                      <Box sx={{ display: 'flex', alignItems: 'center', width: {xs: '100%', sm: 'auto'}, justifyContent: {xs: 'space-between', sm: 'initial'} }}> {/* Inner box for toggle and slider */} 
+                        {/* Cashflow Positive Only Toggle */}
+                        <Tooltip title="Filter by minimum cashflow">
+                          <FormControlLabel
+                            control={<Switch checked={cashflowFilterActive} onChange={(e) => setCashflowFilterActive(e.target.checked)} />}
+                            labelPlacement="start"
+                            label={<Typography variant="caption" sx={{ color: 'text.secondary', mr: 0.5 }}>Min Cashflow</Typography>}
+                            sx={{ mr: 1, ml: 0 }}
+                          />
+                        </Tooltip>
+
+                        {/* Conditional Cashflow Slider - NEW */} 
+                        {cashflowFilterActive && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 150, ml:1 }}>
+                            <Slider
+                              value={minCashflowThreshold}
+                              onChange={(e, newValue) => setMinCashflowThreshold(newValue as number)}
+                              aria-labelledby="min-cashflow-slider"
+                              valueLabelDisplay="auto"
+                              valueLabelFormat={(value) => `$${value}`}
+                              step={50}
+                              min={0}
+                              max={1000}
+                              size="small"
+                              sx={{ flexGrow: 1, mr: 2, color: '#4f46e5' }}
+                            />
+                            <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
+                              ${minCashflowThreshold}{minCashflowThreshold === 1000 ? '+' : ''}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+
+                      <Box sx={{ display: 'flex', alignItems: 'center', width: {xs: '100%', sm: 'auto'}, justifyContent: {xs: 'space-between', sm: 'initial'} }}> {/* Inner box for map/list and sort */} 
+                        {/* Map/List Toggle Button */}
+                        <Tooltip title={mapView ? "Show List View" : "Show Map View"}>
+                          <Button 
+                            variant="outlined"
+                            size="small" // Keep size consistent with other controls if desired
+                            onClick={() => setMapView(!mapView)} 
+                            color="primary"
+                            startIcon={mapView ? <ListIcon /> : <MapIcon />}
+                            sx={{ textTransform: 'none' }} // Prevent uppercase text
+                          >
+                            {mapView ? "List View" : "Map View"}
+                          </Button>
+                        </Tooltip>
+                        <FormControl sx={{ m: 1, minWidth: 120 }} size="small">
+                          <InputLabel id="sort-by-label">Sort By</InputLabel>
+                          <Select
+                            labelId="sort-by-label"
+                            value={sortConfig.key || ''}
+                            label="Sort By"
+                            onChange={(e) => {
+                              const newKey = e.target.value as SortableKey | '';
+                              handleSort(newKey === '' ? 'cashflow' : newKey); // Default to cashflow if empty
+                            }}
+                          >
+                            <MenuItem value="cashflow">Monthly Cashflow</MenuItem>
+                            <MenuItem value="crunchScore">Crunch Score</MenuItem> 
+                            <MenuItem value="price">Price</MenuItem>
+                            <MenuItem value="rent_estimate">Rent Estimate</MenuItem>
+                            <MenuItem value="bedrooms">Bedrooms</MenuItem>
+                            <MenuItem value="bathrooms">Bathrooms</MenuItem>
+                            <MenuItem value="sqft">Sq Ft</MenuItem>
+                            <MenuItem value="days_on_market">Days on Market</MenuItem>
+                          </Select>
+                        </FormControl>
+                        <IconButton 
+                          onClick={() => setSortConfig(prev => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))}
+                        color="primary"
+                          disabled={!sortConfig.key}
                         >
-                          {mapView ? "List View" : "Map View"}
-                        </Button>
-                      </Tooltip>
-                      <FormControl sx={{ m: 1, minWidth: 120 }} size="small">
-                        <InputLabel id="sort-by-label">Sort By</InputLabel>
-                        <Select
-                          labelId="sort-by-label"
-                          value={sortConfig.key || ''}
-                          label="Sort By"
-                          onChange={(e) => {
-                            const newKey = e.target.value as SortableKey | '';
-                            handleSort(newKey === '' ? 'cashflow' : newKey); // Default to cashflow if empty
-                          }}
-                        >
-                          <MenuItem value="cashflow">Monthly Cashflow</MenuItem>
-                          <MenuItem value="crunchScore">Crunch Score</MenuItem> 
-                          <MenuItem value="price">Price</MenuItem>
-                          <MenuItem value="rent_estimate">Rent Estimate</MenuItem>
-                          <MenuItem value="bedrooms">Bedrooms</MenuItem>
-                          <MenuItem value="bathrooms">Bathrooms</MenuItem>
-                          <MenuItem value="sqft">Sq Ft</MenuItem>
-                          <MenuItem value="days_on_market">Days on Market</MenuItem>
-                        </Select>
-                      </FormControl>
-                      <IconButton 
-                        onClick={() => setSortConfig(prev => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))}
-                      color="primary"
-                        disabled={!sortConfig.key}
-                      >
-                        {sortConfig.direction === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />}
-                      </IconButton>
+                          {sortConfig.direction === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />}
+                        </IconButton>
+                      </Box>
+                    </Box>
                   </Box>
-                </Box>
                 
                 {/* Conditional rendering for Map or List view */}
                 {mapView ? (
