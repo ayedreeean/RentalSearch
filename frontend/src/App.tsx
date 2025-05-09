@@ -50,7 +50,7 @@ import ListIcon from '@mui/icons-material/List';
 import Switch from '@mui/material/Switch'; // Import Switch
 
 // Define possible sort keys
-type SortableKey = keyof Pick<Property, 'price' | 'rent_estimate' | 'bedrooms' | 'bathrooms' | 'sqft' | 'days_on_market'> | 'ratio' | 'cashflow' | 'crunchScore'; // Add crunchScore
+type SortableKey = keyof Pick<Property, 'price' | 'rent_estimate' | 'bedrooms' | 'bathrooms' | 'sqft' | 'days_on_market'> | 'ratio' | 'cashflow' | 'crunchScore' | 'cocReturn'; // Add cocReturn
 
 // Define structure for saved searches
 interface SavedSearch {
@@ -235,6 +235,10 @@ const SearchResultsMapComponent: React.FC<SearchResultsMapProps> = ({
                 if (score >= 65) pinColorClassSuffix = 'positive';
                 else if (score >= 45) pinColorClassSuffix = 'medium';
                 else pinColorClassSuffix = 'negative';
+                break;
+              case 'cocReturn':
+                pinText = formatPercentFn(cashflowResult.cashOnCashReturn); // Changed to formatPercentFn
+                pinColorClassSuffix = isPositive ? 'positive' : 'negative'; // Note: cashOnCashReturn might not always align with positive monthly cashflow
                 break;
               default:
                 pinText = formatCurrencyFn(monthlyCashflow);
@@ -841,12 +845,15 @@ function App() {
           if (key === 'ratio') {
             valA = priceA > 0 ? a.rent_estimate / priceA : 0;
             valB = priceB > 0 ? b.rent_estimate / priceB : 0;
-          } else if (key === 'cashflow' || key === 'crunchScore') {
+          } else if (key === 'cashflow' || key === 'crunchScore' || key === 'cocReturn') { // Add cocReturn
               const cashflowA = calculateCashflow({ ...a, price: priceA }, settings);
               const cashflowB = calculateCashflow({ ...b, price: priceB }, settings);
               if (key === 'cashflow') {
-              valA = cashflowA.monthlyCashflow;
-              valB = cashflowB.monthlyCashflow;
+                valA = cashflowA.monthlyCashflow;
+                valB = cashflowB.monthlyCashflow;
+              } else if (key === 'cocReturn') { // Add case for cocReturn
+                valA = cashflowA.cashOnCashReturn;
+                valB = cashflowB.cashOnCashReturn;
               } else { // key === 'crunchScore'
                   valA = calculateCrunchScore({ ...a, price: priceA }, settings, cashflowA);
                   valB = calculateCrunchScore({ ...b, price: priceB }, settings, cashflowB);
@@ -1710,12 +1717,15 @@ function App() {
                   </Typography>
                     <Box sx={{ 
                       display: 'flex', 
-                      alignItems: 'center', 
-                      gap: 1,
-                      width: { xs: '100%', sm: 'auto' },
-                      justifyContent: { xs: 'space-between', sm: 'flex-end' }
+                      // alignItems: 'center', // Original
+                      // gap: 1, // Original
+                      // justifyContent: { xs: 'space-between', sm: 'flex-end' }, // Original
+                      flexDirection: 'column', // Stack the two groups (Cashflow Filter, Map/Sort)
+                      alignItems: { xs: 'stretch', sm: 'flex-end' }, // Align stacked groups. On sm, to the right.
+                      gap: 2, // Vertical gap between the Cashflow Filter group and Map/Sort group
+                      width: { xs: '100%', sm: 'auto' }, // This Box takes full width on xs, auto on sm
                     }}> 
-                      <Box sx={{ display: 'flex', alignItems: 'center', width: {xs: '100%', sm: 'auto'}, justifyContent: {xs: 'space-between', sm: 'initial'} }}> {/* Inner box for toggle and slider */} 
+                      <Box sx={{ display: 'flex', alignItems: 'center', width: {xs: '100%', sm: 'auto'}, justifyContent: {xs: 'space-between', sm: 'flex-start'} }}> {/* Inner box for toggle and slider - On sm, align content to start */}
                         {/* Cashflow Positive Only Toggle */}
                         <Tooltip title="Filter by minimum cashflow">
                           <FormControlLabel
@@ -1748,7 +1758,7 @@ function App() {
                         )}
                       </Box>
 
-                      <Box sx={{ display: 'flex', alignItems: 'center', width: {xs: '100%', sm: 'auto'}, justifyContent: {xs: 'space-between', sm: 'initial'} }}> {/* Inner box for map/list and sort */} 
+                      <Box sx={{ display: 'flex', alignItems: 'center', width: {xs: '100%', sm: 'auto'}, justifyContent: {xs: 'space-between', sm: 'flex-end'} }}> {/* Inner box for map/list and sort - On sm, align content to end */} 
                         {/* Map/List Toggle Button */}
                         <Tooltip title={mapView ? "Show List View" : "Show Map View"}>
                           <Button 
@@ -1775,6 +1785,7 @@ function App() {
                           >
                             <MenuItem value="cashflow">Monthly Cashflow</MenuItem>
                             <MenuItem value="crunchScore">Crunch Score</MenuItem> 
+                            <MenuItem value="cocReturn">Cash on Cash Return</MenuItem> {/* Add CoC Return option */}
                             <MenuItem value="price">Price</MenuItem>
                             <MenuItem value="rent_estimate">Rent Estimate</MenuItem>
                             <MenuItem value="bedrooms">Bedrooms</MenuItem>
@@ -1794,6 +1805,13 @@ function App() {
                     </Box>
                   </Box>
                 
+                {/* NEW: Informational Alert about active filters leading to no visible properties */}
+                {sortedProperties.length === 0 && cashflowFilterActive && (
+                  <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+                    No properties match the current cashflow filter settings. Try adjusting the minimum cashflow slider or disabling the filter.
+                  </Alert>
+                )}
+
                 {/* Conditional rendering for Map or List view */}
                 {mapView ? (
                   <MemoizedSearchResultsMap
