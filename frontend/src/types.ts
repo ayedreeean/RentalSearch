@@ -16,6 +16,7 @@ export interface Property {
   longitude?: number;
   notes?: string;
   zpid?: string | number;
+  description?: string;
 }
 
 export interface Cashflow {

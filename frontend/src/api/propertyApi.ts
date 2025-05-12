@@ -335,6 +335,7 @@ interface ZillowPropertyDetailsData {
     hdpUrl?: string; // Relative URL to Zillow details page
     daysOnZillow?: number;
     homeStatus?: string; // e.g., FOR_SALE, SOLD
+    description?: string;
     // Add other potentially useful fields from the details endpoint
 }
 
@@ -710,7 +711,8 @@ export const getPropertyDetailsByZpid = async (zpid: string): Promise<Property |
             days_on_market: details.daysOnZillow || null,
             rent_source: details.rentZestimate ? 'zillow' : 'calculated',
             latitude: details.latitude,
-            longitude: details.longitude
+            longitude: details.longitude,
+            description: details.description
         };
 
         console.log(`[getPropertyDetailsByZpid] Successfully fetched and formatted details for ZPID ${zpid}`);

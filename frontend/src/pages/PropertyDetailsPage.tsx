@@ -1720,83 +1720,25 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
                 {/* Price Display - Make it an Input */}
-            <TextField
+                <TextField
                   label="Purchase Price"
                   value={editablePriceString} // Controlled by editablePriceString
                   onChange={(e) => {
                     const val = e.target.value;
-                    // Basic filtering to allow only numbers and currency symbols for display
-                    // Formatting will happen more robustly on blur or save if needed
                     setEditablePriceString(val);
-                    // Maybe add validation/formatting on blur later
                   }}
                   onBlur={(e) => {
-                    // Reformat on blur
                     const parsed = parseFloat(e.target.value.replace(/[^\d.-]/g, ''));
                     if (!isNaN(parsed)) {
-                      setEditablePriceString(formatCurrency(parsed)); // Removed options
+                      setEditablePriceString(formatCurrency(parsed));
                     } else {
-                       // Optionally revert to last known good value if invalid
-                       setEditablePriceString(formatCurrency(currentAnalysisPrice ?? 0)); // Removed options
+                      setEditablePriceString(formatCurrency(currentAnalysisPrice ?? 0));
                     }
                   }}
-                  variant="outlined" // Change variant
-                  size="small" // Add size prop
-                sx={{
-                    mt: 1,
-                    '& .MuiInputBase-input': {
-                      fontSize: '1.5rem',
-                      fontWeight: 'medium',
-                      color: 'primary.main'
-                    },
-                    // Make room for save button
-                    // width: 'calc(100% - 50px)', // REMOVE explicit width
-                    // mr: 1 // REMOVE margin right
-                  }}
+                  variant="outlined"
+                  size="small"
                 />
-                {/* Save Price Button */}
-                <Tooltip title="Save this price to update analysis and portfolio entry" arrow>
-                  <span> {/* Span needed for disabled button tooltip */}
-                  <IconButton
-                    onClick={handleSavePrice}
-                    color="primary"
-                    size="small"
-                    disabled={priceSaveStatus !== 'idle' || currentAnalysisPrice === parseFloat(editablePriceString.replace(/[^\d.-]/g, ''))} // Disable if saving or price hasn't changed
-                    sx={{ mt: 2.5 }} // Align with text field baseline
-                  >
-                    {priceSaveStatus === 'saved' ? <CheckIcon fontSize="inherit" sx={{ color: 'success.main' }} /> : <SaveIcon fontSize="inherit" />}
-                  </IconButton>
-                  </span>
-                </Tooltip>
-
-                {/* Crunch Score - DEPENDS ON currentAnalysisPrice via cashflow */}
-                {cashflow && (
-                  <Tooltip title="Overall investment potential (0-100) based on cash flow, rent/price ratio, and your assumptions (higher is better)" arrow>
-                    <Box>
-                      {(() => {
-                        // Recalculate score based on currentAnalysisPrice
-                        const propertyForScore = { ...property, price: currentAnalysisPrice ?? property.price };
-                        const score = calculateCrunchScore(propertyForScore, localSettings, cashflow);
-                        const scoreClass = score >= 65 ? 'good' : (score >= 45 ? 'medium' : 'poor');
-                        return (
-                          <Chip
-                            label={`CrunchScore: ${score}`}
-                            size="small"
-                            sx={{
-                              fontWeight: 'bold',
-                              bgcolor: scoreClass === 'good' ? '#4caf50' : (scoreClass === 'medium' ? '#ff9800' : '#f44336'),
-                              color: 'white',
-                              '& .MuiChip-label': {
-                                px: 1
-                              }
-                            }}
-                          />
-                        );
-                      })()}
-          </Box>
-                  </Tooltip>
-                )}
-        </Box>
+              </Box>
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }} sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
               <Button
@@ -1872,7 +1814,16 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
             </Box>
           </Grid>
         </Grid>
-
+        {/* --- Move property description here, full width --- */}
+        {property.description && (
+          <Paper elevation={0} sx={{ my: 3, p: 3, backgroundColor: 'rgba(79,70,229,0.04)', borderLeft: '4px solid #4f46e5' }}>
+            <Typography variant="h5" fontWeight="medium" sx={{ mb: 1 }}>Listing Description</Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>
+              {property.description}
+            </Typography>
+          </Paper>
+        )}
+        
         {/* Sankey Chart for Cashflow Visualization */}
         {cashflow && (
           <Box sx={{ my: 4 }}>
