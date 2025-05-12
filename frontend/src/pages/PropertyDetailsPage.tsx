@@ -1739,6 +1739,15 @@ const PropertyDetailsPage: React.FC<PropertyDetailsPageProps> = ({
                   size="small"
                 />
               </Box>
+              {/* --- REMOVE property description from here --- */}
+              {/* {property.description && (
+                <Paper elevation={0} sx={{ mt: 2, p: 2, backgroundColor: 'rgba(79,70,229,0.04)', borderLeft: '4px solid #4f46e5' }}>
+                  <Typography variant="subtitle1" fontWeight="medium" sx={{ mb: 1 }}>Listing Description</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>
+                    {property.description}
+                  </Typography>
+                </Paper>
+              )} */}
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }} sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
               <Button
